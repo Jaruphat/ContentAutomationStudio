@@ -1,6 +1,6 @@
 /* ──────────────────────────────────────────────────────────────────────────
-   TimelinePage -- Timeline visualization of approved takes, build and
-   render plan operations.
+   TimelinePage -- Timeline of approved takes, plus the render plan and the
+   actual FFmpeg review render.
    ────────────────────────────────────────────────────────────────────────── */
 
 import { useState } from "react";
@@ -15,10 +15,19 @@ import {
   ArrowRight,
   Terminal,
   AlertTriangle,
+  Clapperboard,
+  CheckCircle2,
+  XCircle,
 } from "lucide-react";
 import api from "../api/client";
 import { useAppState } from "../store/useProjectStore";
-import type { RenderPlan, TimelineItem } from "../types";
+import type { RenderPlan, RenderResult, TimelineItem } from "../types";
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
 
 // ── Timeline item row ────────────────────────────────────────────────────
 
@@ -72,6 +81,9 @@ function TimelineRow({ item, index }: { item: TimelineItem; index: number }) {
 // ── Render plan display ──────────────────────────────────────────────────
 
 function RenderPlanPanel({ plan }: { plan: RenderPlan }) {
+  const segments = plan.timeline_items;
+  const totalDuration = segments.reduce((sum, s) => sum + s.duration_sec, 0);
+
   return (
     <div className="rounded-lg border border-zinc-800 bg-zinc-900/60 p-4 space-y-3">
       <div className="flex items-center gap-2">
@@ -82,20 +94,15 @@ function RenderPlanPanel({ plan }: { plan: RenderPlan }) {
       <div className="flex gap-4 text-xs">
         <span className="text-zinc-500">
           Total duration:{" "}
-          <span className="text-zinc-300">
-            {plan.total_duration_sec.toFixed(1)}s
-          </span>
+          <span className="text-zinc-300">{totalDuration.toFixed(1)}s</span>
         </span>
         <span className="text-zinc-500">
-          Segments:{" "}
-          <span className="text-zinc-300">{plan.segments.length}</span>
+          Segments: <span className="text-zinc-300">{segments.length}</span>
         </span>
         <span className="text-zinc-500">
           FFmpeg:{" "}
           <span
-            className={
-              plan.ffmpeg_available ? "text-green-400" : "text-red-400"
-            }
+            className={plan.ffmpeg_available ? "text-green-400" : "text-red-400"}
           >
             {plan.ffmpeg_available ? "Available" : "Not found"}
           </span>
@@ -105,9 +112,20 @@ function RenderPlanPanel({ plan }: { plan: RenderPlan }) {
       {!plan.ffmpeg_available && (
         <div className="flex items-center gap-2 rounded-md bg-yellow-900/20 border border-yellow-800/50 px-3 py-2 text-xs text-yellow-300">
           <AlertTriangle size={13} />
-          FFmpeg is not installed or not on PATH. Render commands are shown but cannot execute without real media assets.
+          FFmpeg is not installed or not on PATH. The commands below are shown
+          for reference but cannot be executed here.
         </div>
       )}
+
+      {plan.warnings.map((warning, i) => (
+        <div
+          key={i}
+          className="flex items-start gap-2 rounded-md border border-amber-800/50 bg-amber-900/20 px-3 py-2 text-xs text-amber-300"
+        >
+          <AlertTriangle size={12} className="mt-0.5 shrink-0" />
+          <span>{warning}</span>
+        </div>
+      ))}
 
       {plan.commands.length > 0 && (
         <div className="space-y-1">
@@ -127,19 +145,19 @@ function RenderPlanPanel({ plan }: { plan: RenderPlan }) {
         </div>
       )}
 
-      {plan.commands.length === 0 && plan.segments.length === 0 && (
+      {plan.commands.length === 0 && segments.length === 0 && (
         <p className="text-xs text-zinc-500 italic">
           No segments available. Build the timeline first with approved takes.
         </p>
       )}
 
-      {plan.segments.length > 0 && (
+      {segments.length > 0 && (
         <div className="space-y-1">
           <h4 className="text-xs font-medium text-zinc-400 uppercase tracking-wider">
             Segments
           </h4>
           <div className="space-y-1">
-            {plan.segments.map((seg, i) => (
+            {segments.map((seg, i) => (
               <div
                 key={i}
                 className="flex items-center gap-3 rounded-md bg-zinc-800/50 px-3 py-1.5 text-xs"
@@ -161,6 +179,78 @@ function RenderPlanPanel({ plan }: { plan: RenderPlan }) {
   );
 }
 
+// ── Render result display ────────────────────────────────────────────────
+
+function RenderResultPanel({ result }: { result: RenderResult }) {
+  return (
+    <div className="rounded-lg border border-zinc-800 bg-zinc-900/60 p-4 space-y-3">
+      <div className="flex items-center gap-2">
+        <Clapperboard size={14} className="text-zinc-400" />
+        <h3 className="text-sm font-semibold text-zinc-200">Review Render</h3>
+      </div>
+
+      <div
+        className={`flex items-start gap-2 rounded-md px-3 py-2 text-sm font-medium ${
+          result.rendered
+            ? "bg-green-900/30 text-green-300"
+            : "bg-red-900/30 text-red-300"
+        }`}
+      >
+        {result.rendered ? (
+          <CheckCircle2 size={14} className="mt-0.5 shrink-0" />
+        ) : (
+          <XCircle size={14} className="mt-0.5 shrink-0" />
+        )}
+        <span>
+          {result.rendered
+            ? `Rendered ${result.segment_count} segment(s)`
+            : result.reason}
+        </span>
+      </div>
+
+      {result.rendered && (
+        <>
+          <div className="flex flex-wrap gap-4 text-xs text-zinc-500">
+            <span>
+              Format:{" "}
+              <span className="text-zinc-300">
+                {result.width}x{result.height} {result.codec}
+              </span>
+            </span>
+            <span>
+              Duration:{" "}
+              <span className="text-zinc-300">
+                {result.duration_sec.toFixed(1)}s
+              </span>
+            </span>
+            <span>
+              Size:{" "}
+              <span className="text-zinc-300">
+                {formatBytes(result.size_bytes)}
+              </span>
+            </span>
+          </div>
+          <div className="rounded-md bg-zinc-950 px-3 py-2">
+            <p className="text-[11px] font-mono text-zinc-400 break-all">
+              {result.output_path}
+            </p>
+          </div>
+        </>
+      )}
+
+      {result.warnings.map((warning, i) => (
+        <div
+          key={i}
+          className="flex items-start gap-2 rounded-md border border-amber-800/50 bg-amber-900/20 px-3 py-2 text-xs text-amber-300"
+        >
+          <AlertTriangle size={12} className="mt-0.5 shrink-0" />
+          <span>{warning}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ══════════════════════════════════════════════════════════════════════════
 // TimelinePage
 // ══════════════════════════════════════════════════════════════════════════
@@ -169,6 +259,7 @@ export default function TimelinePage() {
   const { currentProjectId } = useAppState();
   const qc = useQueryClient();
   const [renderPlan, setRenderPlan] = useState<RenderPlan | null>(null);
+  const [renderResult, setRenderResult] = useState<RenderResult | null>(null);
 
   const timelineQ = useQuery({
     queryKey: ["timeline", currentProjectId],
@@ -187,6 +278,11 @@ export default function TimelinePage() {
     onSuccess: (data) => setRenderPlan(data),
   });
 
+  const renderMut = useMutation({
+    mutationFn: () => api.timeline.render(currentProjectId!),
+    onSuccess: (data) => setRenderResult(data),
+  });
+
   if (!currentProjectId) {
     return (
       <div className="flex h-full flex-col items-center justify-center text-center px-8">
@@ -199,8 +295,8 @@ export default function TimelinePage() {
     );
   }
 
-  const totalDuration =
-    timelineQ.data?.reduce((sum, item) => sum + item.duration_sec, 0) ?? 0;
+  const items = timelineQ.data?.items ?? [];
+  const totalDuration = timelineQ.data?.total_duration_sec ?? 0;
 
   return (
     <div className="mx-auto max-w-5xl px-6 py-6 space-y-6">
@@ -209,9 +305,10 @@ export default function TimelinePage() {
         <div className="flex items-center gap-3">
           <Film size={20} className="text-indigo-400" />
           <h1 className="text-lg font-semibold text-zinc-100">Timeline</h1>
-          {timelineQ.data && timelineQ.data.length > 0 && (
+          {items.length > 0 && (
             <span className="rounded-full bg-zinc-800 px-2 py-0.5 text-[10px] text-zinc-400">
-              {timelineQ.data.length} item{timelineQ.data.length !== 1 ? "s" : ""} -- {totalDuration.toFixed(1)}s
+              {items.length} item{items.length !== 1 ? "s" : ""} --{" "}
+              {totalDuration.toFixed(1)}s
             </span>
           )}
         </div>
@@ -241,6 +338,23 @@ export default function TimelinePage() {
             )}
             Render Plan
           </button>
+          <button
+            onClick={() => renderMut.mutate()}
+            disabled={renderMut.isPending || items.length === 0}
+            title={
+              items.length === 0
+                ? "Build the timeline from approved takes first"
+                : "Assemble the approved takes into a review video"
+            }
+            className="flex items-center gap-1.5 rounded-md bg-emerald-700 px-4 py-1.5 text-sm font-medium text-white hover:bg-emerald-600 disabled:opacity-50"
+          >
+            {renderMut.isPending ? (
+              <Loader2 size={14} className="animate-spin" />
+            ) : (
+              <Clapperboard size={14} />
+            )}
+            Render Review
+          </button>
         </div>
       </div>
 
@@ -248,6 +362,11 @@ export default function TimelinePage() {
       {buildMut.isError && (
         <div className="flex items-center gap-2 rounded-md border border-red-800 bg-red-900/30 px-4 py-2 text-sm text-red-300">
           <AlertCircle size={14} /> Failed to build timeline.
+        </div>
+      )}
+      {renderMut.isError && (
+        <div className="flex items-center gap-2 rounded-md border border-red-800 bg-red-900/30 px-4 py-2 text-sm text-red-300">
+          <AlertCircle size={14} /> Render request failed. Is the backend running?
         </div>
       )}
 
@@ -259,7 +378,7 @@ export default function TimelinePage() {
       )}
 
       {/* Empty */}
-      {timelineQ.data && timelineQ.data.length === 0 && (
+      {timelineQ.data && items.length === 0 && (
         <div className="flex flex-col items-center py-16 text-center">
           <Film size={28} className="mb-2 text-zinc-600" />
           <p className="text-sm text-zinc-500">
@@ -270,9 +389,9 @@ export default function TimelinePage() {
       )}
 
       {/* Timeline list */}
-      {timelineQ.data && timelineQ.data.length > 0 && (
+      {items.length > 0 && (
         <div className="space-y-2">
-          {timelineQ.data
+          {[...items]
             .sort((a, b) => a.order - b.order)
             .map((item, i) => (
               <TimelineRow key={item.id} item={item} index={i} />
@@ -280,7 +399,8 @@ export default function TimelinePage() {
         </div>
       )}
 
-      {/* Render plan */}
+      {/* Render output */}
+      {renderResult && <RenderResultPanel result={renderResult} />}
       {renderPlan && <RenderPlanPanel plan={renderPlan} />}
     </div>
   );

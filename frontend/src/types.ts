@@ -176,6 +176,10 @@ export interface GenerationJob {
   shot_id: string;
   workflow_id: string | null;
   workflow_version: string;
+  /** Exact graph submitted for this job, kept for reproducibility. */
+  workflow_snapshot_path: string | null;
+  /** SHA-256 of the registered workflow the snapshot was built from. */
+  workflow_sha256: string | null;
   parameter_map: Record<string, unknown>;
   seed: number | null;
   comfyui_prompt_id: string | null;
@@ -238,26 +242,40 @@ export interface CompiledPrompt {
   };
 }
 
-export interface PreflightCheck {
-  category: string;
-  label: string;
-  passed: boolean;
-  message: string;
+/** One shot that failed preflight, with the reasons why. */
+export interface PreflightIssue {
+  shot_id: string;
+  scene_id: string;
+  shot_order: number;
+  issues: string[];
+}
+
+/** Mapping validation for one workflow referenced by the project. */
+export interface WorkflowCheck {
+  workflow_id: string;
+  name: string;
+  valid: boolean;
+  errors: string[];
+  warnings: string[];
 }
 
 export interface PreflightResult {
-  project_id: string;
   ready: boolean;
-  checks: PreflightCheck[];
-  timestamp: string;
+  total_shots: number;
+  ready_shots: number;
+  issues: PreflightIssue[];
+  workflow_checks: WorkflowCheck[];
+  warnings: string[];
+  comfyui_online: boolean;
+  comfyui_mock: boolean;
 }
 
-export interface RenderPlan {
+/** The timeline endpoints return a manifest, not a bare array. */
+export interface TimelineManifest {
   project_id: string;
+  items: TimelineItem[];
   total_duration_sec: number;
-  segments: RenderSegment[];
-  ffmpeg_available: boolean;
-  commands: string[];
+  item_count: number;
 }
 
 export interface RenderSegment {
@@ -270,11 +288,57 @@ export interface RenderSegment {
   transition_out: string;
 }
 
+export interface RenderPlan {
+  project_id: string;
+  timeline_items: RenderSegment[];
+  ffmpeg_available: boolean;
+  commands: string[];
+  warnings: string[];
+}
+
+/** Result of actually executing the render with FFmpeg. */
+export interface RenderResult {
+  project_id: string;
+  rendered: boolean;
+  output_path: string;
+  reason: string;
+  warnings: string[];
+  segment_count: number;
+  width: number;
+  height: number;
+  duration_sec: number;
+  codec: string;
+  size_bytes: number;
+}
+
+/** Queue counters returned by the pause/resume endpoints. */
+export interface QueueStatus {
+  paused: boolean;
+  total_jobs: number;
+  queued: number;
+  running: number;
+  completed: number;
+  failed: number;
+}
+
+export interface ComfyUIHealth {
+  online: boolean;
+  mock: boolean;
+  version: string;
+  gpu_info: string;
+  queue_remaining: number;
+  error: string | null;
+}
+
+export type QueueHealth = QueueStatus;
+
 export interface HealthStatus {
   status: string;
+  service: string;
   version: string;
-  database: string;
-  comfyui: string;
+  comfyui: ComfyUIHealth;
+  queue: QueueHealth;
+  blockers: string[];
 }
 
 // ── Form / create DTOs ───────────────────────────────────────────────────

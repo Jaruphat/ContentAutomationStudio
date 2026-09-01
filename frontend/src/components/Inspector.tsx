@@ -89,25 +89,25 @@ function ScenePanel({ scene }: { scene: Scene }) {
   );
 }
 
-function TakePanel({ take, projectId }: { take: Take; projectId: string }) {
+function TakePanel({ take }: { take: Take }) {
   const qc = useQueryClient();
 
   const approveMut = useMutation({
-    mutationFn: () => api.review.approve(projectId, take.id),
+    mutationFn: () => api.review.approve(take.id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["takes"] });
     },
   });
 
   const rejectMut = useMutation({
-    mutationFn: () => api.review.reject(projectId, take.id),
+    mutationFn: () => api.review.reject(take.id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["takes"] });
     },
   });
 
   const regenMut = useMutation({
-    mutationFn: () => api.review.regenerate(projectId, take.shot_id),
+    mutationFn: () => api.review.regenerate(take.shot_id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["takes"] });
       qc.invalidateQueries({ queryKey: ["jobs"] });
@@ -205,8 +205,8 @@ export default function Inspector() {
 
   const { data: selectedTake } = useQuery({
     queryKey: ["take", currentProjectId, selectedTakeId],
-    queryFn: () => api.review.getTake(currentProjectId!, selectedTakeId!),
-    enabled: !!currentProjectId && !!selectedTakeId,
+    queryFn: () => api.review.getTake(selectedTakeId!),
+    enabled: !!selectedTakeId,
   });
 
   // For shots, we need the sceneId. We rely on selectedSceneId being set alongside selectedShotId.
@@ -240,7 +240,7 @@ export default function Inspector() {
 
   if (selectedTakeId && selectedTake) {
     content = (
-      <TakePanel take={selectedTake} projectId={currentProjectId!} />
+      <TakePanel take={selectedTake} />
     );
   } else if (selectedShotId && selectedShot) {
     content = <ShotPanel shot={selectedShot} />;

@@ -65,6 +65,15 @@ def list_shot_takes(shot_id: str, db: Session = Depends(get_db)):
     )
 
 
+@router.get("/api/takes/{take_id}", response_model=TakeResponse)
+def get_take(take_id: str, db: Session = Depends(get_db)):
+    """Fetch a single take by id, for the inspector panel."""
+    take = db.query(Take).filter(Take.id == take_id).first()
+    if not take:
+        raise HTTPException(status_code=404, detail="Take not found")
+    return take
+
+
 # ---------------------------------------------------------------------------
 # Approve / Reject
 # ---------------------------------------------------------------------------

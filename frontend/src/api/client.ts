@@ -22,7 +22,10 @@ import type {
   Take,
   TimelineItem,
   PreflightResult,
+  QueueStatus,
   RenderPlan,
+  RenderResult,
+  TimelineManifest,
   HealthStatus,
 } from "../types";
 
@@ -161,10 +164,11 @@ export const scenes = {
   delete: (projectId: string, id: string) =>
     http.delete(`/projects/${projectId}/scenes/${id}`).then((r) => r.data),
 
+  /** Bulk-set scene order. Pass the ids in their new display order. */
   reorder: (projectId: string, sceneIds: string[]) =>
     http
-      .post(`/projects/${projectId}/scenes/reorder`, {
-        scene_ids: sceneIds,
+      .put<Scene[]>(`/projects/${projectId}/scenes`, {
+        scenes: sceneIds.map((id, order) => ({ id, order })),
       })
       .then((r) => r.data),
 };
@@ -205,10 +209,11 @@ export const shots = {
       .delete(`/projects/${projectId}/scenes/${sceneId}/shots/${id}`)
       .then((r) => r.data),
 
+  /** Bulk-set shot order within a scene. Pass ids in their new order. */
   reorder: (projectId: string, sceneId: string, shotIds: string[]) =>
     http
-      .post(`/projects/${projectId}/scenes/${sceneId}/shots/reorder`, {
-        shot_ids: shotIds,
+      .put<Shot[]>(`/projects/${projectId}/scenes/${sceneId}/shots`, {
+        shots: shotIds.map((id, order) => ({ id, order })),
       })
       .then((r) => r.data),
 };
@@ -243,46 +248,39 @@ export const workflows = {
 export const generation = {
   preflight: (projectId: string) =>
     http
-      .post<PreflightResult>(`/projects/${projectId}/generate/preflight`)
+      .get<PreflightResult>(`/projects/${projectId}/preflight`)
       .then((r) => r.data),
 
   start: (projectId: string, shotIds?: string[]) =>
     http
       .post<GenerationJob[]>(`/projects/${projectId}/generate`, {
-        shot_ids: shotIds,
+        shot_ids: shotIds ?? null,
       })
       .then((r) => r.data),
 
   listJobs: (projectId: string) =>
     http
-      .get<GenerationJob[]>(`/projects/${projectId}/generate/jobs`)
+      .get<GenerationJob[]>(`/projects/${projectId}/jobs`)
       .then((r) => r.data),
 
-  getJob: (projectId: string, jobId: string) =>
-    http
-      .get<GenerationJob>(`/projects/${projectId}/generate/jobs/${jobId}`)
-      .then((r) => r.data),
+  // Jobs are addressed globally by id, not nested under a project.
+  getJob: (jobId: string) =>
+    http.get<GenerationJob>(`/jobs/${jobId}`).then((r) => r.data),
 
-  cancelJob: (projectId: string, jobId: string) =>
-    http
-      .post(`/projects/${projectId}/generate/jobs/${jobId}/cancel`)
-      .then((r) => r.data),
+  cancelJob: (jobId: string) =>
+    http.post<GenerationJob>(`/jobs/${jobId}/cancel`).then((r) => r.data),
 
-  retryJob: (projectId: string, jobId: string) =>
-    http
-      .post<GenerationJob>(
-        `/projects/${projectId}/generate/jobs/${jobId}/retry`,
-      )
-      .then((r) => r.data),
+  retryJob: (jobId: string) =>
+    http.post<GenerationJob>(`/jobs/${jobId}/retry`).then((r) => r.data),
 
   pauseQueue: (projectId: string) =>
     http
-      .post(`/projects/${projectId}/generate/queue/pause`)
+      .post<QueueStatus>(`/projects/${projectId}/queue/pause`)
       .then((r) => r.data),
 
   resumeQueue: (projectId: string) =>
     http
-      .post(`/projects/${projectId}/generate/queue/resume`)
+      .post<QueueStatus>(`/projects/${projectId}/queue/resume`)
       .then((r) => r.data),
 };
 
@@ -292,26 +290,26 @@ export const review = {
   listTakes: (projectId: string) =>
     http.get<Take[]>(`/projects/${projectId}/takes`).then((r) => r.data),
 
-  getTake: (projectId: string, takeId: string) =>
+  listShotTakes: (shotId: string) =>
+    http.get<Take[]>(`/shots/${shotId}/takes`).then((r) => r.data),
+
+  getTake: (takeId: string) =>
+    http.get<Take>(`/takes/${takeId}`).then((r) => r.data),
+
+  // Takes and shots are addressed globally by id.
+  approve: (takeId: string, notes?: string, rating?: number) =>
     http
-      .get<Take>(`/projects/${projectId}/takes/${takeId}`)
+      .post<Take>(`/takes/${takeId}/approve`, { notes, rating })
       .then((r) => r.data),
 
-  approve: (projectId: string, takeId: string, notes?: string) =>
+  reject: (takeId: string, notes?: string, rating?: number) =>
     http
-      .post<Take>(`/projects/${projectId}/takes/${takeId}/approve`, { notes })
+      .post<Take>(`/takes/${takeId}/reject`, { notes, rating })
       .then((r) => r.data),
 
-  reject: (projectId: string, takeId: string, notes?: string) =>
+  regenerate: (shotId: string) =>
     http
-      .post<Take>(`/projects/${projectId}/takes/${takeId}/reject`, { notes })
-      .then((r) => r.data),
-
-  regenerate: (projectId: string, shotId: string) =>
-    http
-      .post<GenerationJob>(
-        `/projects/${projectId}/shots/${shotId}/regenerate`,
-      )
+      .post<GenerationJob>(`/shots/${shotId}/regenerate`)
       .then((r) => r.data),
 };
 
@@ -320,22 +318,29 @@ export const review = {
 export const timeline = {
   get: (projectId: string) =>
     http
-      .get<TimelineItem[]>(`/projects/${projectId}/timeline`)
+      .get<TimelineManifest>(`/projects/${projectId}/timeline`)
       .then((r) => r.data),
 
   update: (projectId: string, items: Partial<TimelineItem>[]) =>
     http
-      .put<TimelineItem[]>(`/projects/${projectId}/timeline`, { items })
+      .put<TimelineManifest>(`/projects/${projectId}/timeline`, { items })
       .then((r) => r.data),
 
   build: (projectId: string) =>
     http
-      .post<TimelineItem[]>(`/projects/${projectId}/timeline/build`)
+      .post<TimelineManifest>(`/projects/${projectId}/timeline/build`)
       .then((r) => r.data),
 
+  /** Returns the FFmpeg commands without executing anything. */
   renderPlan: (projectId: string) =>
     http
-      .get<RenderPlan>(`/projects/${projectId}/timeline/render-plan`)
+      .post<RenderPlan>(`/projects/${projectId}/render-plan`)
+      .then((r) => r.data),
+
+  /** Executes the render. Reports why it was skipped rather than faking one. */
+  render: (projectId: string) =>
+    http
+      .post<RenderResult>(`/projects/${projectId}/render`)
       .then((r) => r.data),
 };
 
@@ -362,12 +367,17 @@ export const exports_ = {
 
   timeline: (projectId: string) =>
     http
-      .get(`/projects/${projectId}/export/timeline`, { responseType: "json" })
+      .get(`/projects/${projectId}/export/timeline-manifest`, {
+        responseType: "json",
+      })
       .then((r) => r.data),
 
+  // The archive is JSON metadata, not a binary bundle.
   archive: (projectId: string) =>
     http
-      .get(`/projects/${projectId}/export/archive`, { responseType: "blob" })
+      .get(`/projects/${projectId}/export/project-archive`, {
+        responseType: "json",
+      })
       .then((r) => r.data),
 };
 

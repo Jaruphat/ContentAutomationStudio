@@ -17,6 +17,7 @@ import {
   Ban,
   Clock,
   AlertCircle,
+  AlertTriangle,
 } from "lucide-react";
 import api from "../api/client";
 import { useAppState, useAppDispatch } from "../store/useProjectStore";
@@ -77,30 +78,97 @@ function PreflightPanel({
             ) : (
               <XCircle size={14} />
             )}
-            {result.ready ? "All checks passed" : "Some checks failed"}
+            {result.ready
+              ? `All ${result.total_shots} shot(s) ready to generate`
+              : `${result.ready_shots} of ${result.total_shots} shot(s) ready`}
           </div>
 
-          <div className="space-y-1">
-            {result.checks.map((check, i) => (
-              <div
-                key={i}
-                className="flex items-start gap-2 rounded-md px-3 py-1.5 text-xs"
+          {/* Provider status and non-blocking notes */}
+          <div className="flex flex-wrap gap-3 text-xs text-zinc-500">
+            <span>
+              ComfyUI:{" "}
+              <span
+                className={
+                  result.comfyui_online ? "text-green-400" : "text-red-400"
+                }
               >
-                {check.passed ? (
-                  <CheckCircle2 size={12} className="mt-0.5 shrink-0 text-green-500" />
-                ) : (
-                  <XCircle size={12} className="mt-0.5 shrink-0 text-red-500" />
-                )}
-                <div>
-                  <span className="font-medium text-zinc-300">
-                    {check.label}
-                  </span>
-                  <span className="ml-1 text-zinc-500">{check.category}</span>
-                  <p className="mt-0.5 text-zinc-400">{check.message}</p>
-                </div>
-              </div>
-            ))}
+                {result.comfyui_online ? "online" : "offline"}
+              </span>
+              {result.comfyui_mock && (
+                <span className="ml-1 text-amber-400">(mock)</span>
+              )}
+            </span>
           </div>
+
+          {result.warnings.map((warning, i) => (
+            <div
+              key={i}
+              className="flex items-start gap-2 rounded-md border border-amber-800/50 bg-amber-900/20 px-3 py-2 text-xs text-amber-300"
+            >
+              <AlertTriangle size={12} className="mt-0.5 shrink-0" />
+              <span>{warning}</span>
+            </div>
+          ))}
+
+          {/* Per-workflow mapping validation */}
+          {result.workflow_checks.length > 0 && (
+            <div className="space-y-1">
+              <h4 className="text-[10px] font-medium uppercase tracking-wider text-zinc-500">
+                Workflow mapping
+              </h4>
+              {result.workflow_checks.map((check) => (
+                <div
+                  key={check.workflow_id}
+                  className="flex items-start gap-2 rounded-md bg-zinc-800/50 px-3 py-1.5 text-xs"
+                >
+                  {check.valid ? (
+                    <CheckCircle2 size={12} className="mt-0.5 shrink-0 text-green-500" />
+                  ) : (
+                    <XCircle size={12} className="mt-0.5 shrink-0 text-red-500" />
+                  )}
+                  <div className="min-w-0">
+                    <span className="font-medium text-zinc-300">
+                      {check.name || check.workflow_id.slice(0, 8)}
+                    </span>
+                    {check.errors.map((err, i) => (
+                      <p key={i} className="mt-0.5 text-red-400">{err}</p>
+                    ))}
+                    {check.warnings.map((warn, i) => (
+                      <p key={i} className="mt-0.5 text-amber-400">{warn}</p>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Shots that cannot be generated yet */}
+          {result.issues.length > 0 && (
+            <div className="space-y-1">
+              <h4 className="text-[10px] font-medium uppercase tracking-wider text-zinc-500">
+                Blocked shots
+              </h4>
+              {result.issues.map((issue) => (
+                <div
+                  key={issue.shot_id}
+                  className="flex items-start gap-2 rounded-md px-3 py-1.5 text-xs"
+                >
+                  <XCircle size={12} className="mt-0.5 shrink-0 text-red-500" />
+                  <div className="min-w-0">
+                    <span className="font-medium text-zinc-300">
+                      Shot {issue.shot_order}
+                    </span>
+                    <span className="ml-1 font-mono text-zinc-500">
+                      {issue.shot_id.slice(0, 8)}
+                    </span>
+                    {issue.issues.map((text, i) => (
+                      <p key={i} className="mt-0.5 text-zinc-400">{text}</p>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -119,13 +187,13 @@ function JobRow({
   const qc = useQueryClient();
 
   const cancelMut = useMutation({
-    mutationFn: () => api.generation.cancelJob(projectId, job.id),
+    mutationFn: () => api.generation.cancelJob(job.id),
     onSuccess: () =>
       qc.invalidateQueries({ queryKey: ["jobs", projectId] }),
   });
 
   const retryMut = useMutation({
-    mutationFn: () => api.generation.retryJob(projectId, job.id),
+    mutationFn: () => api.generation.retryJob(job.id),
     onSuccess: () =>
       qc.invalidateQueries({ queryKey: ["jobs", projectId] }),
   });

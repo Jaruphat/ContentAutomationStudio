@@ -37,19 +37,19 @@ function TakeCard({
   const qc = useQueryClient();
 
   const approveMut = useMutation({
-    mutationFn: () => api.review.approve(projectId, take.id),
+    mutationFn: () => api.review.approve(take.id),
     onSuccess: () =>
       qc.invalidateQueries({ queryKey: ["takes", projectId] }),
   });
 
   const rejectMut = useMutation({
-    mutationFn: () => api.review.reject(projectId, take.id),
+    mutationFn: () => api.review.reject(take.id),
     onSuccess: () =>
       qc.invalidateQueries({ queryKey: ["takes", projectId] }),
   });
 
   const regenMut = useMutation({
-    mutationFn: () => api.review.regenerate(projectId, take.shot_id),
+    mutationFn: () => api.review.regenerate(take.shot_id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["takes", projectId] });
       qc.invalidateQueries({ queryKey: ["jobs", projectId] });
