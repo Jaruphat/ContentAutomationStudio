@@ -27,7 +27,7 @@ from app.services.comfyui_adapter import (
 
 logger = logging.getLogger("cas.comfyui_provider")
 
-DEFAULT_COMFYUI_URL = "http://127.0.0.1:8001"
+DEFAULT_COMFYUI_URL = "http://127.0.0.1:8000"
 HTTP_TIMEOUT = 10.0
 
 

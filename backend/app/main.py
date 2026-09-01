@@ -54,7 +54,7 @@ def _create_provider() -> ComfyUIProvider:
 
     if provider_type == "real":
         from app.services.comfyui_provider import RealComfyUIProvider
-        url = os.environ.get("COMFYUI_URL", "http://127.0.0.1:8001")
+        url = os.environ.get("COMFYUI_URL", "http://127.0.0.1:8000")
         logger.info("Using REAL ComfyUI provider at %s", url)
         return RealComfyUIProvider(base_url=url)
     else:

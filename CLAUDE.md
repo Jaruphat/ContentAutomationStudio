@@ -4,7 +4,7 @@
 Build the MVP described in `docs/PRD_Content_Automation_Studio_v0.2.md`: a local-first application that turns a creative brief/plot into scenes, shots, compiled prompts, mockable ComfyUI generation jobs, reviewed takes, a Timeline Manifest and an automated review render.
 
 ## Current Constraint
-The real H3 image/video API-format JSON files, required models and custom-node inventory have not been provided. Do not fabricate a successful H3 integration. Build a clean ComfyUI adapter interface, workflow registry/import/mapping validation and a deterministic mock provider so the complete product flow can be exercised now. Clearly mark real H3 end-to-end verification as blocked until those files and a reachable ComfyUI instance are supplied.
+ComfyUI is reachable at `http://127.0.0.1:8000` and has been verified through `/system_stats` and `/object_info` (ComfyUI 0.34.0, RTX 5080). The application backend uses port `8001` to avoid a conflict. The real H3 image/video API-format JSON files, required models and custom-node inventory have not been provided. Do not fabricate a successful H3 integration. Keep deterministic mock generation available until the real H3 workflows are supplied. Real H3 end-to-end verification remains blocked until those workflow files and dependencies are available.
 
 ## Source of Truth
 - `docs/PRD_Content_Automation_Studio_v0.2.md`

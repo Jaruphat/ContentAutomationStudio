@@ -68,7 +68,7 @@ cp .env.example .env
 | Variable               | Default                 | Description                                                                 |
 |------------------------|-------------------------|-----------------------------------------------------------------------------|
 | `COMFYUI_PROVIDER`     | `mock`                  | `mock` for deterministic placeholders, `real` to drive a live ComfyUI        |
-| `COMFYUI_URL`          | `http://127.0.0.1:8001` | ComfyUI instance URL (used when provider is `real`)                         |
+| `COMFYUI_URL`      | `http://127.0.0.1:8000`    | ComfyUI instance URL (used when provider is `real`)   |
 | `CAS_DATA_DIR`         | `backend/data`          | Base directory for the database, workflows, snapshots, media and exports    |
 | `CAS_MOCK_QUEUED_SEC`  | `1.0`                   | Seconds a mock job stays Queued (lower it to speed up the e2e run)          |
 | `CAS_MOCK_RUNNING_SEC` | `2.0`                   | Seconds a mock job stays Running                                            |
@@ -95,13 +95,13 @@ Open two terminal windows:
 ```bash
 cd backend
 # Mock mode (default - no ComfyUI required):
-COMFYUI_PROVIDER=mock python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+COMFYUI_PROVIDER=mock python -m uvicorn app.main:app --host 127.0.0.1 --port 8001
 
 # Real ComfyUI mode (requires running ComfyUI instance):
-COMFYUI_PROVIDER=real COMFYUI_URL=http://127.0.0.1:8001 python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+COMFYUI_PROVIDER=real COMFYUI_URL=http://127.0.0.1:8000 python -m uvicorn app.main:app --host 127.0.0.1 --port 8001
 ```
 
-The API server will be available at `http://localhost:8000`.
+The API server will be available at `http://localhost:8001`. ComfyUI uses `http://127.0.0.1:8000` on this workstation.
 
 ### 2. Start the Frontend
 
