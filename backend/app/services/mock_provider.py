@@ -210,23 +210,31 @@ class MockComfyUIProvider(ComfyUIProvider):
         }
 
     def _materialise(self, prompt_id: str) -> OutputFile:
-        """Create (if needed) and describe the output file for a submission."""
-        record = self._submissions.get(prompt_id, {})
-        spec = self._describe_output(record)
-        width, height = _scaled_dimensions(spec["width"], spec["height"])
+        """Create (if needed) and describe the output file for a submission.
 
-        if spec["mode"] in ("video", "image-to-video"):
+        The stored record is already normalised by ``_describe_output`` at
+        submit time, so it is read directly here. Re-normalising it would look
+        for a ``generation_mode`` key that normalisation has already renamed to
+        ``mode``, quietly turning every video shot back into a still.
+        """
+        spec = self._submissions.get(prompt_id) or self._describe_output(None)
+        width, height = _scaled_dimensions(
+            spec.get("width", 1920), spec.get("height", 1080)
+        )
+
+        if spec.get("mode") in ("video", "image-to-video"):
             video_path = os.path.join(self._output_dir, f"{prompt_id}_output.mp4")
             if os.path.isfile(video_path) or _create_placeholder_mp4(
-                video_path, width, height, spec["duration_sec"], spec["frame_rate"]
+                video_path, width, height,
+                spec.get("duration_sec", 2.0), spec.get("frame_rate", 24.0),
             ):
                 return OutputFile(
                     file_path=video_path,
                     file_type="video",
                     width=width,
                     height=height,
-                    duration_sec=spec["duration_sec"],
-                    frame_rate=spec["frame_rate"],
+                    duration_sec=spec.get("duration_sec", 2.0),
+                    frame_rate=spec.get("frame_rate", 24.0),
                     codec="h264",
                 )
             # FFmpeg unavailable: fall back to a still so the flow still runs.

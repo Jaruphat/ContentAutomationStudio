@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 
 from app.database import SessionLocal
 from app.models import GenerationJob, Project, Scene, Shot, Take
+from app.services import error_classifier
 from app.services.comfyui_adapter import ComfyUIProvider, JobStatusEnum
 from app.services.job_payload import WorkflowValidationError, build_payload
 from app.services.mock_provider import MockComfyUIProvider
@@ -247,54 +248,76 @@ class QueueManager:
                     return
 
                 elif status.status == JobStatusEnum.FAILED:
-                    job.status = "Failed"
-                    job.error_code = status.error_code or "GENERATION_FAILED"
-                    job.error_message = status.error_message or "Unknown error"
-                    job.completed_at = datetime.now(timezone.utc)
-                    db.commit()
-
-                    # Retry if under max attempts
-                    if job.attempts < MAX_ATTEMPTS:
-                        logger.info(
-                            f"Job {job.id} failed (attempt {job.attempts}/{MAX_ATTEMPTS}), requeueing"
-                        )
-                        job.status = "Queued"
-                        job.error_code = None
-                        job.error_message = None
-                        job.started_at = None
-                        job.completed_at = None
-                        job.comfyui_prompt_id = None
-                        db.commit()
-                    else:
-                        logger.warning(f"Job {job.id} failed after {MAX_ATTEMPTS} attempts")
-                        if shot:
-                            shot.status = "Failed"
-                        db.commit()
+                    self._handle_failure(
+                        db, job, shot,
+                        message=status.error_message or "Unknown error",
+                        fallback_code=status.error_code,
+                    )
                     return
 
                 # Still running or queued -- keep polling
                 await asyncio.sleep(POLL_INTERVAL_SEC)
 
         except Exception as exc:
-            logger.exception(f"Error executing job {job.id}")
-            job.status = "Failed"
-            job.error_code = "EXECUTION_ERROR"
-            job.error_message = str(exc)[:1000]
-            job.completed_at = datetime.now(timezone.utc)
-            db.commit()
+            logger.exception("Error executing job %s", job.id)
+            self._handle_failure(db, job, shot, message=str(exc), exception=exc)
 
-            if job.attempts < MAX_ATTEMPTS:
-                job.status = "Queued"
-                job.error_code = None
-                job.error_message = None
-                job.started_at = None
-                job.completed_at = None
-                job.comfyui_prompt_id = None
-                db.commit()
-            else:
-                if shot:
-                    shot.status = "Failed"
-                db.commit()
+    def _handle_failure(
+        self,
+        db: Session,
+        job: GenerationJob,
+        shot: Shot | None,
+        *,
+        message: str,
+        exception: BaseException | None = None,
+        fallback_code: str | None = None,
+    ) -> None:
+        """Categorise a failure and either requeue it or stop.
+
+        Only errors that a retry could plausibly fix are requeued. An
+        out-of-memory or missing-model failure is recorded once with the action
+        the operator needs to take, rather than repeated until the attempt
+        ceiling (PRD 10.5).
+        """
+        classification = error_classifier.classify(message, exception)
+        code = classification.code
+        if code == error_classifier.UNKNOWN_ERROR and fallback_code:
+            code = fallback_code
+
+        detail = f"{message} | Suggested action: {classification.suggested_action}"
+
+        if classification.retryable and job.attempts < MAX_ATTEMPTS:
+            logger.info(
+                "Job %s failed with %s (attempt %d/%d); requeueing",
+                job.id, code, job.attempts, MAX_ATTEMPTS,
+            )
+            job.status = "Queued"
+            job.error_code = None
+            job.error_message = None
+            job.started_at = None
+            job.completed_at = None
+            job.comfyui_prompt_id = None
+            db.commit()
+            return
+
+        if not classification.retryable:
+            logger.warning(
+                "Job %s failed with non-retryable %s: %s", job.id, code, message
+            )
+            # Pin attempts so the loop treats this as exhausted.
+            job.attempts = MAX_ATTEMPTS
+        else:
+            logger.warning(
+                "Job %s failed with %s after %d attempts", job.id, code, MAX_ATTEMPTS
+            )
+
+        job.status = "Failed"
+        job.error_code = code
+        job.error_message = detail[:1000]
+        job.completed_at = datetime.now(timezone.utc)
+        if shot:
+            shot.status = "Failed"
+        db.commit()
 
     def _job_context(
         self, db: Session, job: GenerationJob, shot: Shot | None

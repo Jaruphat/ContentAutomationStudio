@@ -261,3 +261,86 @@ class TestQueueStatus:
         db_session.commit()
         status = manager.get_queue_status(sample_project.id)
         assert status["total_jobs"] == 0
+
+
+# ---------------------------------------------------------------------------
+# Retry policy driven by error category
+# ---------------------------------------------------------------------------
+
+class TestRetryPolicy:
+    @pytest.mark.asyncio
+    async def test_out_of_memory_is_not_retried(
+        self, db_session, sample_shot, manager, patched_sessions
+    ):
+        """PRD 10.5: never retry OOM indefinitely. One attempt, then stop with
+        an actionable message."""
+        async def oom(_payload, _job_id, context=None):
+            raise RuntimeError("CUDA out of memory. Tried to allocate 4.00 GiB")
+
+        manager._provider.submit_job = oom
+        job = make_job(db_session, sample_shot.id)
+        manager._running = True
+        await manager._execute_job(db_session, job)
+
+        db_session.refresh(job)
+        assert job.status == "Failed"
+        assert job.error_code == "OutOfMemoryError"
+        assert job.attempts == qm_module.MAX_ATTEMPTS  # pinned, not consumed
+        assert "Suggested action" in job.error_message
+
+    @pytest.mark.asyncio
+    async def test_connection_error_is_requeued(
+        self, db_session, sample_shot, manager, patched_sessions
+    ):
+        async def refused(_payload, _job_id, context=None):
+            raise ConnectionError("All connection attempts failed")
+
+        manager._provider.submit_job = refused
+        job = make_job(db_session, sample_shot.id)
+        manager._running = True
+        await manager._execute_job(db_session, job)
+
+        db_session.refresh(job)
+        assert job.status == "Queued"
+        assert job.attempts == 1
+        assert job.comfyui_prompt_id is None
+
+    @pytest.mark.asyncio
+    async def test_connection_error_stops_at_the_attempt_ceiling(
+        self, db_session, sample_shot, manager, patched_sessions
+    ):
+        async def refused(_payload, _job_id, context=None):
+            raise ConnectionError("Cannot connect to ComfyUI")
+
+        manager._provider.submit_job = refused
+        job = make_job(db_session, sample_shot.id)
+        manager._running = True
+
+        for _ in range(qm_module.MAX_ATTEMPTS):
+            db_session.refresh(job)
+            if job.status != "Queued":
+                break
+            await manager._execute_job(db_session, job)
+
+        db_session.refresh(job)
+        assert job.status == "Failed"
+        assert job.error_code == "ConnectionError"
+        assert job.attempts == qm_module.MAX_ATTEMPTS
+
+    @pytest.mark.asyncio
+    async def test_missing_model_is_not_retried(
+        self, db_session, sample_shot, manager, patched_sessions
+    ):
+        async def missing(_payload, _job_id, context=None):
+            raise RuntimeError(
+                "ckpt_name: 'h3.safetensors' not in list of available checkpoints"
+            )
+
+        manager._provider.submit_job = missing
+        job = make_job(db_session, sample_shot.id)
+        manager._running = True
+        await manager._execute_job(db_session, job)
+
+        db_session.refresh(job)
+        assert job.status == "Failed"
+        assert job.error_code == "MissingModelError"

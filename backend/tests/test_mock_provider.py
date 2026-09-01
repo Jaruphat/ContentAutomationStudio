@@ -6,6 +6,7 @@ and health checks.
 """
 
 import os
+import shutil
 import time
 
 import pytest
@@ -268,3 +269,101 @@ class TestCreatePlaceholderPng:
         size_1x1_path = str(tmp_path / "small.png")
         _create_placeholder_png(size_1x1_path, width=1, height=1)
         assert os.path.getsize(path) >= os.path.getsize(size_1x1_path)
+
+
+# ---------------------------------------------------------------------------
+# Context-shaped output
+# ---------------------------------------------------------------------------
+
+class TestOutputShapedByContext:
+    """The mock must produce media matching what the shot asked for.
+
+    Regression guard: the submit-time context is normalised into a record whose
+    mode lives under "mode". Re-normalising that record on the way out looked
+    for "generation_mode" instead, so every video shot silently came back as a
+    still.
+    """
+
+    @pytest.mark.asyncio
+    async def test_image_context_produces_png_at_requested_size(self, provider):
+        prompt_id = await provider.submit_job(
+            {}, "job-sized-image",
+            context={"generation_mode": "image", "width": 640, "height": 360},
+        )
+        outputs = await provider.get_job_outputs(prompt_id)
+        assert outputs[0].file_type == "image"
+        assert (outputs[0].width, outputs[0].height) == (640, 360)
+        assert outputs[0].file_path.endswith(".png")
+
+    @pytest.mark.asyncio
+    async def test_large_dimensions_are_clamped_keeping_aspect(self, provider):
+        prompt_id = await provider.submit_job(
+            {}, "job-vertical",
+            context={"generation_mode": "image", "width": 1080, "height": 1920},
+        )
+        outputs = await provider.get_job_outputs(prompt_id)
+        assert (outputs[0].width, outputs[0].height) == (360, 640)
+
+    @pytest.mark.asyncio
+    @pytest.mark.skipif(
+        shutil.which("ffmpeg") is None, reason="FFmpeg is not installed"
+    )
+    async def test_video_context_produces_mp4(self, provider):
+        prompt_id = await provider.submit_job(
+            {}, "job-video",
+            context={
+                "generation_mode": "video",
+                "width": 640, "height": 360,
+                "duration_sec": 1.0, "frame_rate": 24.0,
+            },
+        )
+        outputs = await provider.get_job_outputs(prompt_id)
+        assert outputs[0].file_type == "video"
+        assert outputs[0].file_path.endswith(".mp4")
+        assert outputs[0].codec == "h264"
+        assert outputs[0].duration_sec == pytest.approx(1.0, abs=0.1)
+        assert os.path.isfile(outputs[0].file_path)
+
+    @pytest.mark.asyncio
+    async def test_video_mode_survives_the_status_round_trip(self, provider):
+        """get_job_status must report the same media kind as get_job_outputs."""
+        prompt_id = await provider.submit_job(
+            {}, "job-video-status",
+            context={"generation_mode": "video", "width": 320, "height": 180,
+                     "duration_sec": 0.5, "frame_rate": 24.0},
+        )
+        age_submission(provider, prompt_id, 10.0)
+        status = await provider.get_job_status(prompt_id)
+        outputs = await provider.get_job_outputs(prompt_id)
+        assert status.outputs[0]["type"] == outputs[0].file_type
+
+    @pytest.mark.asyncio
+    async def test_frames_imply_duration_when_not_given(self, provider):
+        prompt_id = await provider.submit_job(
+            {}, "job-frames",
+            context={"generation_mode": "video", "frames": 48, "frame_rate": 24.0},
+        )
+        assert provider._submissions[prompt_id]["duration_sec"] == pytest.approx(2.0)
+
+
+# ---------------------------------------------------------------------------
+# Restart durability
+# ---------------------------------------------------------------------------
+
+class TestSubmissionPersistence:
+    @pytest.mark.asyncio
+    async def test_submissions_survive_a_new_provider_instance(self, output_dir):
+        """A job in flight when the process stopped must still be resolvable
+        by the provider the restarted process creates."""
+        first = MockComfyUIProvider(output_base_dir=output_dir)
+        prompt_id = await first.submit_job(
+            {}, "job-durable",
+            context={"generation_mode": "image", "width": 320, "height": 180},
+        )
+
+        restarted = MockComfyUIProvider(output_base_dir=output_dir)
+        assert prompt_id in restarted._submissions
+
+        age_submission(restarted, prompt_id, 10.0)
+        status = await restarted.get_job_status(prompt_id)
+        assert status.status == JobStatusEnum.COMPLETED
