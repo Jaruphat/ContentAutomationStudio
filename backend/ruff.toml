@@ -1,0 +1,9 @@
+# Ruff configuration for the Content Automation Studio backend.
+# Rule selection is left at Ruff's defaults (pycodestyle errors + Pyflakes).
+
+[lint.per-file-ignores]
+# conftest.py must set CAS_DATA_DIR before importing any app module: the
+# database engine is bound at import time, so a later assignment would let the
+# suite create and migrate the developer's real backend/data/cas.db. The
+# imports below that assignment are deliberate, not an oversight.
+"tests/conftest.py" = ["E402"]

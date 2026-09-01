@@ -8,7 +8,19 @@ Provides:
 """
 
 import os
+import shutil
+import tempfile
 import uuid
+
+# Redirect all runtime data before any app module is imported.
+#
+# app.database builds its engine at import time from app.paths, and
+# TestClient(app) runs the real application lifespan, which calls init_db().
+# Setting CAS_DATA_DIR inside a fixture would therefore be too late: the tests
+# would create and migrate the developer's real backend/data/cas.db. Doing it
+# here, above the app imports, keeps the whole suite inside a temp directory.
+_TEST_DATA_DIR = tempfile.mkdtemp(prefix="cas-test-data-")
+os.environ["CAS_DATA_DIR"] = _TEST_DATA_DIR
 
 import pytest
 from fastapi.testclient import TestClient
@@ -33,22 +45,25 @@ from app.models import (
 # ---------------------------------------------------------------------------
 
 @pytest.fixture(scope="session", autouse=True)
-def isolated_data_dir(tmp_path_factory):
-    """Redirect all runtime data (workflows, generated media, exports) to a
-    temporary directory for the whole test session.
+def isolated_data_dir():
+    """Guarantee the suite never writes into the developer's working tree.
 
-    Without this, importing a workflow in a test writes its source JSON into
-    the developer's real ``backend/data/workflows`` directory and leaves it
-    there. ``app.paths`` resolves ``CAS_DATA_DIR`` on every call, so setting it
-    here is enough to redirect every consumer.
+    The redirection itself happens at import time (see the top of this file);
+    this fixture asserts it took effect and removes the directory afterwards.
     """
-    previous = os.environ.get("CAS_DATA_DIR")
-    os.environ["CAS_DATA_DIR"] = str(tmp_path_factory.mktemp("cas-data"))
-    yield os.environ["CAS_DATA_DIR"]
-    if previous is None:
-        os.environ.pop("CAS_DATA_DIR", None)
-    else:
-        os.environ["CAS_DATA_DIR"] = previous
+    assert os.environ["CAS_DATA_DIR"] == _TEST_DATA_DIR
+
+    from app import paths
+
+    assert paths.data_dir() == _TEST_DATA_DIR
+    # The database engine is bound at import time, so it must also point here.
+    from app.database import _DB_PATH
+
+    assert _DB_PATH.startswith(_TEST_DATA_DIR)
+
+    yield _TEST_DATA_DIR
+
+    shutil.rmtree(_TEST_DATA_DIR, ignore_errors=True)
 
 
 # ---------------------------------------------------------------------------
