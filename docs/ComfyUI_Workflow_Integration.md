@@ -261,3 +261,82 @@ instance cannot answer - the report is `checked: false` rather than
   UI-format workflow degrades to passing logical values through rather than
   blocking the product flow. Verified after these changes: three shots to three
   takes to a rendered review video, with the live ComfyUI queue untouched.
+---
+
+## 7. Controlled one-shot preflight (2026-09-01)
+
+The first real generation through this application. One job, authorised
+explicitly, on `video_minimax_h3_t2v.api.json` only.
+
+### Setup
+
+| | |
+|---|---|
+| Workflow | `video_minimax_h3_t2v.api.json`, sha256 `06392e85…4030088` (unchanged) |
+| Mapped fields | `positivePrompt`, `seed`, `outputPrefix` only |
+| `output_mapping` | node `92` (`SaveVideo`) |
+| Prompt | `a calm blue sky with slow drifting white clouds` |
+| Seed | `42` (`seed_policy: fixed`, deterministic) |
+| Preserved | 0.4 MP / 16:9 / multiple 32, duration expression and its `5` second input, 20 steps, turbo-LoRA switch off, 24 fps |
+
+The payload was diffed against the untouched source before submission:
+**exactly three inputs changed**, all of them the authorised fields. Every
+resolution, duration, step-count and LoRA setting was byte-identical to the
+source file.
+
+### Result — completed
+
+| | |
+|---|---|
+| Job status | `Completed`, 1 attempt, no errors |
+| ComfyUI `prompt_id` | `7bd626a7-b9b8-4f58-907a-02b4da19d836` |
+| Wall clock | 300.7 s (~295 s in ComfyUI) |
+| Output | `7bd626a7…_537ab438_f722befb_00001_.mp4`, 416,626 bytes |
+| sha256 | `d5abfef82068048ddf315d53957e4104b73426d6da95b7d9e886f4eadeac3496` |
+
+ffprobe on the retrieved file:
+
+```
+video: h264  864x480  24/1 fps  124 frames
+audio: aac   32000 Hz  2 channels
+format: mp4  duration 5.167s  bit_rate 645056
+```
+
+Both derived values match what was predicted from the preserved defaults:
+864×480 is 0.4 MP at 16:9 rounded to a multiple of 32, and 124 frames is
+`max(5, round(5×24)) + (5 − (120 mod 17)) mod 17`. 124 frames at 24 fps is
+5.167 s.
+
+The output carries **native stereo audio**, which is MiniMax H3's headline
+feature.
+
+### Defect found and fixed
+
+The take was first recorded as `codec=mp4, 0x0, 0.0s, 0.0fps`. The real
+provider never probed what it downloaded - it inferred the type from the file
+extension and left every dimension at zero. That is wrong provenance, and a
+zero duration makes the timeline silently fall back to the shot's *planned*
+duration rather than the media's real length.
+
+`app/services/media_probe.py` now probes every downloaded file, and
+`render_service` shares the same implementation. Re-running
+`get_job_outputs` against the same live ComfyUI history confirmed the fix:
+`h264 864x480 5.167s 24.0fps`. Downstream, the timeline picked up 5.167 s
+instead of the planned 5.0 s.
+
+### Known gap: the review render drops audio
+
+`render_service` normalises every segment with `-an`, so the assembled
+`review.mp4` is silent even when the source take carries audio. Verified on
+this run: source `has_audio: true (aac)`, render `has_audio: false`.
+
+This was left as-is rather than half-fixed. Preserving audio means every
+segment needs a matching audio stream before the concat demuxer's stream copy
+will work, so stills would need a silent track synthesised
+(`-f lavfi -i anullsrc`). That changes render output for every existing
+project and deserves its own change, not a footnote to a preflight.
+
+### Not done
+
+No batch was run. Resolution and duration remain unmapped by choice, so per-shot
+control of either still needs the decisions in section 4.

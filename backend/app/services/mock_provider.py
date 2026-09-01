@@ -122,7 +122,7 @@ def _create_placeholder_mp4(
         "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p",
         tmp,
     ]
-    from app.services.render_service import run_captured
+    from app.services.media_probe import run_captured
 
     returncode, _stdout, stderr = run_captured(cmd, timeout=60)
     if returncode != 0:

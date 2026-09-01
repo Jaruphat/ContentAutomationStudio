@@ -17,6 +17,7 @@ from typing import Any
 import httpx
 
 from app import paths
+from app.services.media_probe import probe_media_file
 from app.services.comfyui_adapter import (
     ComfyUIProvider,
     HealthStatus,
@@ -349,18 +350,25 @@ class RealComfyUIProvider(ComfyUIProvider):
             with open(local_path, "wb") as f:
                 f.write(resp.content)
 
-            # Determine dimensions from content-type or filename
             ext = os.path.splitext(filename)[1].lower()
-            is_video = ext in (".mp4", ".webm", ".gif", ".avi")
+            is_video = ext in (".mp4", ".webm", ".gif", ".avi", ".mkv", ".mov")
+
+            # Probe the file we just downloaded rather than guessing from its
+            # extension. Without this a take records 0x0 at 0.0s with the
+            # container name as its codec, which is wrong provenance and makes
+            # the timeline fall back to the shot's planned duration instead of
+            # the real one.
+            probe = probe_media_file(local_path)
 
             return OutputFile(
                 file_path=local_path,
                 file_type="video" if is_video else "image",
-                width=0,
-                height=0,
-                duration_sec=0.0,
-                frame_rate=0.0,
-                codec=ext.lstrip("."),
+                width=probe.get("width", 0),
+                height=probe.get("height", 0),
+                duration_sec=probe.get("duration_sec", 0.0),
+                frame_rate=probe.get("frame_rate", 0.0),
+                # Fall back to the extension only when ffprobe is unavailable.
+                codec=probe.get("codec") or ext.lstrip("."),
             )
 
         except Exception as exc:

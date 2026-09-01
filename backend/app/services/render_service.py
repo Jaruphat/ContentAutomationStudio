@@ -14,33 +14,26 @@ is missing. A failed render never touches approved takes or project state
 (NFR-09); it only writes under the project's export directory.
 """
 
-import json
 import logging
 import os
-import shutil
-import subprocess
-import tempfile
 from typing import Any
 
 from sqlalchemy.orm import Session
 
 from app import paths
 from app.models import Project, Take
+# ffmpeg_path/ffprobe_path are re-exported: callers and tests treat this
+# module as the render entry point and ask it whether FFmpeg is available.
+from app.services.media_probe import (  # noqa: F401
+    VIDEO_EXTENSIONS,
+    ffmpeg_path,
+    ffprobe_path,
+    probe_media_file,
+    run_captured,
+)
 from app.services.timeline_service import get_timeline_manifest
 
 logger = logging.getLogger("cas.render_service")
-
-VIDEO_EXTENSIONS = (".mp4", ".mov", ".webm", ".mkv", ".avi", ".gif")
-
-
-def ffmpeg_path() -> str | None:
-    """Absolute path to ffmpeg, or None when it is not installed."""
-    return shutil.which("ffmpeg")
-
-
-def ffprobe_path() -> str | None:
-    """Absolute path to ffprobe, or None when it is not installed."""
-    return shutil.which("ffprobe")
 
 
 def parse_resolution(value: str) -> tuple[int, int]:
@@ -54,44 +47,6 @@ def parse_resolution(value: str) -> tuple[int, int]:
     return max(2, width - (width % 2)), max(2, height - (height % 2))
 
 
-def run_captured(
-    cmd: list[str], timeout: int = 300
-) -> tuple[int, str, str]:
-    """
-    Run a command, capturing stdout and stderr through temporary files.
-
-    Pipes are deliberately avoided: ``capture_output=True`` spawns reader
-    threads, and on Windows those threads make pytest's faulthandler report a
-    spurious access violation on every FFmpeg call, which buries real failures
-    in the test output. Redirecting to files needs no reader threads and has no
-    pipe-buffer deadlock risk on verbose output.
-
-    Returns (returncode, stdout, stderr). A returncode of -1 means the process
-    could not be run at all.
-    """
-    with tempfile.TemporaryDirectory(prefix="cas-proc-") as tmp:
-        out_path = os.path.join(tmp, "stdout")
-        err_path = os.path.join(tmp, "stderr")
-        try:
-            with open(out_path, "wb") as out_f, open(err_path, "wb") as err_f:
-                proc = subprocess.run(
-                    cmd, stdout=out_f, stderr=err_f, stdin=subprocess.DEVNULL,
-                    timeout=timeout,
-                )
-            returncode = proc.returncode
-        except (subprocess.TimeoutExpired, OSError) as exc:
-            return -1, "", str(exc)
-
-        def _read(path: str) -> str:
-            try:
-                with open(path, encoding="utf-8", errors="replace") as f:
-                    return f.read()
-            except OSError:
-                return ""
-
-        return returncode, _read(out_path), _read(err_path)
-
-
 def _run(cmd: list[str], timeout: int = 300) -> tuple[bool, str]:
     """Run a command; return (ok, tail of stderr)."""
     returncode, _stdout, stderr = run_captured(cmd, timeout=timeout)
@@ -102,34 +57,7 @@ def _run(cmd: list[str], timeout: int = 300) -> tuple[bool, str]:
 
 def probe_media(file_path: str) -> dict[str, Any]:
     """Return width/height/duration/codec for a media file, or {} if unknown."""
-    ffprobe = ffprobe_path()
-    if not ffprobe or not os.path.isfile(file_path):
-        return {}
-
-    cmd = [
-        ffprobe, "-v", "error",
-        "-select_streams", "v:0",
-        "-show_entries", "stream=width,height,codec_name",
-        "-show_entries", "format=duration",
-        "-of", "json", file_path,
-    ]
-    returncode, stdout, _stderr = run_captured(cmd, timeout=30)
-    if returncode != 0:
-        return {}
-    try:
-        data = json.loads(stdout or "{}")
-    except json.JSONDecodeError:
-        return {}
-
-    streams = data.get("streams") or [{}]
-    stream = streams[0]
-    duration = (data.get("format") or {}).get("duration")
-    return {
-        "width": int(stream.get("width") or 0),
-        "height": int(stream.get("height") or 0),
-        "codec": stream.get("codec_name") or "",
-        "duration_sec": float(duration) if duration else 0.0,
-    }
+    return probe_media_file(file_path)
 
 
 def _blocked(project_id: str, reason: str) -> dict[str, Any]:

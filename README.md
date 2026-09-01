@@ -124,7 +124,7 @@ cd backend
 python -m pytest tests/ -q
 ```
 
-412 tests covering the data model, prompt compiler, workflow registry and
+429 tests covering the data model, prompt compiler, workflow registry and
 mapping, workflow format detection, node/model inventory and candidate mapping
 derivation, dependency checking, job payload construction, queue state and
 retry policy, error classification, the review API, schema migration, and the
@@ -227,7 +227,8 @@ ContentAutomationStudio/
 |   |       |-- queue_manager.py       # Persistent queue, reconcile, retry policy
 |   |       |-- error_classifier.py    # PRD 10.5 error categories and retryability
 |   |       |-- timeline_service.py    # Timeline manifest and render plan
-|   |       |-- render_service.py      # FFmpeg review render and ffprobe
+|   |       |-- render_service.py      # FFmpeg review render
+|   |       |-- media_probe.py         # ffprobe metadata, shared by render + provider
 |   |       +-- export_service.py      # Storyboard/prompt/manifest export
 |   +-- tests/
 |       |-- conftest.py                # Fixtures; redirects CAS_DATA_DIR to tmp
@@ -242,6 +243,7 @@ ContentAutomationStudio/
 |       |-- test_queue_manager.py
 |       |-- test_error_classifier.py
 |       |-- test_render_service.py
+|       |-- test_media_probe.py
 |       |-- test_database_schema.py
 |       |-- test_mock_provider.py
 |       |-- test_comfyui_provider.py
@@ -339,6 +341,10 @@ preserved under `workflows/source/api/`. Both are detected as API format,
 marked submittable, dependency-checked clean, and their suggested mappings
 validate. `GET /api/health` now reports `workflows.submittable: 2`.
 
+**Video generation is verified working.** One controlled real job ran through
+the T2V workflow on 2026-09-01 and produced a genuine 864x480 h264+aac clip;
+see the Verification Status section.
+
 **Still outstanding: `image_boogu_image_0_1_edit_int8` in API format.** Until
 that arrives, image shots cannot be generated for real.
 
@@ -367,8 +373,8 @@ reported by the analysis endpoint:
 - **Output mapping** — `output_mapping` is still empty and should name the
   `SaveVideo` node.
 
-No real generation has been run. The handoff README asks for a low-resolution
-single-shot test before any batch, and that is a decision for the operator.
+The single-shot test the handoff README asks for has now been run on the T2V
+workflow and passed. No batch has been run.
 
 `docs/ComfyUI_Workflow_Integration.md` has the full findings: per-workflow
 candidate mappings, the two fields that need a decision after export
@@ -417,13 +423,13 @@ exercised against a running server on 2026-09-01, not merely implemented.
 |---|-------------------------|--------|----------|
 | 1 | Plot to editable scene/shot storyboard | Verified | e2e run creates 3 scenes and 9 shots, all editable via the API |
 | 2 | Each shot has a prompt and checkable workflow mapping | Verified | Preflight validates each mapping against the workflow JSON; snapshots show the compiled prompt injected into node 6, negative into 7, seed into 3, dimensions into 5, with unmapped inputs untouched |
-| 3 | Real image and video jobs through H3 | **PARTIALLY UNBLOCKED** | ComfyUI 0.34.0 reachable; all node classes and models installed. Both video workflows are now registered in API format, validated and submittable. The image workflow is still editor-format only, and no real generation has been run - see Known Blockers |
+| 3 | Real image and video jobs through H3 | **Video verified; image blocked** | One controlled real generation completed on the T2V workflow: 864x480 h264 + aac, 124 frames, 5.167s, in 300.7s. Image generation is still blocked - that workflow exists only in editor format |
 | 4 | Job status, error and retry behave correctly | Verified | Categorised errors; connection failures retry three times, OOM and missing models fail once |
 | 5 | One approved take per shot | Verified | 9 takes approved through the review API |
 | 6 | Approved takes assembled into a review video | Verified | 45.0s 1920x1080 h264 `review.mp4` from 9 approved takes, confirmed with ffprobe |
 | 7 | Project and queue state survive restart | Verified | Project, scenes and 9 approved takes intact after a hard kill and restart |
 | 8 | Exports include video, storyboard, prompts and provenance | Verified | Storyboard JSON/CSV/Markdown, prompts, generation manifest with snapshot path and SHA-256, timeline manifest, project archive |
-| 9 | Automated tests of data model, mapping and queue state | Verified | 412 backend tests |
+| 9 | Automated tests of data model, mapping and queue state | Verified | 429 backend tests |
 | 10 | One end-to-end project with no manual file edits | Verified | `python test_e2e.py` passes start to finish |
 | 11 | Restart mid-queue resumes only the stuck jobs | Verified | Server killed with 1 Running and 7 Queued; on restart the Running job was requeued, retried as attempt 2, and all 8 completed |
 | 12 | Retiming the manifest re-renders without regenerating takes | Verified | Two items retimed, re-render went 45.0s to 36.0s, approved take files byte-identical and no new jobs created |
@@ -444,11 +450,27 @@ exercised against a running server on 2026-09-01, not merely implemented.
 | Unsafe bindings withheld | `frames` (would overwrite a computed formula) reported for review, excluded from auto-apply |
 | Mock generation still working | 3 shots to 3 takes to a 1024x1024 h264 review render |
 
+### First real generation (2026-09-01)
+
+One authorised job on `video_minimax_h3_t2v.api.json`. Full record in
+`docs/ComfyUI_Workflow_Integration.md` section 7.
+
+| Check | Result |
+|---|---|
+| Payload diff vs untouched source | exactly 3 inputs changed, all authorised; resolution, duration, steps and LoRA switch byte-identical |
+| Job outcome | `Completed`, 1 attempt, prompt_id `7bd626a7-...` |
+| Wall clock | 300.7 s |
+| Output (ffprobe) | h264 864x480, 24 fps, 124 frames, 5.167 s, + aac stereo; 416,626 bytes |
+| Derived values | 864x480 = 0.4 MP @ 16:9 rounded to 32; 124 frames = the workflow's own duration expression |
+| Provenance | snapshot written, workflow sha256 recorded, seed 42 reproducible |
+| Defect found | takes recorded `0x0 / 0.0s / codec=mp4` - the provider never probed downloads. Fixed and regression-tested |
+| Known gap | the review render drops audio (`-an`); source take has aac, render does not |
+
 ### Quality gates
 
 | Gate | Command | Result |
 |------|---------|--------|
-| Backend tests | `python -m pytest tests/ -q` | 412 passed |
+| Backend tests | `python -m pytest tests/ -q` | 429 passed |
 | Backend lint | `python -m ruff check app/ tests/` | clean |
 | Frontend lint | `npm run lint` | clean |
 | Frontend typecheck | `npx tsc -b` | clean |
