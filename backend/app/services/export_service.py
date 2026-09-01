@@ -296,6 +296,10 @@ def export_generation_manifest(db: Session, project_id: str) -> dict[str, Any]:
             "shot_id": job.shot_id,
             "workflow_id": job.workflow_id,
             "workflow_version": job.workflow_version,
+            # Provenance: the exact graph submitted and the hash of the
+            # registered source it came from (PRD FR-11, NFR-10).
+            "workflow_snapshot_path": job.workflow_snapshot_path or "",
+            "workflow_sha256": job.workflow_sha256 or "",
             "seed": job.seed,
             "status": job.status,
             "attempts": job.attempts,

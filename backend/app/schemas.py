@@ -427,6 +427,8 @@ class GenerationJobResponse(BaseModel):
     shot_id: str
     workflow_id: Optional[str]
     workflow_version: str
+    workflow_snapshot_path: Optional[str] = None
+    workflow_sha256: Optional[str] = None
     parameter_map: dict[str, Any]
     seed: Optional[int]
     comfyui_prompt_id: Optional[str]
