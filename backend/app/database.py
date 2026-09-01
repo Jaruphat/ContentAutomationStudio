@@ -3,10 +3,14 @@ Database configuration for Content Automation Studio.
 Uses synchronous SQLAlchemy with SQLite.
 """
 
-from sqlalchemy import create_engine
+import logging
+
+from sqlalchemy import create_engine, inspect
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 from app import paths
+
+logger = logging.getLogger("cas.database")
 
 # Database path comes from the central paths module so that the DB, imported
 # workflows, generated media and exports all live under one runtime tree.
@@ -40,8 +44,39 @@ def get_db():
 
 
 def init_db():
-    """Create all tables defined by ORM models."""
+    """Create all tables and apply additive column migrations."""
     # Import models so they are registered on Base.metadata before create_all.
     import app.models  # noqa: F401
 
     Base.metadata.create_all(bind=engine)
+    ensure_schema()
+
+
+def ensure_schema():
+    """Add columns that exist on the ORM models but not yet in the database.
+
+    ``create_all`` only creates missing tables, so a database written by an
+    older build keeps its original columns. This walks every mapped table and
+    issues ``ALTER TABLE ... ADD COLUMN`` for anything missing, which is the
+    one schema change SQLite supports in place. Enough for the MVP's additive
+    schema evolution; a destructive change would need a real migration tool.
+    """
+    import app.models  # noqa: F401
+
+    inspector = inspect(engine)
+    existing_tables = set(inspector.get_table_names())
+
+    with engine.begin() as conn:
+        for table in Base.metadata.sorted_tables:
+            if table.name not in existing_tables:
+                continue
+            present = {c["name"] for c in inspector.get_columns(table.name)}
+            for column in table.columns:
+                if column.name in present:
+                    continue
+                col_type = column.type.compile(dialect=engine.dialect)
+                ddl = f'ALTER TABLE "{table.name}" ADD COLUMN "{column.name}" {col_type}'
+                # SQLite rejects a non-constant DEFAULT on ADD COLUMN, so new
+                # columns are added nullable and backfilled by the app layer.
+                conn.exec_driver_sql(ddl)
+                logger.info("Schema migration: added %s.%s", table.name, column.name)

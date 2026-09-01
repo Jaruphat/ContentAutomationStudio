@@ -27,6 +27,7 @@ from app.schemas import (
     PreflightResult,
     QueueStatus,
 )
+from app.services import job_payload, workflow_registry
 from app.services.prompt_compiler import compile_prompt
 from app.services.queue_manager import queue_manager
 
@@ -60,6 +61,15 @@ def _get_project_shots(db: Session, project_id: str) -> list[Shot]:
     return shots
 
 
+def _parse_resolution(value: str) -> tuple[int, int]:
+    """Parse a 'WIDTHxHEIGHT' project resolution, falling back to 1920x1080."""
+    try:
+        width_str, height_str = str(value).lower().split("x", 1)
+        return int(width_str), int(height_str)
+    except (ValueError, AttributeError):
+        return 1920, 1080
+
+
 # ---------------------------------------------------------------------------
 # Preflight validation
 # ---------------------------------------------------------------------------
@@ -68,49 +78,139 @@ def _get_project_shots(db: Session, project_id: str) -> list[Shot]:
     "/api/projects/{project_id}/preflight",
     response_model=PreflightResult,
 )
-def preflight_validation(project_id: str, db: Session = Depends(get_db)):
+async def preflight_validation(project_id: str, db: Session = Depends(get_db)):
     """
-    Run preflight checks before generation.
+    Run preflight checks before generation (PRD section 10.3).
 
-    Validates that shots have prompts, workflow assignments, and
-    that referenced workflows exist and have valid mappings.
+    Per shot: prompt present, a workflow resolvable from the shot or the
+    project default, and an eligible status.
+    Per referenced workflow: the source JSON still parses and every mapped
+    node/field still exists in it, plus the fields required to drive a real
+    generation are mapped.
+    Plus: whether the configured ComfyUI provider is reachable.
     """
     project = _get_project_or_404(db, project_id)
     shots = _get_project_shots(db, project_id)
 
     issues: list[dict[str, Any]] = []
+    warnings: list[str] = []
     ready_count = 0
 
+    # -- Provider reachability ------------------------------------------
+    provider = queue_manager.provider
+    health = await provider.check_health()
+    if health.mock:
+        warnings.append(
+            "ComfyUI provider is in mock mode. Generated takes are deterministic "
+            "placeholders, not real renders. Set COMFYUI_PROVIDER=real to use a "
+            "live instance."
+        )
+    elif not health.online:
+        warnings.append(
+            f"ComfyUI is not reachable: {health.error or 'unknown error'}. "
+            f"Jobs will fail until the instance is online."
+        )
+
+    # -- Workflow mapping validation ------------------------------------
+    # Validate each distinct referenced workflow once rather than per shot.
+    workflow_checks: list[dict[str, Any]] = []
+    workflow_ok: dict[str, bool] = {}
+
+    def _resolve_workflow_id(shot: Shot) -> str | None:
+        if shot.workflow_preset_id:
+            return shot.workflow_preset_id
+        if shot.generation_mode == "image":
+            return project.default_image_workflow_id
+        return project.default_video_workflow_id
+
+    referenced_ids = {
+        wid for wid in (_resolve_workflow_id(s) for s in shots) if wid
+    }
+
+    for workflow_id in sorted(referenced_ids):
+        workflow = db.query(Workflow).filter(Workflow.id == workflow_id).first()
+        if workflow is None:
+            workflow_checks.append({
+                "workflow_id": workflow_id,
+                "name": "",
+                "valid": False,
+                "errors": ["Workflow record not found"],
+                "warnings": [],
+            })
+            workflow_ok[workflow_id] = False
+            continue
+
+        errors: list[str] = []
+        check_warnings: list[str] = []
+
+        try:
+            workflow_data = workflow_registry.load_workflow_source(
+                workflow.source_json_path
+            )
+        except (FileNotFoundError, ValueError) as exc:
+            errors.append(str(exc))
+            workflow_data = None
+
+        if workflow_data is not None:
+            valid, map_errors, map_warnings = workflow_registry.validate_mapping(
+                workflow_data=workflow_data,
+                parameter_mapping=workflow.parameter_mapping or {},
+                output_mapping=workflow.output_mapping or [],
+            )
+            errors.extend(map_errors)
+            check_warnings.extend(map_warnings)
+
+            mapping = workflow.parameter_mapping or {}
+            missing = [
+                f for f in job_payload.REQUIRED_LOGICAL_FIELDS if f not in mapping
+            ]
+            if missing:
+                message = (
+                    f"Required logical field(s) not mapped: {', '.join(missing)}"
+                )
+                # Only blocking for a real instance; the mock does not execute
+                # the graph, so an unmapped field cannot break it.
+                if provider.requires_workflow_payload:
+                    errors.append(message)
+                else:
+                    check_warnings.append(message + " (tolerated in mock mode)")
+
+        is_ok = not errors
+        workflow_ok[workflow_id] = is_ok
+        workflow_checks.append({
+            "workflow_id": workflow_id,
+            "name": workflow.name,
+            "valid": is_ok,
+            "errors": errors,
+            "warnings": check_warnings,
+        })
+
+        # Keep the stored validation status in step with what we just checked.
+        workflow.validation_status = "valid" if is_ok else "invalid"
+
+    db.commit()
+
+    # -- Per-shot checks -------------------------------------------------
     for shot in shots:
         shot_issues: list[str] = []
 
-        # Check prompt presence
         if shot.generation_mode == "image" and not shot.image_prompt:
             shot_issues.append("Missing image prompt")
         elif shot.generation_mode in ("video", "image-to-video") and not shot.video_prompt:
             shot_issues.append("Missing video prompt")
 
-        # Check workflow assignment
-        workflow_id = shot.workflow_preset_id
+        workflow_id = _resolve_workflow_id(shot)
         if not workflow_id:
-            # Try project defaults
-            if shot.generation_mode == "image":
-                workflow_id = project.default_image_workflow_id
-            else:
-                workflow_id = project.default_video_workflow_id
-
-        if workflow_id:
-            workflow = db.query(Workflow).filter(Workflow.id == workflow_id).first()
-            if not workflow:
-                shot_issues.append(f"Referenced workflow '{workflow_id}' not found")
-            elif workflow.validation_status == "invalid":
-                shot_issues.append(f"Workflow '{workflow.name}' has invalid mapping")
-        else:
             shot_issues.append("No workflow assigned (shot or project default)")
+        elif not workflow_ok.get(workflow_id, False):
+            shot_issues.append(
+                f"Assigned workflow '{workflow_id}' failed mapping validation"
+            )
 
-        # Check status
         if shot.status not in ("Ready", "Draft", "Failed"):
-            shot_issues.append(f"Shot status is '{shot.status}', expected Ready or Draft")
+            shot_issues.append(
+                f"Shot status is '{shot.status}', expected Ready, Draft or Failed"
+            )
 
         if shot_issues:
             issues.append({
@@ -127,6 +227,10 @@ def preflight_validation(project_id: str, db: Session = Depends(get_db)):
         total_shots=len(shots),
         ready_shots=ready_count,
         issues=issues,
+        workflow_checks=workflow_checks,
+        warnings=warnings,
+        comfyui_online=health.online,
+        comfyui_mock=health.mock,
     )
 
 
@@ -242,12 +346,22 @@ def start_generation(
         else:
             seed = random.randint(0, 2**31 - 1)
 
+        # Keys are the canonical logical field names shared with a workflow's
+        # parameter_mapping, so the payload builder can line the two up.
+        width, height = _parse_resolution(project.target_resolution)
         parameter_map = {
-            "positive_prompt": compiled.positive_prompt,
-            "negative_prompt": compiled.negative_prompt,
-            "seed": seed,
-            "generation_mode": shot.generation_mode,
+            job_payload.POSITIVE_PROMPT: compiled.positive_prompt,
+            job_payload.NEGATIVE_PROMPT: compiled.negative_prompt,
+            job_payload.SEED: seed,
+            job_payload.WIDTH: width,
+            job_payload.HEIGHT: height,
+            job_payload.OUTPUT_PREFIX: f"{project_id[:8]}_{shot.id[:8]}",
         }
+        if shot.generation_mode in ("video", "image-to-video"):
+            frames = max(1, round(
+                (shot.planned_duration_sec or 3.0) * (project.frame_rate or 24.0)
+            ))
+            parameter_map[job_payload.FRAMES] = frames
 
         job = GenerationJob(
             id=str(uuid.uuid4()),

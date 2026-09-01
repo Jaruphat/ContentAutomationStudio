@@ -9,11 +9,12 @@ from app.database import get_db
 from app.models import Project, TimelineItem
 from app.schemas import (
     RenderPlan,
+    RenderResult,
     TimelineItemResponse,
     TimelineManifest,
     TimelineUpdateRequest,
 )
-from app.services import timeline_service
+from app.services import render_service, timeline_service
 
 router = APIRouter(prefix="/api/projects/{project_id}", tags=["timeline"])
 
@@ -111,3 +112,17 @@ def generate_render_plan(project_id: str, db: Session = Depends(get_db)):
         commands=plan["commands"],
         warnings=plan["warnings"],
     )
+
+
+@router.post("/render", response_model=RenderResult)
+def render_review(project_id: str, db: Session = Depends(get_db)):
+    """
+    Render a review video from the current timeline using FFmpeg.
+
+    Only approved takes are used. When FFmpeg is missing, the timeline is
+    empty, or any referenced media file is absent, no video is produced and
+    the response explains why - nothing is fabricated.
+    """
+    _get_project_or_404(db, project_id)
+    result = render_service.render_review_video(db, project_id)
+    return RenderResult(**result)

@@ -528,11 +528,31 @@ class TimelineUpdateRequest(BaseModel):
 # Preflight / Generation control
 # ============================================================================
 
+class RenderResult(BaseModel):
+    project_id: str
+    rendered: bool
+    output_path: str = ""
+    reason: str = ""
+    warnings: list[str] = Field(default_factory=list)
+    segment_count: int = 0
+    width: int = 0
+    height: int = 0
+    duration_sec: float = 0.0
+    codec: str = ""
+    size_bytes: int = 0
+
+
 class PreflightResult(BaseModel):
     ready: bool
     total_shots: int
     ready_shots: int
     issues: list[dict[str, Any]] = Field(default_factory=list)
+    #: Per-workflow mapping validation, keyed by workflow id.
+    workflow_checks: list[dict[str, Any]] = Field(default_factory=list)
+    #: Non-blocking notes (e.g. mock provider in use, ComfyUI offline).
+    warnings: list[str] = Field(default_factory=list)
+    comfyui_online: bool = False
+    comfyui_mock: bool = False
 
 
 class GenerateRequest(BaseModel):

@@ -66,8 +66,18 @@ class ComfyUIProvider(ABC):
       - Checking the health of the ComfyUI instance.
     """
 
+    #: Whether this provider needs a real, node-mapped ComfyUI workflow
+    #: payload. Real instances do; the mock accepts logical values directly so
+    #: the product flow can be exercised before H3 workflow JSON arrives.
+    requires_workflow_payload: bool = True
+
     @abstractmethod
-    async def submit_job(self, workflow_payload: dict[str, Any], job_id: str) -> str:
+    async def submit_job(
+        self,
+        workflow_payload: dict[str, Any],
+        job_id: str,
+        context: dict[str, Any] | None = None,
+    ) -> str:
         """
         Submit a generation job to ComfyUI.
 
@@ -77,6 +87,11 @@ class ComfyUIProvider(ABC):
             Complete ComfyUI API-format workflow with parameters injected.
         job_id : str
             Internal job ID for correlation.
+        context : dict or None
+            Advisory metadata about the shot being generated (generation mode,
+            dimensions, frame rate, duration). A real instance ignores this -
+            the payload is authoritative. The mock provider uses it to shape
+            placeholder media to match what the shot asked for.
 
         Returns
         -------

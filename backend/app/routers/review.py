@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import GenerationJob, Project, Scene, Shot, Take
 from app.schemas import GenerationJobResponse, TakeResponse, TakeReviewRequest
+from app.services import job_payload
 
 router = APIRouter(tags=["review"])
 
@@ -175,7 +176,7 @@ def regenerate_shot(shot_id: str, db: Session = Depends(get_db)):
 
     # Generate new seed for regeneration
     seed = random.randint(0, 2**31 - 1)
-    parameter_map["seed"] = seed
+    parameter_map[job_payload.SEED] = seed
 
     job = GenerationJob(
         id=str(uuid.uuid4()),

@@ -214,6 +214,12 @@ class GenerationJob(Base):
     shot_id = Column(String, ForeignKey("shots.id", ondelete="CASCADE"), nullable=False)
     workflow_id = Column(String, ForeignKey("workflows.id"), nullable=True)
     workflow_version = Column(String, default="")
+    # Snapshot of the exact workflow JSON submitted for this job, plus the
+    # hash of the registered source it was built from. Together these make a
+    # job reproducible even after the registered workflow is re-imported or
+    # its node IDs change (PRD FR-11, NFR-10).
+    workflow_snapshot_path = Column(String, default="")
+    workflow_sha256 = Column(String, default="")
     parameter_map = Column(JSON, default=dict)
     seed = Column(Integer, nullable=True)
     comfyui_prompt_id = Column(String, nullable=True)

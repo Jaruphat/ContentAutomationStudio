@@ -30,6 +30,11 @@ def provider(output_dir):
     return MockComfyUIProvider(output_base_dir=output_dir)
 
 
+def age_submission(provider, prompt_id, seconds):
+    """Backdate a submission so status progression can be tested instantly."""
+    provider._submissions[prompt_id]["submitted_at"] = time.time() - seconds
+
+
 # ---------------------------------------------------------------------------
 # submit_job
 # ---------------------------------------------------------------------------
@@ -88,7 +93,7 @@ class TestGetJobStatus:
     async def test_status_after_1s_is_running(self, provider):
         prompt_id = await provider.submit_job({}, "job-running")
         # Artificially age the submission by 1.5 seconds
-        provider._submissions[prompt_id] = time.time() - 1.5
+        age_submission(provider, prompt_id, 1.5)
         status = await provider.get_job_status(prompt_id)
         assert status.status == JobStatusEnum.RUNNING
         assert 0.0 < status.progress < 1.0
@@ -96,8 +101,8 @@ class TestGetJobStatus:
     @pytest.mark.asyncio
     async def test_status_after_3s_is_completed(self, provider):
         prompt_id = await provider.submit_job({}, "job-completed")
-        # Artificially age the submission by 4 seconds
-        provider._submissions[prompt_id] = time.time() - 4.0
+        # Artificially age the submission past the running window
+        age_submission(provider, prompt_id, 4.0)
         status = await provider.get_job_status(prompt_id)
         assert status.status == JobStatusEnum.COMPLETED
         assert status.progress == 1.0
@@ -105,7 +110,7 @@ class TestGetJobStatus:
     @pytest.mark.asyncio
     async def test_completed_status_has_outputs(self, provider):
         prompt_id = await provider.submit_job({}, "job-with-output")
-        provider._submissions[prompt_id] = time.time() - 5.0
+        age_submission(provider, prompt_id, 5.0)
         status = await provider.get_job_status(prompt_id)
         assert status.status == JobStatusEnum.COMPLETED
         assert len(status.outputs) > 0
@@ -114,7 +119,7 @@ class TestGetJobStatus:
     @pytest.mark.asyncio
     async def test_completed_creates_output_file(self, provider, output_dir):
         prompt_id = await provider.submit_job({}, "job-file")
-        provider._submissions[prompt_id] = time.time() - 5.0
+        age_submission(provider, prompt_id, 5.0)
         status = await provider.get_job_status(prompt_id)
         file_path = status.outputs[0]["file_path"]
         assert os.path.isfile(file_path)
@@ -124,12 +129,12 @@ class TestGetJobStatus:
         """Progress should increase over the Running window (1-3s)."""
         prompt_id = await provider.submit_job({}, "job-ramp")
 
-        # At 1.5s elapsed -> progress should be ~0.25
-        provider._submissions[prompt_id] = time.time() - 1.5
+        # Early in the running window.
+        age_submission(provider, prompt_id, 1.5)
         status_early = await provider.get_job_status(prompt_id)
 
-        # At 2.5s elapsed -> progress should be ~0.75
-        provider._submissions[prompt_id] = time.time() - 2.5
+        # Later in the running window.
+        age_submission(provider, prompt_id, 2.5)
         status_late = await provider.get_job_status(prompt_id)
 
         assert status_early.progress < status_late.progress
@@ -148,8 +153,9 @@ class TestGetJobOutputs:
         outputs = await provider.get_job_outputs(prompt_id)
         assert len(outputs) == 1
         assert outputs[0].file_type == "image"
-        assert outputs[0].width == 1
-        assert outputs[0].height == 1
+        # With no context the mock falls back to the 1920x1080 default,
+        # clamped to the placeholder edge limit while keeping 16:9.
+        assert (outputs[0].width, outputs[0].height) == (640, 360)
         assert outputs[0].codec == "png"
 
     @pytest.mark.asyncio
@@ -198,7 +204,7 @@ class TestCheckHealth:
     @pytest.mark.asyncio
     async def test_health_gpu_info(self, provider):
         health = await provider.check_health()
-        assert "Mock GPU" in health.gpu_info
+        assert "Mock provider" in health.gpu_info
 
 
 # ---------------------------------------------------------------------------

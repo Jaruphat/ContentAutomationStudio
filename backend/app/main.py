@@ -82,7 +82,7 @@ async def lifespan(app: FastAPI):
 
     # Configure provider based on environment
     provider = _create_provider()
-    queue_manager._provider = provider
+    queue_manager.provider = provider
 
     queue_manager.reconcile_on_startup()
     logger.info("Queue reconciliation complete")
@@ -144,7 +144,7 @@ async def health_check():
     Returns system status including queue manager state and ComfyUI
     provider health (real or mock).
     """
-    provider = queue_manager._provider
+    provider = queue_manager.provider
     provider_health = await provider.check_health()
     queue_status = queue_manager.get_queue_status()
 

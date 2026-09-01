@@ -116,9 +116,16 @@ class RealComfyUIProvider(ComfyUIProvider):
                 error=f"ComfyUI health check failed: {exc}",
             )
 
-    async def submit_job(self, workflow_payload: dict[str, Any], job_id: str) -> str:
+    async def submit_job(
+        self,
+        workflow_payload: dict[str, Any],
+        job_id: str,
+        context: dict[str, Any] | None = None,
+    ) -> str:
         """
         Submit a workflow to ComfyUI's /prompt endpoint.
+
+        ``context`` is advisory only; the injected payload is authoritative.
 
         The workflow_payload should be a complete ComfyUI API-format workflow
         with all parameters already injected.

@@ -19,8 +19,9 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from app.database import SessionLocal
-from app.models import GenerationJob, Shot, Take
+from app.models import GenerationJob, Project, Scene, Shot, Take
 from app.services.comfyui_adapter import ComfyUIProvider, JobStatusEnum
+from app.services.job_payload import WorkflowValidationError, build_payload
 from app.services.mock_provider import MockComfyUIProvider
 
 logger = logging.getLogger("cas.queue_manager")
@@ -44,6 +45,15 @@ class QueueManager:
         self._task: asyncio.Task | None = None
         # Per-project pause state
         self._paused_projects: set[str] = set()
+
+    @property
+    def provider(self) -> ComfyUIProvider:
+        """The ComfyUI provider currently backing the queue."""
+        return self._provider
+
+    @provider.setter
+    def provider(self, value: ComfyUIProvider) -> None:
+        self._provider = value
 
     @property
     def paused(self) -> bool:
@@ -163,17 +173,38 @@ class QueueManager:
             db.commit()
 
         try:
-            # Build a minimal workflow payload (in real usage this would come
-            # from the workflow registry with parameters applied).
-            workflow_payload = job.parameter_map or {}
+            # Resolve the registered workflow JSON and inject this job's
+            # logical parameter values through the workflow's node mapping.
+            # No H3 node ID ever reaches this module.
+            try:
+                built = build_payload(
+                    db,
+                    job,
+                    require_workflow=self._provider.requires_workflow_payload,
+                )
+            except WorkflowValidationError as exc:
+                self._fail_permanently(
+                    db, job, shot, "WorkflowValidationError", "; ".join(exc.errors)
+                )
+                return
 
-            prompt_id = await self._provider.submit_job(workflow_payload, job.id)
+            job.workflow_snapshot_path = built.snapshot_path
+            job.workflow_sha256 = built.workflow_sha256
+            db.commit()
+
+            prompt_id = await self._provider.submit_job(
+                built.payload, job.id, context=self._job_context(db, job, shot)
+            )
             job.comfyui_prompt_id = prompt_id
             job.submitted_at = datetime.now(timezone.utc)
             db.commit()
 
             # Poll until terminal state
             while self._running:
+                if self._is_cancelled(db, job):
+                    logger.info("Job %s cancelled while running; stopping poll", job.id)
+                    return
+
                 status = await self._provider.get_job_status(prompt_id)
 
                 if status.status == JobStatusEnum.COMPLETED:
@@ -264,6 +295,59 @@ class QueueManager:
                 if shot:
                     shot.status = "Failed"
                 db.commit()
+
+    def _job_context(
+        self, db: Session, job: GenerationJob, shot: Shot | None
+    ) -> dict[str, Any]:
+        """Advisory metadata describing the media this job should produce."""
+        params = job.parameter_map or {}
+        context: dict[str, Any] = {
+            "generation_mode": shot.generation_mode if shot else "image",
+            "width": params.get("width"),
+            "height": params.get("height"),
+            "frames": params.get("frames"),
+            "duration_sec": shot.planned_duration_sec if shot else 0.0,
+        }
+        if shot:
+            scene = db.query(Scene).filter(Scene.id == shot.scene_id).first()
+            if scene:
+                project = (
+                    db.query(Project).filter(Project.id == scene.project_id).first()
+                )
+                if project:
+                    context["frame_rate"] = project.frame_rate
+        return context
+
+    def _is_cancelled(self, db: Session, job: GenerationJob) -> bool:
+        """Re-read the job's status so a cancel issued through the API during
+        a long poll actually stops the loop instead of being overwritten by a
+        later Completed/Failed write."""
+        db.refresh(job)
+        return job.status == "Cancelled"
+
+    def _fail_permanently(
+        self,
+        db: Session,
+        job: GenerationJob,
+        shot: Shot | None,
+        error_code: str,
+        error_message: str,
+    ) -> None:
+        """Fail a job without consuming retries.
+
+        Used for errors that no amount of retrying can fix, such as a missing
+        or invalid workflow mapping (PRD 10.5: do not retry non-transient
+        errors). The user must fix the mapping and retry explicitly.
+        """
+        logger.error("Job %s failed permanently (%s): %s", job.id, error_code, error_message)
+        job.status = "Failed"
+        job.error_code = error_code
+        job.error_message = error_message[:1000]
+        job.completed_at = datetime.now(timezone.utc)
+        job.attempts = MAX_ATTEMPTS
+        if shot:
+            shot.status = "Failed"
+        db.commit()
 
     def get_queue_status(self, project_id: str | None = None) -> dict[str, Any]:
         """Get counts of jobs in each state, optionally filtered by project."""
