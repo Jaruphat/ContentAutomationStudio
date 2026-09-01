@@ -1,0 +1,33 @@
+# Runtime data - SQLite database and generated files
+data/
+app/data/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environment
+venv/
+.venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test artifacts
+test_vertical_slice.py
+.pytest_cache/
+.coverage
+htmlcov/

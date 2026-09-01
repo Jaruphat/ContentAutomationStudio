@@ -8,13 +8,26 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 *.pyc
+*.pyo
 *.log
 .env
 .env.*
 !.env.example
 .DS_Store
 Thumbs.db
+desktop.ini
 .claude/settings.local.json
+
+# Runtime data (SQLite DB, generated assets, exports)
 runtime/
 projects/
 exports/
+backend/data/
+backend/app/data/
+frontend/dist/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo

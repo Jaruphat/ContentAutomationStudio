@@ -1,0 +1,306 @@
+"""
+Shared test fixtures for Content Automation Studio backend tests.
+
+Provides:
+  - An in-memory SQLite test database with all tables created.
+  - A FastAPI TestClient that uses the test database session.
+  - Helper fixtures for creating sample projects, scenes, shots, etc.
+"""
+
+import os
+import uuid
+
+import pytest
+from fastapi.testclient import TestClient
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.pool import StaticPool
+
+from app.database import Base, get_db
+from app.main import app
+from app.models import (
+    Character,
+    Location,
+    Project,
+    Scene,
+    Shot,
+    Style,
+)
+
+
+# ---------------------------------------------------------------------------
+# Filesystem isolation
+# ---------------------------------------------------------------------------
+
+@pytest.fixture(scope="session", autouse=True)
+def isolated_data_dir(tmp_path_factory):
+    """Redirect all runtime data (workflows, generated media, exports) to a
+    temporary directory for the whole test session.
+
+    Without this, importing a workflow in a test writes its source JSON into
+    the developer's real ``backend/data/workflows`` directory and leaves it
+    there. ``app.paths`` resolves ``CAS_DATA_DIR`` on every call, so setting it
+    here is enough to redirect every consumer.
+    """
+    previous = os.environ.get("CAS_DATA_DIR")
+    os.environ["CAS_DATA_DIR"] = str(tmp_path_factory.mktemp("cas-data"))
+    yield os.environ["CAS_DATA_DIR"]
+    if previous is None:
+        os.environ.pop("CAS_DATA_DIR", None)
+    else:
+        os.environ["CAS_DATA_DIR"] = previous
+
+
+# ---------------------------------------------------------------------------
+# Database fixtures
+# ---------------------------------------------------------------------------
+
+@pytest.fixture()
+def db_engine():
+    """Create an in-memory SQLite engine with all tables.
+
+    Uses StaticPool so that all connections share the same in-memory
+    database; without this, each connection gets its own empty database.
+    """
+    engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+        echo=False,
+    )
+    Base.metadata.create_all(bind=engine)
+    yield engine
+    Base.metadata.drop_all(bind=engine)
+    engine.dispose()
+
+
+@pytest.fixture()
+def db_session(db_engine):
+    """Provide a transactional database session scoped to each test."""
+    TestingSessionLocal = sessionmaker(
+        autocommit=False, autoflush=False, bind=db_engine
+    )
+    session = TestingSessionLocal()
+    try:
+        yield session
+    finally:
+        session.close()
+
+
+@pytest.fixture()
+def client(db_engine):
+    """
+    FastAPI TestClient that overrides the get_db dependency to use
+    the in-memory test database.
+    """
+    TestingSessionLocal = sessionmaker(
+        autocommit=False, autoflush=False, bind=db_engine
+    )
+
+    def _override_get_db():
+        db = TestingSessionLocal()
+        try:
+            yield db
+        finally:
+            db.close()
+
+    app.dependency_overrides[get_db] = _override_get_db
+    with TestClient(app, raise_server_exceptions=False) as c:
+        yield c
+    app.dependency_overrides.clear()
+
+
+# ---------------------------------------------------------------------------
+# Helper fixtures for creating sample entities
+# ---------------------------------------------------------------------------
+
+@pytest.fixture()
+def sample_project(db_session: Session) -> Project:
+    """Insert and return a sample Project."""
+    project = Project(
+        id=str(uuid.uuid4()),
+        title="Test Project",
+        objective="Test objective",
+        audience="General",
+        content_type="video",
+        aspect_ratio="16:9",
+        target_resolution="1920x1080",
+        target_duration_sec=120.0,
+        frame_rate=24.0,
+        language="en",
+        status="Draft",
+        brief_text="A test brief.",
+        plot_text="A test plot.",
+    )
+    db_session.add(project)
+    db_session.commit()
+    db_session.refresh(project)
+    return project
+
+
+@pytest.fixture()
+def sample_character(db_session: Session, sample_project: Project) -> Character:
+    """Insert and return a sample Character linked to sample_project."""
+    char = Character(
+        id=str(uuid.uuid4()),
+        project_id=sample_project.id,
+        name="Alice",
+        role="protagonist",
+        age_range="25-30",
+        appearance="tall, brown hair",
+        clothing="red dress",
+        color_palette="warm tones",
+        personality="brave",
+        prompt_tokens="1girl, brown hair, red dress",
+    )
+    db_session.add(char)
+    db_session.commit()
+    db_session.refresh(char)
+    return char
+
+
+@pytest.fixture()
+def sample_location(db_session: Session, sample_project: Project) -> Location:
+    """Insert and return a sample Location linked to sample_project."""
+    loc = Location(
+        id=str(uuid.uuid4()),
+        project_id=sample_project.id,
+        name="Forest Clearing",
+        description="A sunlit clearing in an ancient forest",
+        geography="temperate forest",
+        time_of_day="golden hour",
+        palette="greens and golds",
+        lighting="dappled sunlight",
+        props="fallen logs, wildflowers",
+    )
+    db_session.add(loc)
+    db_session.commit()
+    db_session.refresh(loc)
+    return loc
+
+
+@pytest.fixture()
+def sample_style(db_session: Session, sample_project: Project) -> Style:
+    """Insert and return a sample Style linked to sample_project."""
+    style = Style(
+        id=str(uuid.uuid4()),
+        project_id=sample_project.id,
+        medium="digital painting",
+        genre="fantasy",
+        visual_keywords="ethereal, luminous",
+        camera_language="cinematic",
+        palette="warm sunset palette",
+        lighting_rules="volumetric lighting",
+        negative_constraints="blurry, low quality, watermark",
+    )
+    db_session.add(style)
+    db_session.commit()
+    db_session.refresh(style)
+    return style
+
+
+@pytest.fixture()
+def sample_scene(
+    db_session: Session,
+    sample_project: Project,
+    sample_character: Character,
+    sample_location: Location,
+) -> Scene:
+    """Insert and return a sample Scene linked to the project, character, and location."""
+    scene = Scene(
+        id=str(uuid.uuid4()),
+        project_id=sample_project.id,
+        order=1,
+        title="Opening Scene",
+        purpose="Establish the protagonist",
+        summary="Alice enters the forest clearing",
+        character_ids=[sample_character.id],
+        location_id=sample_location.id,
+        time_of_day="golden hour",
+        emotional_beat="wonder and discovery",
+        planned_duration_sec=30.0,
+        status="Draft",
+    )
+    db_session.add(scene)
+    db_session.commit()
+    db_session.refresh(scene)
+    return scene
+
+
+@pytest.fixture()
+def sample_shot(db_session: Session, sample_scene: Scene) -> Shot:
+    """Insert and return a sample Shot linked to sample_scene."""
+    shot = Shot(
+        id=str(uuid.uuid4()),
+        scene_id=sample_scene.id,
+        order=1,
+        shot_type="wide shot",
+        camera_angle="eye level",
+        camera_movement="slow dolly in",
+        lens_framing="35mm",
+        subject="Alice",
+        action="walking into the clearing",
+        environment="sunlit forest",
+        dialogue="",
+        planned_duration_sec=5.0,
+        generation_mode="image",
+        image_prompt="masterpiece, best quality",
+        video_prompt="",
+        negative_prompt="ugly, deformed",
+        reference_asset_ids=[],
+        seed_policy="random",
+        status="Draft",
+    )
+    db_session.add(shot)
+    db_session.commit()
+    db_session.refresh(shot)
+    return shot
+
+
+@pytest.fixture()
+def sample_workflow_json() -> bytes:
+    """Return a minimal but valid ComfyUI API-format workflow JSON."""
+    import json
+
+    workflow = {
+        "3": {
+            "inputs": {
+                "seed": 42,
+                "steps": 20,
+                "cfg": 7.0,
+                "sampler_name": "euler",
+                "scheduler": "normal",
+                "denoise": 1.0,
+                "model": ["4", 0],
+                "positive": ["6", 0],
+                "negative": ["7", 0],
+                "latent_image": ["5", 0],
+            },
+            "class_type": "KSampler",
+        },
+        "4": {
+            "inputs": {"ckpt_name": "sd_xl_base_1.0.safetensors"},
+            "class_type": "CheckpointLoaderSimple",
+        },
+        "5": {
+            "inputs": {"width": 1024, "height": 1024, "batch_size": 1},
+            "class_type": "EmptyLatentImage",
+        },
+        "6": {
+            "inputs": {"text": "a beautiful landscape", "clip": ["4", 1]},
+            "class_type": "CLIPTextEncode",
+        },
+        "7": {
+            "inputs": {"text": "ugly, blurry", "clip": ["4", 1]},
+            "class_type": "CLIPTextEncode",
+        },
+        "8": {
+            "inputs": {"samples": ["3", 0], "vae": ["4", 2]},
+            "class_type": "VAEDecode",
+        },
+        "9": {
+            "inputs": {"filename_prefix": "output", "images": ["8", 0]},
+            "class_type": "SaveImage",
+        },
+    }
+    return json.dumps(workflow).encode("utf-8")

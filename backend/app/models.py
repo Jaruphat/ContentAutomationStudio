@@ -1,0 +1,279 @@
+"""
+SQLAlchemy ORM models for Content Automation Studio.
+
+All primary keys are UUID strings generated at the application layer.
+JSON-typed columns store lists and dicts for flexible schema evolution.
+"""
+
+import uuid
+from datetime import datetime, timezone
+
+from sqlalchemy import (
+    Column,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+)
+from sqlalchemy.types import JSON
+from sqlalchemy.orm import relationship
+
+from app.database import Base
+
+
+def _uuid() -> str:
+    return str(uuid.uuid4())
+
+
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+# ---------------------------------------------------------------------------
+# Project
+# ---------------------------------------------------------------------------
+
+class Project(Base):
+    __tablename__ = "projects"
+
+    id = Column(String, primary_key=True, default=_uuid)
+    title = Column(String, nullable=False)
+    objective = Column(Text, default="")
+    audience = Column(String, default="")
+    content_type = Column(String, default="video")
+    aspect_ratio = Column(String, default="16:9")
+    target_resolution = Column(String, default="1920x1080")
+    target_duration_sec = Column(Float, default=180.0)
+    frame_rate = Column(Float, default=24.0)
+    language = Column(String, default="en")
+    default_image_workflow_id = Column(String, nullable=True)
+    default_video_workflow_id = Column(String, nullable=True)
+    status = Column(String, default="Draft")  # Draft / Active / Completed / Archived
+    brief_text = Column(Text, default="")
+    plot_text = Column(Text, default="")
+    created_at = Column(DateTime, default=_utcnow)
+    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
+
+    # Relationships
+    characters = relationship("Character", back_populates="project", cascade="all, delete-orphan")
+    locations = relationship("Location", back_populates="project", cascade="all, delete-orphan")
+    styles = relationship("Style", back_populates="project", cascade="all, delete-orphan")
+    scenes = relationship("Scene", back_populates="project", cascade="all, delete-orphan")
+    timeline_items = relationship("TimelineItem", back_populates="project", cascade="all, delete-orphan")
+
+
+# ---------------------------------------------------------------------------
+# Story Bible entities
+# ---------------------------------------------------------------------------
+
+class Character(Base):
+    __tablename__ = "characters"
+
+    id = Column(String, primary_key=True, default=_uuid)
+    project_id = Column(String, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    name = Column(String, nullable=False)
+    role = Column(String, default="")
+    age_range = Column(String, default="")
+    appearance = Column(Text, default="")
+    clothing = Column(Text, default="")
+    color_palette = Column(String, default="")
+    personality = Column(Text, default="")
+    prompt_tokens = Column(Text, default="")
+    created_at = Column(DateTime, default=_utcnow)
+    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
+
+    project = relationship("Project", back_populates="characters")
+
+
+class Location(Base):
+    __tablename__ = "locations"
+
+    id = Column(String, primary_key=True, default=_uuid)
+    project_id = Column(String, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    name = Column(String, nullable=False)
+    description = Column(Text, default="")
+    geography = Column(Text, default="")
+    time_of_day = Column(String, default="")
+    palette = Column(String, default="")
+    lighting = Column(String, default="")
+    props = Column(Text, default="")
+    created_at = Column(DateTime, default=_utcnow)
+    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
+
+    project = relationship("Project", back_populates="locations")
+
+
+class Style(Base):
+    __tablename__ = "styles"
+
+    id = Column(String, primary_key=True, default=_uuid)
+    project_id = Column(String, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    medium = Column(String, default="")
+    genre = Column(String, default="")
+    visual_keywords = Column(Text, default="")
+    camera_language = Column(Text, default="")
+    palette = Column(String, default="")
+    lighting_rules = Column(Text, default="")
+    negative_constraints = Column(Text, default="")
+    created_at = Column(DateTime, default=_utcnow)
+    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
+
+    project = relationship("Project", back_populates="styles")
+
+
+# ---------------------------------------------------------------------------
+# Scene and Shot
+# ---------------------------------------------------------------------------
+
+class Scene(Base):
+    __tablename__ = "scenes"
+
+    id = Column(String, primary_key=True, default=_uuid)
+    project_id = Column(String, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    order = Column(Integer, nullable=False, default=0)
+    title = Column(String, default="")
+    purpose = Column(Text, default="")
+    summary = Column(Text, default="")
+    character_ids = Column(JSON, default=list)
+    location_id = Column(String, nullable=True)
+    time_of_day = Column(String, default="")
+    emotional_beat = Column(Text, default="")
+    planned_duration_sec = Column(Float, default=0.0)
+    status = Column(String, default="Draft")  # Draft / Reviewed / Locked / Generated / Approved
+    created_at = Column(DateTime, default=_utcnow)
+    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
+
+    project = relationship("Project", back_populates="scenes")
+    shots = relationship("Shot", back_populates="scene", cascade="all, delete-orphan")
+
+
+class Shot(Base):
+    __tablename__ = "shots"
+
+    id = Column(String, primary_key=True, default=_uuid)
+    scene_id = Column(String, ForeignKey("scenes.id", ondelete="CASCADE"), nullable=False)
+    order = Column(Integer, nullable=False, default=0)
+    shot_type = Column(String, default="")
+    camera_angle = Column(String, default="")
+    camera_movement = Column(String, default="")
+    lens_framing = Column(String, default="")
+    subject = Column(Text, default="")
+    action = Column(Text, default="")
+    environment = Column(Text, default="")
+    dialogue = Column(Text, default="")
+    planned_duration_sec = Column(Float, default=0.0)
+    generation_mode = Column(String, default="image")  # image / video / image-to-video
+    image_prompt = Column(Text, default="")
+    video_prompt = Column(Text, default="")
+    negative_prompt = Column(Text, default="")
+    reference_asset_ids = Column(JSON, default=list)
+    workflow_preset_id = Column(String, nullable=True)
+    seed_policy = Column(String, default="random")
+    status = Column(String, default="Draft")  # Draft / Ready / Generating / NeedsReview / Approved / Failed
+    created_at = Column(DateTime, default=_utcnow)
+    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
+
+    scene = relationship("Scene", back_populates="shots")
+    jobs = relationship("GenerationJob", back_populates="shot", cascade="all, delete-orphan")
+    takes = relationship("Take", back_populates="shot", cascade="all, delete-orphan")
+
+
+# ---------------------------------------------------------------------------
+# Workflow
+# ---------------------------------------------------------------------------
+
+class Workflow(Base):
+    __tablename__ = "workflows"
+
+    id = Column(String, primary_key=True, default=_uuid)
+    name = Column(String, nullable=False)
+    purpose = Column(String, default="image")  # image / text-to-video / image-to-video
+    source_json_path = Column(String, default="")
+    sha256_hash = Column(String, default="")
+    version = Column(String, default="1.0")
+    required_models = Column(JSON, default=list)
+    required_custom_nodes = Column(JSON, default=list)
+    parameter_mapping = Column(JSON, default=dict)
+    output_mapping = Column(JSON, default=list)
+    tested_comfyui_version = Column(String, default="")
+    validation_status = Column(String, default="pending")  # pending / valid / invalid
+    created_at = Column(DateTime, default=_utcnow)
+    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
+
+
+# ---------------------------------------------------------------------------
+# Generation Job
+# ---------------------------------------------------------------------------
+
+class GenerationJob(Base):
+    __tablename__ = "generation_jobs"
+
+    id = Column(String, primary_key=True, default=_uuid)
+    shot_id = Column(String, ForeignKey("shots.id", ondelete="CASCADE"), nullable=False)
+    workflow_id = Column(String, ForeignKey("workflows.id"), nullable=True)
+    workflow_version = Column(String, default="")
+    parameter_map = Column(JSON, default=dict)
+    seed = Column(Integer, nullable=True)
+    comfyui_prompt_id = Column(String, nullable=True)
+    status = Column(String, default="Queued")  # Queued / Running / Completed / Failed / Cancelled
+    attempts = Column(Integer, default=0)
+    error_code = Column(String, nullable=True)
+    error_message = Column(Text, nullable=True)
+    outputs = Column(JSON, default=list)
+    submitted_at = Column(DateTime, nullable=True)
+    started_at = Column(DateTime, nullable=True)
+    completed_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=_utcnow)
+
+    shot = relationship("Shot", back_populates="jobs")
+
+
+# ---------------------------------------------------------------------------
+# Take
+# ---------------------------------------------------------------------------
+
+class Take(Base):
+    __tablename__ = "takes"
+
+    id = Column(String, primary_key=True, default=_uuid)
+    shot_id = Column(String, ForeignKey("shots.id", ondelete="CASCADE"), nullable=False)
+    job_id = Column(String, ForeignKey("generation_jobs.id"), nullable=True)
+    file_path = Column(String, default="")
+    thumbnail_path = Column(String, default="")
+    duration_sec = Column(Float, default=0.0)
+    width = Column(Integer, default=0)
+    height = Column(Integer, default=0)
+    frame_rate = Column(Float, default=0.0)
+    codec = Column(String, default="")
+    review_status = Column(String, default="Pending")  # Pending / Approved / Rejected
+    rating = Column(Integer, nullable=True)
+    notes = Column(Text, default="")
+    approved_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=_utcnow)
+
+    shot = relationship("Shot", back_populates="takes")
+
+
+# ---------------------------------------------------------------------------
+# Timeline Item
+# ---------------------------------------------------------------------------
+
+class TimelineItem(Base):
+    __tablename__ = "timeline_items"
+
+    id = Column(String, primary_key=True, default=_uuid)
+    project_id = Column(String, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    shot_id = Column(String, ForeignKey("shots.id"), nullable=True)
+    take_id = Column(String, ForeignKey("takes.id"), nullable=True)
+    order = Column(Integer, nullable=False, default=0)
+    in_point_sec = Column(Float, default=0.0)
+    out_point_sec = Column(Float, default=0.0)
+    duration_sec = Column(Float, default=0.0)
+    transition_in = Column(String, default="cut")
+    transition_out = Column(String, default="cut")
+    created_at = Column(DateTime, default=_utcnow)
+    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
+
+    project = relationship("Project", back_populates="timeline_items")
