@@ -15,6 +15,10 @@ workflow mapper UI and validated against the workflow JSON before use.
 Each built payload is written to a snapshot file so a job stays reproducible
 even if the registered workflow is later re-imported with different node IDs
 (PRD sections 10.2/10.4, FR-11, NFR-10).
+
+Only API-format workflows can produce a submittable payload. An editor/UI
+graph is refused here rather than at the HTTP boundary, so no code path can
+post one to /prompt.
 """
 
 import json
@@ -28,6 +32,7 @@ from sqlalchemy.orm import Session
 from app import paths
 from app.models import GenerationJob, Workflow
 from app.services import workflow_registry
+from app.services.workflow_format import WorkflowFormat
 
 logger = logging.getLogger("cas.job_payload")
 
@@ -144,6 +149,22 @@ def build_payload(
             f"Job {job.id} has no registered workflow "
             f"(workflow_id={job.workflow_id!r}). Assign an image/video workflow "
             f"to the shot or set a project default."
+        )
+        if require_workflow:
+            raise WorkflowValidationError(msg)
+        logger.debug("%s - passing logical values through to mock provider", msg)
+        return BuiltPayload(payload=values, passthrough=True)
+
+    # An editor/UI graph is never submittable, whatever its mapping says.
+    # ComfyUI's /prompt endpoint only accepts the flattened API shape, so this
+    # is refused before any mapping work happens.
+    source_format = (workflow.source_format or "unknown").lower()
+    if source_format != WorkflowFormat.API.value:
+        msg = (
+            f"Workflow '{workflow.name}' was imported as "
+            f"{source_format}-format JSON, which ComfyUI cannot execute. "
+            f"Open it in ComfyUI and use Workflow -> Export (API), then "
+            f"import that file and map its nodes."
         )
         if require_workflow:
             raise WorkflowValidationError(msg)

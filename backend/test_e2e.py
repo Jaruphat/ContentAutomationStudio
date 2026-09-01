@@ -7,7 +7,9 @@ import time
 
 import requests
 
-BASE = "http://127.0.0.1:8000/api"
+# Target the running backend. ComfyUI occupies 8000 on this workstation, so the
+# application backend defaults to 8001; override with CAS_E2E_BASE.
+BASE = os.environ.get("CAS_E2E_BASE", "http://127.0.0.1:8001/api")
 
 # A minimal ComfyUI API-format workflow JSON for testing
 MOCK_WORKFLOW_JSON = json.dumps({

@@ -154,11 +154,16 @@ export interface Shot {
   updated_at: string;
 }
 
+/** Which ComfyUI JSON shape a registered workflow was imported from. */
+export type WorkflowSourceFormat = "api" | "ui" | "unknown";
+
 export interface Workflow {
   id: string;
   name: string;
   purpose: WorkflowPurpose;
   source_json_path: string;
+  /** Only "api" can be submitted to ComfyUI; "ui" is an editor graph. */
+  source_format: WorkflowSourceFormat;
   sha256_hash: string;
   version: string;
   required_models: string[];
@@ -169,6 +174,65 @@ export interface Workflow {
   validation_status: ValidationStatus;
   created_at: string;
   updated_at: string;
+}
+
+/** A proposed binding of one logical field to a node input. */
+export interface MappingCandidate {
+  logical_field: string;
+  node_class: string;
+  input_name: string;
+  /** Null for UI workflows: their node ids change on API export. */
+  node_id: string | null;
+  match_kind: string;
+  confidence: number;
+  note: string;
+  /** False when the input is hidden inside a subgraph, or fed by a wire. */
+  exposed: boolean;
+  /** False when applying it would overwrite a value the graph computes. */
+  auto_applicable: boolean;
+}
+
+export interface SubgraphInfo {
+  subgraph_id: string;
+  name: string;
+  input_bindings: Record<string, Record<string, unknown>>;
+  inner_node_classes: string[];
+  unresolved_inputs: string[];
+}
+
+export interface DependencyReport {
+  checked: boolean;
+  reason: string;
+  satisfied: boolean;
+  summary: string;
+  node_classes_present: string[];
+  node_classes_missing: string[];
+  node_classes_frontend_only: string[];
+  models_present: string[];
+  models_missing: string[];
+  catalogue_size: number;
+}
+
+export interface WorkflowAnalysis {
+  workflow_id: string;
+  name: string;
+  format: WorkflowSourceFormat;
+  format_confidence: number;
+  format_reasons: string[];
+  submittable: boolean;
+  blocking_reason: string;
+  node_count: number;
+  subgraphs: SubgraphInfo[];
+  required_node_classes: string[];
+  frontend_only_node_classes: string[];
+  required_models: string[];
+  mapping_candidates: MappingCandidate[];
+  alternate_candidates: MappingCandidate[];
+  unmapped_logical_fields: string[];
+  /** Empty unless the workflow is API-format. */
+  suggested_parameter_mapping: Record<string, { nodeId: string; field: string }>;
+  dependencies: DependencyReport;
+  warnings: string[];
 }
 
 export interface GenerationJob {
@@ -255,6 +319,7 @@ export interface WorkflowCheck {
   workflow_id: string;
   name: string;
   valid: boolean;
+  source_format: WorkflowSourceFormat;
   errors: string[];
   warnings: string[];
 }
@@ -332,12 +397,19 @@ export interface ComfyUIHealth {
 
 export type QueueHealth = QueueStatus;
 
+export interface WorkflowsHealth {
+  total: number;
+  by_format: Record<string, number>;
+  submittable: number;
+}
+
 export interface HealthStatus {
   status: string;
   service: string;
   version: string;
   comfyui: ComfyUIHealth;
   queue: QueueHealth;
+  workflows: WorkflowsHealth;
   blockers: string[];
 }
 

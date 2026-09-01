@@ -22,7 +22,7 @@ import {
 import api from "../api/client";
 import { useAppState, useAppDispatch } from "../store/useProjectStore";
 import StatusBadge from "../components/StatusBadge";
-import type { PreflightResult, GenerationJob } from "../types";
+import type { PreflightResult, GenerationJob, Workflow } from "../types";
 
 // ── Preflight panel ──────────────────────────────────────────────────────
 
@@ -169,6 +169,120 @@ function PreflightPanel({
               ))}
             </div>
           )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Workflow format diagnostics ──────────────────────────────────────────
+
+/**
+ * Explains why a registered workflow cannot drive real generation.
+ *
+ * A ComfyUI editor graph is the file most people have to hand, and it is
+ * indistinguishable from an API export by name alone, so the reason is spelled
+ * out here rather than surfacing only as a failed job.
+ */
+function WorkflowFormatPanel({ workflow }: { workflow: Workflow }) {
+  const analysisQ = useQuery({
+    queryKey: ["workflow-analysis", workflow.id],
+    queryFn: () => api.workflows.analysis(workflow.id),
+  });
+
+  if (workflow.source_format === "api") return null;
+
+  const analysis = analysisQ.data;
+
+  return (
+    <div className="rounded-lg border border-amber-800/60 bg-amber-900/15 p-4 space-y-3">
+      <div className="flex items-center gap-2">
+        <AlertTriangle size={14} className="text-amber-400" />
+        <h3 className="text-sm font-semibold text-amber-200">
+          {workflow.name} is {workflow.source_format}-format and cannot run
+        </h3>
+      </div>
+
+      <p className="text-xs text-amber-100/80">
+        ComfyUI only executes API-format JSON. Open this workflow in ComfyUI and
+        choose <span className="font-medium">Workflow → Export (API)</span>, then
+        import that file here and map its nodes.
+      </p>
+
+      {analysisQ.isLoading && (
+        <div className="flex items-center gap-2 text-xs text-zinc-400">
+          <Loader2 size={12} className="animate-spin" /> Analysing workflow...
+        </div>
+      )}
+
+      {analysis && (
+        <div className="space-y-3">
+          {/* Dependency check against the live instance */}
+          <div className="rounded-md bg-zinc-950/60 px-3 py-2 text-xs">
+            <span className="text-zinc-400">Dependencies: </span>
+            {analysis.dependencies.checked ? (
+              <span
+                className={
+                  analysis.dependencies.satisfied
+                    ? "text-green-400"
+                    : "text-red-400"
+                }
+              >
+                {analysis.dependencies.summary}
+              </span>
+            ) : (
+              <span className="text-zinc-500">
+                {analysis.dependencies.reason}
+              </span>
+            )}
+          </div>
+
+          {analysis.dependencies.models_missing.length > 0 && (
+            <div className="text-xs text-red-300">
+              Missing models: {analysis.dependencies.models_missing.join(", ")}
+            </div>
+          )}
+
+          {/* What the mapping will look like after export */}
+          {analysis.mapping_candidates.length > 0 && (
+            <div className="space-y-1">
+              <h4 className="text-[10px] font-medium uppercase tracking-wider text-zinc-500">
+                Candidate mappings (confirm after API export)
+              </h4>
+              {analysis.mapping_candidates.map((c) => (
+                <div
+                  key={c.logical_field}
+                  className="flex items-center gap-2 rounded-md bg-zinc-800/50 px-3 py-1 text-xs"
+                >
+                  <span className="font-mono text-indigo-300 min-w-[120px]">
+                    {c.logical_field}
+                  </span>
+                  <span className="text-zinc-500">→</span>
+                  <span className="text-zinc-300 truncate">
+                    {c.node_class}.{c.input_name}
+                  </span>
+                  {!c.exposed && (
+                    <span className="ml-auto shrink-0 rounded bg-zinc-700 px-1.5 py-0.5 text-[10px] text-zinc-300">
+                      inside subgraph
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {analysis.unmapped_logical_fields.length > 0 && (
+            <div className="text-xs text-zinc-500">
+              No candidate found for:{" "}
+              {analysis.unmapped_logical_fields.join(", ")}
+            </div>
+          )}
+
+          {analysis.warnings.map((w, i) => (
+            <p key={i} className="text-xs text-amber-300/80">
+              {w}
+            </p>
+          ))}
         </div>
       )}
     </div>
@@ -355,6 +469,13 @@ export default function GeneratePage() {
         running={preflightMut.isPending}
       />
 
+      {/* Any registered workflow ComfyUI cannot execute */}
+      {workflowsQ.data
+        ?.filter((w) => w.source_format !== "api")
+        .map((w) => (
+          <WorkflowFormatPanel key={w.id} workflow={w} />
+        ))}
+
       {/* Controls */}
       <div className="flex flex-wrap items-center gap-4 rounded-lg border border-zinc-800 bg-zinc-900/60 px-4 py-3">
         {/* Workflow selector */}
@@ -369,6 +490,7 @@ export default function GeneratePage() {
             {workflowsQ.data?.map((w) => (
               <option key={w.id} value={w.id}>
                 {w.name} ({w.purpose})
+                {w.source_format !== "api" ? " -- not runnable" : ""}
               </option>
             ))}
           </select>

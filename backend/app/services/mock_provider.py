@@ -21,7 +21,6 @@ import json
 import logging
 import os
 import struct
-import subprocess
 import shutil
 import time
 import zlib
@@ -123,10 +122,11 @@ def _create_placeholder_mp4(
         "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p",
         tmp,
     ]
-    try:
-        subprocess.run(cmd, check=True, capture_output=True, timeout=60)
-    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError) as exc:
-        logger.warning("Placeholder MP4 generation failed: %s", exc)
+    from app.services.render_service import run_captured
+
+    returncode, _stdout, stderr = run_captured(cmd, timeout=60)
+    if returncode != 0:
+        logger.warning("Placeholder MP4 generation failed: %s", stderr[-300:])
         if os.path.exists(tmp):
             os.remove(tmp)
         return False

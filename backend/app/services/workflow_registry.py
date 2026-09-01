@@ -4,6 +4,7 @@ Workflow Registry Service.
 Handles:
   - Import and parse ComfyUI API-format workflow JSON files.
   - Compute SHA-256 hash of workflow content for versioning.
+  - Detect whether an import is API-format or editor/UI-format.
   - Validate that parameter/output mappings reference real nodes/fields.
   - Apply parameter mapping to produce a ready-to-submit payload.
 """
@@ -15,6 +16,7 @@ import uuid
 from typing import Any
 
 from app import paths
+from app.services.workflow_format import WorkflowFormat, detect_format
 
 
 def compute_sha256(content: bytes) -> str:
@@ -206,16 +208,26 @@ def import_workflow(
 
     Returns a dict suitable for constructing a Workflow ORM model.
     """
-    parse_workflow_json(raw_bytes)  # Validate JSON before saving
+    data = parse_workflow_json(raw_bytes)  # Validate JSON before saving
+    detection = detect_format(data)
+
     sha256 = compute_sha256(raw_bytes)
     workflow_id = str(uuid.uuid4())
     source_path = save_workflow_source(raw_bytes, workflow_id, name)
+
+    # A non-API shape is stored so it can be inspected, but it is marked
+    # unsupported rather than pending: no amount of mapping makes an editor
+    # graph submittable to /prompt.
+    validation_status = (
+        "pending" if detection.format is WorkflowFormat.API else "unsupported_format"
+    )
 
     return {
         "id": workflow_id,
         "name": name,
         "purpose": purpose,
         "source_json_path": source_path,
+        "source_format": detection.format.value,
         "sha256_hash": sha256,
         "version": version,
         "required_models": required_models or [],
@@ -223,7 +235,7 @@ def import_workflow(
         "parameter_mapping": {},
         "output_mapping": [],
         "tested_comfyui_version": tested_comfyui_version,
-        "validation_status": "pending",
+        "validation_status": validation_status,
     }
 
 

@@ -13,7 +13,10 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.database import init_db
+from sqlalchemy.orm import Session
+
+from app.database import SessionLocal, init_db
+from app.models import Workflow
 from app.routers import (
     exports,
     generation,
@@ -28,6 +31,7 @@ from app.routers import (
 from app.services.comfyui_adapter import ComfyUIProvider
 from app.services.mock_provider import MockComfyUIProvider
 from app.services.queue_manager import queue_manager
+from app.services.workflow_format import WorkflowFormat
 
 # ---------------------------------------------------------------------------
 # Logging configuration
@@ -84,11 +88,18 @@ async def lifespan(app: FastAPI):
     provider = _create_provider()
     queue_manager.provider = provider
 
-    queue_manager.reconcile_on_startup()
-    logger.info("Queue reconciliation complete")
+    # CAS_DISABLE_QUEUE runs the API without the background worker. The test
+    # suite uses it: TestClient(app) executes this lifespan, and a live queue
+    # polling SQLite from another thread for the whole session adds
+    # nondeterminism to tests that have nothing to do with generation.
+    if os.environ.get("CAS_DISABLE_QUEUE", "").strip().lower() in ("1", "true", "yes"):
+        logger.info("CAS_DISABLE_QUEUE set - background queue not started")
+    else:
+        queue_manager.reconcile_on_startup()
+        logger.info("Queue reconciliation complete")
 
-    queue_manager.start()
-    logger.info("Queue manager started")
+        queue_manager.start()
+        logger.info("Queue manager started")
 
     yield
 
@@ -148,19 +159,51 @@ async def health_check():
     provider_health = await provider.check_health()
     queue_status = queue_manager.get_queue_status()
 
-    blockers: list[str] = [
-        "H3 workflow JSON files not yet provided - using mock generation for now",
-    ]
+    # Report what is actually registered rather than a fixed sentence, so the
+    # blocker list stays true as workflows are imported.
+    db: Session = SessionLocal()
+    try:
+        workflows = db.query(Workflow).all()
+        by_format: dict[str, int] = {}
+        for workflow in workflows:
+            key = (workflow.source_format or "unknown").lower()
+            by_format[key] = by_format.get(key, 0) + 1
+        submittable = [
+            w for w in workflows
+            if (w.source_format or "").lower() == WorkflowFormat.API.value
+            and w.parameter_mapping
+            and w.validation_status == "valid"
+        ]
+    finally:
+        db.close()
+
+    blockers: list[str] = []
 
     if provider_health.mock:
         blockers.append(
-            "ComfyUI provider is set to mock mode. "
-            "Set COMFYUI_PROVIDER=real to connect to a real instance."
+            "ComfyUI provider is set to mock mode. Takes are deterministic "
+            "placeholders, not real renders. Set COMFYUI_PROVIDER=real to "
+            "connect to a live instance."
         )
     elif not provider_health.online:
         blockers.append(
             f"Real ComfyUI provider configured but not reachable: "
             f"{provider_health.error or 'unknown error'}"
+        )
+
+    if not submittable:
+        detail = ""
+        if by_format.get(WorkflowFormat.UI.value):
+            detail = (
+                f" {by_format[WorkflowFormat.UI.value]} workflow(s) are "
+                f"registered as editor/UI graphs, which ComfyUI cannot "
+                f"execute; re-import them via Workflow -> Export (API)."
+            )
+        elif not workflows:
+            detail = " No workflow has been imported yet."
+        blockers.append(
+            "No API-format workflow with a validated mapping is registered, "
+            "so real generation cannot run." + detail
         )
 
     return {
@@ -176,5 +219,10 @@ async def health_check():
             "error": provider_health.error,
         },
         "queue": queue_status,
+        "workflows": {
+            "total": sum(by_format.values()),
+            "by_format": by_format,
+            "submittable": len(submittable),
+        },
         "blockers": blockers,
     }

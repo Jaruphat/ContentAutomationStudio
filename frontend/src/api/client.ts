@@ -18,6 +18,7 @@ import type {
   Shot,
   ShotCreate,
   Workflow,
+  WorkflowAnalysis,
   GenerationJob,
   Take,
   TimelineItem,
@@ -238,6 +239,10 @@ export const workflows = {
 
   validate: (id: string) =>
     http.post<Workflow>(`/workflows/${id}/validate`).then((r) => r.data),
+
+  /** Format diagnostics, dependency check and candidate logical mappings. */
+  analysis: (id: string) =>
+    http.get<WorkflowAnalysis>(`/workflows/${id}/analysis`).then((r) => r.data),
 
   delete: (id: string) =>
     http.delete(`/workflows/${id}`).then((r) => r.data),

@@ -29,6 +29,8 @@ logger = logging.getLogger("cas.comfyui_provider")
 
 DEFAULT_COMFYUI_URL = "http://127.0.0.1:8000"
 HTTP_TIMEOUT = 10.0
+# /object_info is a few MB and can be slow on a cold start.
+OBJECT_INFO_TIMEOUT = 60.0
 
 
 class RealComfyUIProvider(ComfyUIProvider):
@@ -45,7 +47,31 @@ class RealComfyUIProvider(ComfyUIProvider):
             output_base_dir = paths.generated_dir()
         self._output_dir = output_base_dir
         os.makedirs(self._output_dir, exist_ok=True)
+        self._object_info: dict[str, Any] | None = None
         logger.info("RealComfyUIProvider initialized: %s", self._base_url)
+
+    async def get_object_info(self) -> dict[str, Any] | None:
+        """Fetch and cache the instance's node catalogue.
+
+        The response is a few megabytes, so it is cached for the life of the
+        provider; restart the backend after installing nodes or models.
+        """
+        if self._object_info is not None:
+            return self._object_info
+        try:
+            async with httpx.AsyncClient(timeout=OBJECT_INFO_TIMEOUT) as client:
+                resp = await client.get(f"{self._base_url}/object_info")
+                resp.raise_for_status()
+                data = resp.json()
+        except Exception as exc:
+            logger.warning("Could not fetch /object_info: %s", exc)
+            return None
+        if not isinstance(data, dict):
+            logger.warning("/object_info returned %s, expected an object", type(data).__name__)
+            return None
+        self._object_info = data
+        logger.info("Cached /object_info: %d node classes", len(data))
+        return data
 
     async def check_health(self) -> HealthStatus:
         """

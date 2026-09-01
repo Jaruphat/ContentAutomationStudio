@@ -19,6 +19,7 @@ import logging
 import os
 import shutil
 import subprocess
+import tempfile
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -53,14 +54,49 @@ def parse_resolution(value: str) -> tuple[int, int]:
     return max(2, width - (width % 2)), max(2, height - (height % 2))
 
 
+def run_captured(
+    cmd: list[str], timeout: int = 300
+) -> tuple[int, str, str]:
+    """
+    Run a command, capturing stdout and stderr through temporary files.
+
+    Pipes are deliberately avoided: ``capture_output=True`` spawns reader
+    threads, and on Windows those threads make pytest's faulthandler report a
+    spurious access violation on every FFmpeg call, which buries real failures
+    in the test output. Redirecting to files needs no reader threads and has no
+    pipe-buffer deadlock risk on verbose output.
+
+    Returns (returncode, stdout, stderr). A returncode of -1 means the process
+    could not be run at all.
+    """
+    with tempfile.TemporaryDirectory(prefix="cas-proc-") as tmp:
+        out_path = os.path.join(tmp, "stdout")
+        err_path = os.path.join(tmp, "stderr")
+        try:
+            with open(out_path, "wb") as out_f, open(err_path, "wb") as err_f:
+                proc = subprocess.run(
+                    cmd, stdout=out_f, stderr=err_f, stdin=subprocess.DEVNULL,
+                    timeout=timeout,
+                )
+            returncode = proc.returncode
+        except (subprocess.TimeoutExpired, OSError) as exc:
+            return -1, "", str(exc)
+
+        def _read(path: str) -> str:
+            try:
+                with open(path, encoding="utf-8", errors="replace") as f:
+                    return f.read()
+            except OSError:
+                return ""
+
+        return returncode, _read(out_path), _read(err_path)
+
+
 def _run(cmd: list[str], timeout: int = 300) -> tuple[bool, str]:
     """Run a command; return (ok, tail of stderr)."""
-    try:
-        proc = subprocess.run(cmd, capture_output=True, timeout=timeout, text=True)
-    except (subprocess.TimeoutExpired, OSError) as exc:
-        return False, str(exc)
-    if proc.returncode != 0:
-        return False, (proc.stderr or "")[-800:]
+    returncode, _stdout, stderr = run_captured(cmd, timeout=timeout)
+    if returncode != 0:
+        return False, (stderr or "")[-800:]
     return True, ""
 
 
@@ -77,12 +113,12 @@ def probe_media(file_path: str) -> dict[str, Any]:
         "-show_entries", "format=duration",
         "-of", "json", file_path,
     ]
+    returncode, stdout, _stderr = run_captured(cmd, timeout=30)
+    if returncode != 0:
+        return {}
     try:
-        proc = subprocess.run(cmd, capture_output=True, timeout=30, text=True)
-        if proc.returncode != 0:
-            return {}
-        data = json.loads(proc.stdout or "{}")
-    except (subprocess.TimeoutExpired, OSError, json.JSONDecodeError):
+        data = json.loads(stdout or "{}")
+    except json.JSONDecodeError:
         return {}
 
     streams = data.get("streams") or [{}]

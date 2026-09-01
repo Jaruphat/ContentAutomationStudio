@@ -9,8 +9,8 @@ A local-first application for AI-assisted storyboard creation, image/video gener
 ```
 +------------------+         HTTP/REST         +------------------+
 |                  | <-----------------------> |                  |
-|  React + TS      |    localhost:8000/api      |  Python FastAPI  |
-|  (Vite, port     |                           |  (Uvicorn)       |
+|  React + TS      |    localhost:8001/api      |  Python FastAPI  |
+|  (Vite, port     |                           |  (Uvicorn, 8001) |
 |   5173)          |                           |                  |
 +------------------+                           +--------+---------+
                                                         |
@@ -68,8 +68,9 @@ cp .env.example .env
 | Variable               | Default                 | Description                                                                 |
 |------------------------|-------------------------|-----------------------------------------------------------------------------|
 | `COMFYUI_PROVIDER`     | `mock`                  | `mock` for deterministic placeholders, `real` to drive a live ComfyUI        |
-| `COMFYUI_URL`      | `http://127.0.0.1:8000`    | ComfyUI instance URL (used when provider is `real`)   |
+| `COMFYUI_URL`          | `http://127.0.0.1:8000` | ComfyUI instance URL (used when provider is `real`)                          |
 | `CAS_DATA_DIR`         | `backend/data`          | Base directory for the database, workflows, snapshots, media and exports    |
+| `CAS_DISABLE_QUEUE`    | unset                   | Set to `1` to run the API without the background generation worker          |
 | `CAS_MOCK_QUEUED_SEC`  | `1.0`                   | Seconds a mock job stays Queued (lower it to speed up the e2e run)          |
 | `CAS_MOCK_RUNNING_SEC` | `2.0`                   | Seconds a mock job stays Running                                            |
 
@@ -123,9 +124,12 @@ cd backend
 python -m pytest tests/ -q
 ```
 
-287 tests covering the data model, prompt compiler, workflow registry and
-mapping, job payload construction, queue state and retry policy, error
-classification, the review API, schema migration, and the FFmpeg render.
+412 tests covering the data model, prompt compiler, workflow registry and
+mapping, workflow format detection, node/model inventory and candidate mapping
+derivation, dependency checking, job payload construction, queue state and
+retry policy, error classification, the review API, schema migration, and the
+FFmpeg render. The analysis heuristics are also exercised against the three
+real ComfyUI exports in `workflows/source/ui/`, skipping if absent.
 Tests redirect `CAS_DATA_DIR` to a temporary directory, so running them leaves
 no files in your working tree. Render tests that shell out to FFmpeg skip
 themselves automatically when it is not installed.
@@ -162,7 +166,7 @@ export, and a persistence re-check.
 ```bash
 cd backend
 # In another terminal, start the server first. Short mock timings keep the run brief:
-CAS_MOCK_QUEUED_SEC=0.2 CAS_MOCK_RUNNING_SEC=0.3 python -m uvicorn app.main:app --port 8000
+CAS_MOCK_QUEUED_SEC=0.2 CAS_MOCK_RUNNING_SEC=0.3 python -m uvicorn app.main:app --port 8001
 
 python test_e2e.py
 ```
@@ -181,7 +185,13 @@ ContentAutomationStudio/
 |-- docs/
 |   |-- PRD_Content_Automation_Studio_v0.1.md / .docx
 |   |-- PRD_Content_Automation_Studio_v0.2.md / .docx   # Source of truth
+|   |-- ComfyUI_Workflow_Integration.md            # Adapter + supplied-workflow findings
 |   +-- build_prd_docx.py
+|
+|-- workflows/
+|   +-- source/
+|      |-- ui/                         # Supplied ComfyUI editor graphs (read-only, checksummed)
+|      +-- api/                        # API-format exports (submittable)
 |
 |-- backend/
 |   |-- requirements.txt
@@ -207,6 +217,9 @@ ContentAutomationStudio/
 |   |   +-- services/
 |   |       |-- prompt_compiler.py     # Layered prompt compilation
 |   |       |-- workflow_registry.py   # Workflow import, validation, mapping
+|   |       |-- workflow_format.py     # UI vs API format detection
+|   |       |-- workflow_analysis.py   # Node/model inventory, candidate mappings
+|   |       |-- workflow_dependencies.py  # Checks against /object_info
 |   |       |-- job_payload.py         # Job + mapping -> ComfyUI payload + snapshot
 |   |       |-- comfyui_adapter.py     # Provider interface (no ComfyUI specifics)
 |   |       |-- comfyui_provider.py    # Real ComfyUI HTTP provider
@@ -221,6 +234,10 @@ ContentAutomationStudio/
 |       |-- test_models.py
 |       |-- test_prompt_compiler.py
 |       |-- test_workflow_registry.py
+|       |-- test_workflow_format.py
+|       |-- test_workflow_analysis.py
+|       |-- test_workflow_linked_inputs.py
+|       |-- test_api_workflow_analysis.py
 |       |-- test_job_payload.py
 |       |-- test_queue_manager.py
 |       |-- test_error_classifier.py
@@ -237,7 +254,7 @@ ContentAutomationStudio/
     |-- index.html
     |-- package.json
     |-- tsconfig.json / tsconfig.app.json / tsconfig.node.json
-    |-- vite.config.ts                 # Dev server, /api proxy to port 8000
+    |-- vite.config.ts                 # Dev server, /api proxy to port 8001
     +-- src/
         |-- main.tsx                   # Application entry point
         |-- App.tsx                    # Router and providers
@@ -269,7 +286,8 @@ This application implements the full vertical slice described in the PRD:
 2. **Scene/Shot Hierarchy** -- Break the plot into 3 scenes with 9-15 shots total, each with shot type, camera, action, dialogue, and duration.
 3. **Story Bible** -- Maintain Characters, Locations, and Visual Style entries as shared context for prompt compilation.
 4. **Layered Prompt Compilation** -- Compile prompts from 8 layers (per PRD section 9.1): style bible, character, location, scene context, shot description, camera/composition, negative prompt, and technical parameters.
-5. **Workflow Registry** -- Import ComfyUI API-format workflow JSON files. Map logical fields (prompt, seed, dimensions, etc.) to workflow node IDs without hardcoding in business logic. Validate mappings before use.
+5. **Workflow Registry** -- Import ComfyUI workflow JSON. Map logical fields (prompt, seed, dimensions, etc.) to workflow node IDs without hardcoding in business logic. Validate mappings before use.
+5a. **Workflow Format Detection and Diagnostics** -- Tell a ComfyUI editor graph from an API-format prompt file structurally, and refuse to submit the former. Inventory the node classes and model files a workflow needs, following subgraphs to the nodes that actually execute; check both against the live instance's `/object_info`; and propose candidate logical-field mappings from generic input-name and type heuristics. For an API-format workflow the proposal is a ready-to-apply `parameter_mapping`.
 6. **Preflight Validation** -- Verify all shots have compiled prompts, a mapped workflow, and required parameters before generation begins.
 7. **Persistent Generation Queue** -- Queue jobs with deterministic mock ComfyUI provider. Jobs persist across restarts with resumable states (Queued, Running, Completed, Failed).
 8. **Queue Control** -- Pause, resume, cancel, and retry generation jobs.
@@ -295,49 +313,98 @@ The frontend uses a production cockpit layout:
 
 ## Known Blockers
 
-### H3 ComfyUI Integration (BLOCKED)
+### H3 ComfyUI Integration — blocked on API-format export only
 
-The real H3 image/video workflow JSON files have **not** been provided, and no
-ComfyUI instance is reachable. Checked on 2026-09-01: nothing is listening on
-`127.0.0.1:8001`, nor on 8188, 8000, 8080, 3000 or 7860.
+ComfyUI **is** reachable and healthy: version 0.34.0 on `http://127.0.0.1:8000`,
+RTX 5080, 1800 registered node classes. The application backend runs on 8001 to
+avoid the clash.
 
-**What this blocks:** real image and video generation, and therefore any claim
-that the pipeline produces genuine ComfyUI output. That claim is not made
-anywhere in this repository.
+Three workflows were supplied on 2026-09-01 and are preserved unmodified with
+SHA-256 checksums under `workflows/source/ui/`:
 
-**What was still verified without it.** The `real` provider was pointed at the
-unreachable instance and behaves correctly:
+| Workflow | Purpose |
+|---|---|
+| `image_boogu_image_0_1_edit_int8.ui.json` | image edit (Boogu-Image-0.1-Edit) |
+| `video_minimax_h3_t2v.ui.json` | text to video (MiniMax H3) |
+| `video_minimax_h3_i2v.ui.json` | image to video (MiniMax H3) |
 
-- `/api/health` reports `online: false` with the connection error and lists the
-  blocker explicitly.
-- Preflight reports ComfyUI unreachable while still validating workflow
-  mappings against their JSON.
-- A submitted job fails with `ConnectionError` after three retries, records a
-  suggested action, and **creates no takes** - no output is invented.
+All three were supplied as ComfyUI **editor/UI graphs**, which `POST /prompt`
+cannot execute. They are imported and fully analysed but recorded as
+`source_format: "ui"` / `validation_status: "unsupported_format"`, and the
+payload builder refuses to construct a submission from them. Nothing in this
+repository posts an editor graph to ComfyUI.
 
-The mock provider stands in for generation so the rest of the product can be
-exercised end to end. It is deliberately honest about what it is:
+**API-format exports have since arrived for the two video workflows** and are
+preserved under `workflows/source/api/`. Both are detected as API format,
+marked submittable, dependency-checked clean, and their suggested mappings
+validate. `GET /api/health` now reports `workflows.submittable: 2`.
 
-- Jobs progress Queued -> Running -> Completed on a wall-clock schedule.
-- Outputs are real files at the shot's requested dimensions - a gradient PNG
-  for image shots, and an H.264 MP4 (via FFmpeg's synthetic source) for video
-  shots - so the timeline and render stages operate on genuine media.
+**Still outstanding: `image_boogu_image_0_1_edit_int8` in API format.** Until
+that arrives, image shots cannot be generated for real.
+
+**Everything else checked out.** Verified against the live instance:
+
+- Every node class each workflow needs is registered — 15, 20 and 23
+  respectively, including `TextEncodeBooguEdit`, `MiniMaxH3ImageToVideo`,
+  `SamplerCustomAdvanced` and `LoraLoaderModelOnly`.
+- Every model file they name is installed — 3, 5 and 5 respectively.
+- **No missing custom node and no missing model.**
+- Candidate logical mappings were derived for prompt, seed, width, height,
+  reference image and output prefix on all three.
+
+**To finish unblocking:** export the image workflow via
+`Workflow → Export (API)` in ComfyUI and import it. The analysis endpoint
+returns a `suggested_parameter_mapping` with concrete node ids that can be
+applied and validated directly.
+
+Three decisions remain on the two video workflows before a real run, all
+reported by the analysis endpoint:
+
+- **Resolution** — `width`/`height` are wired from `ResolutionSelector`, which
+  exposes `aspect_ratio`/`megapixels`/`multiple` rather than pixel dimensions.
+- **Duration** — the frame count is computed by a math expression from a
+  duration primitive; the adapter deliberately will not overwrite that formula.
+- **Output mapping** — `output_mapping` is still empty and should name the
+  `SaveVideo` node.
+
+No real generation has been run. The handoff README asks for a low-resolution
+single-shot test before any batch, and that is a decision for the operator.
+
+`docs/ComfyUI_Workflow_Integration.md` has the full findings: per-workflow
+candidate mappings, the two fields that need a decision after export
+(`negativePrompt`, which the MiniMax video node does not accept, and `frames`,
+computed inside the subgraph), and the exact commands.
+
+**No application change is pending.** Node ids live only in a workflow record's
+`parameter_mapping`, so adopting the exports is configuration, not code.
+
+### Why the editor format is not converted here
+
+All three workflows put their generation nodes inside a **subgraph** — a node
+whose `type` is a UUID, with the real nodes under `definitions.subgraphs`.
+ComfyUI flattens subgraphs and renumbers nodes during API export. Reimplementing
+that flattening here would duplicate frontend logic and could silently produce a
+graph that differs from what ComfyUI would run, so the adapter analyses the
+editor file and asks for the real export rather than guessing. Candidate
+mappings from a UI file therefore name a *node class and input*, never a node
+id.
+
+### Mock generation
+
+The mock provider stands in so the rest of the product can be exercised. It is
+deliberately honest about what it is:
+
+- Jobs progress Queued → Running → Completed on a wall-clock schedule.
+- Outputs are real files at the shot's requested dimensions — a gradient PNG for
+  image shots, an H.264 MP4 for video shots — so the timeline and render stages
+  operate on genuine media.
 - `check_health()` reports `mock: true`, and the health endpoint says so.
 - Nothing imitates a rendered frame or a ComfyUI response.
 
-**To unblock real generation, provide:**
-
-1. H3 image workflow API-format JSON
-2. H3 video workflow API-format JSON
-3. ComfyUI server URL and version
-4. Required models/checkpoints/LoRA list
-5. Required custom nodes list
-
-See `docs/PRD_Content_Automation_Studio_v0.2.md` Appendix B for the required
-handoff package format. Once supplied: import each workflow on the Workflows
-screen, map its logical fields to node IDs, run Validate, then start the
-backend with `COMFYUI_PROVIDER=real`. No business logic needs to change -
-node IDs live only in the workflow record's `parameter_mapping`.
+Mock generation keeps working with a UI-format workflow registered: the mock
+never executes the graph, so the payload builder passes logical values through
+instead of blocking. Re-verified after these changes — three shots to three
+takes to a 1024×1024 h264 review render, with the live ComfyUI queue untouched.
 
 ---
 
@@ -350,36 +417,60 @@ exercised against a running server on 2026-09-01, not merely implemented.
 |---|-------------------------|--------|----------|
 | 1 | Plot to editable scene/shot storyboard | Verified | e2e run creates 3 scenes and 9 shots, all editable via the API |
 | 2 | Each shot has a prompt and checkable workflow mapping | Verified | Preflight validates each mapping against the workflow JSON; snapshots show the compiled prompt injected into node 6, negative into 7, seed into 3, dimensions into 5, with unmapped inputs untouched |
-| 3 | Real image and video jobs through H3 | **BLOCKED** | No H3 JSON and no reachable ComfyUI - see Known Blockers |
+| 3 | Real image and video jobs through H3 | **PARTIALLY UNBLOCKED** | ComfyUI 0.34.0 reachable; all node classes and models installed. Both video workflows are now registered in API format, validated and submittable. The image workflow is still editor-format only, and no real generation has been run - see Known Blockers |
 | 4 | Job status, error and retry behave correctly | Verified | Categorised errors; connection failures retry three times, OOM and missing models fail once |
 | 5 | One approved take per shot | Verified | 9 takes approved through the review API |
 | 6 | Approved takes assembled into a review video | Verified | 45.0s 1920x1080 h264 `review.mp4` from 9 approved takes, confirmed with ffprobe |
 | 7 | Project and queue state survive restart | Verified | Project, scenes and 9 approved takes intact after a hard kill and restart |
 | 8 | Exports include video, storyboard, prompts and provenance | Verified | Storyboard JSON/CSV/Markdown, prompts, generation manifest with snapshot path and SHA-256, timeline manifest, project archive |
-| 9 | Automated tests of data model, mapping and queue state | Verified | 287 backend tests |
+| 9 | Automated tests of data model, mapping and queue state | Verified | 412 backend tests |
 | 10 | One end-to-end project with no manual file edits | Verified | `python test_e2e.py` passes start to finish |
 | 11 | Restart mid-queue resumes only the stuck jobs | Verified | Server killed with 1 Running and 7 Queued; on restart the Running job was requeued, retried as attempt 2, and all 8 completed |
 | 12 | Retiming the manifest re-renders without regenerating takes | Verified | Two items retimed, re-render went 45.0s to 36.0s, approved take files byte-identical and no new jobs created |
+
+### Live ComfyUI integration (2026-09-01)
+
+| Check | Result |
+|---|---|
+| ComfyUI health via the real provider | online, 0.34.0, RTX 5080, 14.6/15.9 GB VRAM free |
+| Node catalogue fetched | 1800 classes via `GET /object_info` |
+| Workflow format detection | all 3 supplied files correctly identified as UI format |
+| Node dependencies | 15 / 20 / 23 classes required, all present |
+| Model dependencies | 3 / 5 / 5 files required, all installed |
+| Candidate mappings derived | 7 / 7 / 7 logical fields |
+| UI-format submission guard | job failed `WorkflowValidationError`, `comfyui_prompt_id` null, 0 takes created, ComfyUI queue untouched |
+| API exports detected | both video workflows: `api`, submittable, dependencies satisfied |
+| Suggested mapping applied and validated | T2V 3 fields, I2V 4 fields, `valid: true` both |
+| Unsafe bindings withheld | `frames` (would overwrite a computed formula) reported for review, excluded from auto-apply |
+| Mock generation still working | 3 shots to 3 takes to a 1024x1024 h264 review render |
 
 ### Quality gates
 
 | Gate | Command | Result |
 |------|---------|--------|
-| Backend tests | `python -m pytest tests/ -q` | 287 passed |
+| Backend tests | `python -m pytest tests/ -q` | 412 passed |
 | Backend lint | `python -m ruff check app/ tests/` | clean |
 | Frontend lint | `npm run lint` | clean |
 | Frontend typecheck | `npx tsc -b` | clean |
 | Frontend build | `npm run build` | succeeds |
 | End-to-end | `python test_e2e.py` | all steps pass |
-| API contract | client calls vs OpenAPI | 58/58 match on method and path |
+| API contract | client calls vs OpenAPI | all client calls match on method and path |
+| Live ComfyUI | `GET /object_info` via the real provider | 1800 node classes; all workflow dependencies satisfied |
+
+> On Windows the full-suite run prints `Windows fatal exception: access
+> violation` from pytest's faulthandler. It appears only in the combined run,
+> never when the same tests run in isolation or when the same code runs outside
+> pytest, and the suite still exits 0 with every test passing. It is a
+> pytest/anyio artifact on this platform, not an application fault; the handler
+> is deliberately left enabled so a genuine crash would still be reported.
 
 ---
 
 ## API Documentation
 
-Start the backend server and visit **http://localhost:8000/docs** for the interactive Swagger UI, which documents all available REST endpoints with request/response schemas.
+Start the backend server and visit **http://localhost:8001/docs** for the interactive Swagger UI, which documents all available REST endpoints with request/response schemas.
 
-Alternatively, visit **http://localhost:8000/redoc** for the ReDoc-formatted API reference.
+Alternatively, visit **http://localhost:8001/redoc** for the ReDoc-formatted API reference.
 
 ---
 

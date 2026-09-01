@@ -385,6 +385,7 @@ class WorkflowResponse(BaseModel):
     name: str
     purpose: str
     source_json_path: str
+    source_format: str = "unknown"
     sha256_hash: str
     version: str
     required_models: list[str]
@@ -400,6 +401,64 @@ class WorkflowResponse(BaseModel):
 class WorkflowMappingUpdate(BaseModel):
     parameter_mapping: dict[str, Any]
     output_mapping: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class MappingCandidateOut(BaseModel):
+    logical_field: str
+    node_class: str
+    input_name: str
+    node_id: Optional[str] = None
+    match_kind: str
+    confidence: float
+    note: str = ""
+    exposed: bool = True
+    auto_applicable: bool = True
+
+
+class SubgraphInfoOut(BaseModel):
+    subgraph_id: str
+    name: str
+    input_bindings: dict[str, Any] = Field(default_factory=dict)
+    inner_node_classes: list[str] = Field(default_factory=list)
+    unresolved_inputs: list[str] = Field(default_factory=list)
+
+
+class DependencyReportOut(BaseModel):
+    checked: bool
+    reason: str = ""
+    satisfied: bool = False
+    summary: str = ""
+    node_classes_present: list[str] = Field(default_factory=list)
+    node_classes_missing: list[str] = Field(default_factory=list)
+    node_classes_frontend_only: list[str] = Field(default_factory=list)
+    models_present: list[str] = Field(default_factory=list)
+    models_missing: list[str] = Field(default_factory=list)
+    catalogue_size: int = 0
+
+
+class WorkflowAnalysisResult(BaseModel):
+    """Diagnostics for one registered workflow."""
+
+    workflow_id: str
+    name: str
+    format: str
+    format_confidence: float
+    format_reasons: list[str] = Field(default_factory=list)
+    submittable: bool
+    #: Present only when the workflow cannot be submitted.
+    blocking_reason: str = ""
+    node_count: int = 0
+    subgraphs: list[SubgraphInfoOut] = Field(default_factory=list)
+    required_node_classes: list[str] = Field(default_factory=list)
+    frontend_only_node_classes: list[str] = Field(default_factory=list)
+    required_models: list[str] = Field(default_factory=list)
+    mapping_candidates: list[MappingCandidateOut] = Field(default_factory=list)
+    alternate_candidates: list[MappingCandidateOut] = Field(default_factory=list)
+    unmapped_logical_fields: list[str] = Field(default_factory=list)
+    #: Ready-to-apply mapping; empty unless the workflow is API-format.
+    suggested_parameter_mapping: dict[str, dict[str, str]] = Field(default_factory=dict)
+    dependencies: DependencyReportOut
+    warnings: list[str] = Field(default_factory=list)
 
 
 class WorkflowValidationResult(BaseModel):

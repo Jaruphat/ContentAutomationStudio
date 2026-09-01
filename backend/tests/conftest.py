@@ -22,6 +22,12 @@ import uuid
 _TEST_DATA_DIR = tempfile.mkdtemp(prefix="cas-test-data-")
 os.environ["CAS_DATA_DIR"] = _TEST_DATA_DIR
 
+# TestClient(app) runs the real application lifespan. Without this the
+# background generation queue starts and polls SQLite from another thread for
+# the rest of the session, which is both unnecessary (the queue has its own
+# tests, driven directly) and a source of cross-test nondeterminism.
+os.environ["CAS_DISABLE_QUEUE"] = "1"
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine

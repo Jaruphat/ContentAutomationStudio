@@ -28,6 +28,7 @@ from app.schemas import (
     QueueStatus,
 )
 from app.services import job_payload, workflow_registry
+from app.services.workflow_format import WorkflowFormat
 from app.services.prompt_compiler import compile_prompt
 from app.services.queue_manager import queue_manager
 
@@ -134,6 +135,7 @@ async def preflight_validation(project_id: str, db: Session = Depends(get_db)):
                 "workflow_id": workflow_id,
                 "name": "",
                 "valid": False,
+                "source_format": "unknown",
                 "errors": ["Workflow record not found"],
                 "warnings": [],
             })
@@ -142,6 +144,26 @@ async def preflight_validation(project_id: str, db: Session = Depends(get_db)):
 
         errors: list[str] = []
         check_warnings: list[str] = []
+
+        # An editor/UI graph fails for a reason no amount of mapping fixes, so
+        # it is reported as such and not re-checked as a mapping problem.
+        source_format = (workflow.source_format or "unknown").lower()
+        if source_format != WorkflowFormat.API.value:
+            workflow_ok[workflow_id] = False
+            workflow_checks.append({
+                "workflow_id": workflow_id,
+                "name": workflow.name,
+                "valid": False,
+                "source_format": source_format,
+                "errors": [
+                    f"Workflow is {source_format}-format JSON, which ComfyUI "
+                    f"cannot execute. Re-import it via Workflow -> Export (API) "
+                    f"in ComfyUI."
+                ],
+                "warnings": [],
+            })
+            workflow.validation_status = "unsupported_format"
+            continue
 
         try:
             workflow_data = workflow_registry.load_workflow_source(
@@ -181,6 +203,7 @@ async def preflight_validation(project_id: str, db: Session = Depends(get_db)):
             "workflow_id": workflow_id,
             "name": workflow.name,
             "valid": is_ok,
+            "source_format": source_format,
             "errors": errors,
             "warnings": check_warnings,
         })

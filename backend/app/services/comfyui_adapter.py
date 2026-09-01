@@ -134,6 +134,17 @@ class ComfyUIProvider(ABC):
         """
         ...
 
+    async def get_object_info(self) -> dict[str, Any] | None:
+        """
+        Return the instance's node catalogue (``GET /object_info``).
+
+        Used to check that a workflow's node classes and model files actually
+        exist before generating. Not every provider can answer - the mock has
+        no catalogue - so ``None`` means "cannot be determined here" and must
+        not be read as "nothing is installed".
+        """
+        return None
+
     @abstractmethod
     async def check_health(self) -> HealthStatus:
         """

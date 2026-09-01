@@ -191,6 +191,9 @@ class Workflow(Base):
     name = Column(String, nullable=False)
     purpose = Column(String, default="image")  # image / text-to-video / image-to-video
     source_json_path = Column(String, default="")
+    # Which of ComfyUI's two JSON shapes was imported: "api" (submittable to
+    # /prompt), "ui" (editor graph, must be re-exported first) or "unknown".
+    source_format = Column(String, default="unknown")
     sha256_hash = Column(String, default="")
     version = Column(String, default="1.0")
     required_models = Column(JSON, default=list)
