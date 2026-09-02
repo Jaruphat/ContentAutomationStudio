@@ -6,9 +6,18 @@ Expected filenames:
 
 - `video_minimax_h3_t2v.api.json` — received; SHA-256 `06392e8508554ce7b9cbefc8ae1ebc59e12e7019c3d04d372ad11a4864030088`
 - `video_minimax_h3_i2v.api.json` — received; SHA-256 `a742c6de241bd77d540767cf0ec2ce4bc084d701eeae85faf925ec79ccf75601`
+- `image_z_image_turbo_int8.api.json` — received; SHA-256 `d37a4dcc2259fcdbdd87a4306643d9c10128c4e08ad9317690dc420cd9922b4f`
 - `image_boogu_image_0_1_edit_int8.api.json`
 
 The two H3 files were supplied by the user at the project root on 2026-09-01 and moved here after verification. Both are valid API-format root node mappings (not UI graphs). Their node classes were checked against live ComfyUI 0.34.0 at `http://127.0.0.1:8000/object_info`: T2V has 23 nodes / 20 class types and I2V has 26 nodes / 23 class types, with no missing class types.
+
+The Z-Image T2I export was supplied under `comfyworkflow/` on 2026-09-02 and
+is preserved here byte-for-byte. Its CLIP filename was not installed locally,
+so the source remains untouched and `../../derived/image_z_image_turbo_int8.local.api.json`
+records the single local compatibility substitution plus provenance. That
+derivative passed live dependency and mapping validation and completed a real
+512x512 one-shot render through ComfyUI; evidence is under
+`docs/release_evidence/2026-09-02/comfyui-image-e2e/`.
 
 For every file:
 

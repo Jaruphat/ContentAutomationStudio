@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "source": "../source/api/image_z_image_turbo_int8.api.json",
+  "sourceSha256": "d37a4dcc2259fcdbdd87a4306643d9c10128c4e08ad9317690dc420cd9922b4f",
+  "derived": "image_z_image_turbo_int8.local.api.json",
+  "derivedSha256": "a31450cf898fc2cabb47e42fb87fc3a08feeb1e76ba96d18069b87e818e9ba89",
+  "changes": [
+    {
+      "nodeId": "57:30",
+      "field": "clip_name",
+      "from": "qwen_3_4b_fp8_mixed.safetensors",
+      "to": "qwen_3_4b.safetensors",
+      "reason": "The source filename is not installed; ComfyUI 0.34.0 advertises qwen_3_4b.safetensors for CLIPLoader."
+    }
+  ]
+}

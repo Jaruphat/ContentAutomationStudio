@@ -321,7 +321,7 @@ The frontend uses a production cockpit layout:
 
 ## Known Blockers
 
-### H3 ComfyUI Integration — video operational; image workflow export pending
+### ComfyUI Integration — T2I, T2V and I2V workflows connected
 
 ComfyUI **is** reachable and healthy: version 0.34.0 on `http://127.0.0.1:8000`,
 RTX 5080, 1800 registered node classes. The application backend runs on 8001 to
@@ -351,10 +351,13 @@ validate.
 the T2V workflow on 2026-09-01 and produced a genuine 864x480 h264+aac clip;
 see the Verification Status section.
 
-**Still outstanding: `image_boogu_image_0_1_edit_int8` in API format.** Until
-that arrives, image shots cannot be generated through ComfyUI. The independent
-OpenAI Images path has been exercised with one paid low-cost image and is
-verified; see the Verification Status section.
+**Text-to-image is now operational through ComfyUI.** The supplied Z-Image
+Turbo API export was preserved byte-for-byte. Its CLIP filename differed from
+the installed filename, so a separately versioned local derivative records the
+single substitution and provenance. It passed live dependency/mapping checks
+and produced a real 512x512 PNG. The independent OpenAI Images path is also
+verified. The optional Boogu image-edit workflow still needs an API-format
+export before image-to-image editing can use that workflow.
 
 **Everything else checked out.** Verified against the live instance:
 
@@ -432,7 +435,7 @@ implemented.
 |---|-------------------------|--------|----------|
 | 1 | Plot to editable scene/shot storyboard | Verified | e2e run creates 3 scenes and 9 shots, all editable via the API |
 | 2 | Each shot has a prompt and checkable workflow mapping | Verified | Preflight validates each mapping against the workflow JSON; snapshots show the compiled prompt injected into node 6, negative into 7, seed into 3, dimensions into 5, with unmapped inputs untouched |
-| 3 | Real image and video generation paths | **Verified across providers; H3 image pending** | H3 T2V produced a real 864x480 h264+aac clip (124 frames, 5.167s). OpenAI `gpt-image-1-mini` produced one paid 1024x1024 PNG at an estimated $0.011. The ComfyUI image-edit workflow still needs an API-format export. |
+| 3 | Real image and video generation paths | **Verified** | Local ComfyUI Z-Image T2I produced a 512x512 PNG; H3 T2V produced an 864x480 h264+aac clip (124 frames, 5.167s); OpenAI `gpt-image-1-mini` produced one paid 1024x1024 PNG at an estimated $0.011. Optional Boogu image editing still needs its API export. |
 | 4 | Job status, error and retry behave correctly | Verified | Categorised errors; connection failures retry three times, OOM and missing models fail once |
 | 5 | One approved take per shot | Verified | 9 takes approved through the review API |
 | 6 | Approved takes assembled into a review video | Verified | Mock E2E: 45.0s 1920x1080 h264 from 9 approved takes. Paid-image E2E: approved PNG became a 3.000s, 1024x1024, 24fps h264 render. Both confirmed with ffprobe. |
@@ -462,9 +465,19 @@ implemented.
 Rechecked on 2026-09-02 against the live ComfyUI instance: T2V and I2V were
 both API format, submittable and mapping-valid; all 20/23 required node classes
 and all five model files per workflow were present. No generation was submitted
-during this recheck. Both source records still warn that `output_mapping` is
-empty, so output retrieval must be configured before using those records for a
-new run.
+during this recheck. Their `SaveVideo` output mappings were then configured and
+both validated without warnings.
+
+### First real ComfyUI image generation (2026-09-02)
+
+The Z-Image Turbo API workflow passed preflight with `comfyui_mock: false`, all
+10 node classes and all three model files available. One local 512x512 shot
+completed in one attempt with ComfyUI prompt id
+`753a6b1b-d297-4ce0-9898-df46ac2ca996`. The resulting PNG was visually
+inspected: a coherent white paper boat on a calm sunrise pond, with no visible
+text, logo, corruption or major artifact. The run has no vendor charge.
+Evidence and checksums are under
+`docs/release_evidence/2026-09-02/comfyui-image-e2e/`.
 
 ### First real generation (2026-09-01)
 

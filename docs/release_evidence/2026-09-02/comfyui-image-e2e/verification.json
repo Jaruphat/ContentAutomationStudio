@@ -1,0 +1,28 @@
+{
+  "verifiedAt": "2026-09-02T09:30:29Z",
+  "provider": "comfyui",
+  "mock": false,
+  "comfyuiVersion": "0.34.0",
+  "projectId": "fec6ece3-c0b5-402b-bf0a-f8fbc8de38c4",
+  "workflowId": "359c2852-f880-430f-a096-07e6ef5625a3",
+  "workflowVersion": "1.0-local.1",
+  "sourceWorkflowSha256": "d37a4dcc2259fcdbdd87a4306643d9c10128c4e08ad9317690dc420cd9922b4f",
+  "derivedWorkflowSha256": "a31450cf898fc2cabb47e42fb87fc3a08feeb1e76ba96d18069b87e818e9ba89",
+  "jobId": "10e9230c-a2c0-4612-b52f-27326f5f869e",
+  "takeId": "632261f5-70b0-44e0-ad28-bf9d6bfb947b",
+  "comfyuiPromptId": "753a6b1b-d297-4ce0-9898-df46ac2ca996",
+  "status": "Completed",
+  "attempts": 1,
+  "seed": 42,
+  "width": 512,
+  "height": 512,
+  "codec": "png",
+  "outputSha256": "e5828c236af361ef8a246b8c61c7a619c68a35d7bdb41510507b183710128e40",
+  "visualInspection": "Coherent white paper boat on a calm sunrise pond with gentle ripples; no visible text, logo, corruption, or major artifact.",
+  "costUsd": 0,
+  "notes": [
+    "Preflight reported ready=true, comfyui_online=true and comfyui_mock=false.",
+    "All 10 node classes and all three model files were available after adapting the source CLIP filename to the installed qwen_3_4b.safetensors.",
+    "The source workflow is preserved byte-for-byte; the local derivative and its provenance record are stored separately."
+  ]
+}
