@@ -601,6 +601,10 @@ class RenderResult(BaseModel):
     duration_sec: float = 0.0
     codec: str = ""
     size_bytes: int = 0
+    #: Audio from approved takes is carried through the render; false when no
+    #: take on the timeline had any.
+    has_audio: bool = False
+    audio_codec: str = ""
 
 
 class PreflightResult(BaseModel):

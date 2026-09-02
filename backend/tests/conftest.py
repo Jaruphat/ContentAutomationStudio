@@ -132,6 +132,58 @@ def client(db_engine):
 
 
 # ---------------------------------------------------------------------------
+# Media fixtures
+# ---------------------------------------------------------------------------
+
+@pytest.fixture()
+def synthesise_clip():
+    """Return a factory that writes a real short clip to disk with FFmpeg.
+
+    Media tests must assert against a file FFmpeg actually produced, never a
+    stub. ``with_audio=True`` adds a stereo AAC track, mirroring what MiniMax
+    H3 emits (32 kHz stereo); ``with_audio=False`` yields a silent clip.
+    Skips the calling test when FFmpeg cannot produce the file.
+    """
+    from app.services import media_probe
+
+    def _make(
+        path: str,
+        *,
+        with_audio: bool,
+        width: int = 320,
+        height: int = 180,
+        duration: float = 1.0,
+        frame_rate: float = 24.0,
+        sample_rate: int = 32000,
+    ) -> str:
+        ffmpeg = media_probe.ffmpeg_path()
+        if not ffmpeg:
+            pytest.skip("ffmpeg is not installed on this machine")
+        cmd = [
+            ffmpeg, "-y", "-loglevel", "error",
+            "-f", "lavfi",
+            "-i", f"color=c=gray:s={width}x{height}:r={frame_rate:g}:d={duration:g}",
+        ]
+        if with_audio:
+            cmd += [
+                "-f", "lavfi",
+                "-i", f"sine=frequency=440:duration={duration:g}"
+                      f":sample_rate={sample_rate}",
+                "-ac", "2", "-c:a", "aac",
+            ]
+        cmd += [
+            "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p",
+            "-shortest", path,
+        ]
+        returncode, _stdout, stderr = media_probe.run_captured(cmd, timeout=60)
+        if returncode != 0 or not os.path.isfile(path):
+            pytest.skip(f"could not synthesise test media: {stderr[-200:]}")
+        return path
+
+    return _make
+
+
+# ---------------------------------------------------------------------------
 # Helper fixtures for creating sample entities
 # ---------------------------------------------------------------------------
 

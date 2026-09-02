@@ -8,6 +8,14 @@ Follows PRD section 13.3: each timeline item is normalised to the project's
 resolution and frame rate as its own intermediate (stills held for the shot
 duration, video trimmed), then the intermediates are concatenated.
 
+Audio is preserved when any approved take carries it - MiniMax H3 emits video
+with a native stereo track. The concat demuxer stream-copies the
+intermediates, so they must all share one stream layout: when the timeline
+carries audio anywhere, every segment gets an AAC stereo track and the ones
+with no source audio (stills, silent clips) get silence synthesised. When
+nothing on the timeline has audio, the render stays video-only rather than
+padding a silent track onto it.
+
 Rendering is skipped - with an explicit reason, never a fabricated result -
 when FFmpeg is unavailable, the timeline is empty, or any referenced media file
 is missing. A failed render never touches approved takes or project state
@@ -35,6 +43,12 @@ from app.services.timeline_service import get_timeline_manifest
 
 logger = logging.getLogger("cas.render_service")
 
+#: Every segment that carries audio is normalised to this layout so the concat
+#: demuxer can stream-copy them into one file.
+AUDIO_SAMPLE_RATE = 48000
+AUDIO_CHANNELS = 2
+AUDIO_BITRATE = "192k"
+
 
 def parse_resolution(value: str) -> tuple[int, int]:
     """Parse a 'WIDTHxHEIGHT' string, falling back to 1920x1080."""
@@ -60,6 +74,18 @@ def probe_media(file_path: str) -> dict[str, Any]:
     return probe_media_file(file_path)
 
 
+def _source_has_audio(file_path: str) -> bool | None:
+    """Whether a source file carries audio, or None when it cannot be probed.
+
+    None is not False: without ffprobe the render must say it could not tell
+    rather than silently claim the media had no audio.
+    """
+    probe = probe_media_file(file_path)
+    if not probe:
+        return None
+    return bool(probe.get("has_audio"))
+
+
 def _blocked(project_id: str, reason: str) -> dict[str, Any]:
     """Uniform 'the render did not run' result."""
     return {
@@ -74,6 +100,8 @@ def _blocked(project_id: str, reason: str) -> dict[str, Any]:
         "duration_sec": 0.0,
         "codec": "",
         "size_bytes": 0,
+        "has_audio": False,
+        "audio_codec": "",
     }
 
 
@@ -137,26 +165,61 @@ def render_review_video(db: Session, project_id: str) -> dict[str, Any]:
         f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2,setsar=1"
     )
 
+    # Decide once whether this render carries audio at all: the segments have
+    # to agree, because the concat step stream-copies them.
+    source_audio = [_source_has_audio(take.file_path) for _item, take in sources]
+    if any(flag is None for flag in source_audio):
+        warnings.append(
+            "ffprobe is unavailable, so source audio could not be detected. "
+            "The review video was rendered without audio."
+        )
+        source_audio = [False] * len(source_audio)
+    keep_audio = any(source_audio)
+
     segment_paths: list[str] = []
     for index, (item, take) in enumerate(sources):
         duration = float(item.get("duration_sec") or 0.0) or 3.0
         segment = os.path.join(segments_dir, f"seg_{index:04d}.mp4")
         is_video = (take.file_path or "").lower().endswith(VIDEO_EXTENSIONS)
+        # A still or a silent clip on an otherwise-audible timeline needs a
+        # synthesised silent track to match the other segments.
+        needs_silence = keep_audio and not source_audio[index]
 
         cmd = [ffmpeg, "-y", "-loglevel", "error"]
         if not is_video:
             # Hold the still for the shot's duration.
             cmd += ["-loop", "1"]
+        cmd += ["-i", take.file_path]
+        if needs_silence:
+            cmd += [
+                "-f", "lavfi",
+                "-i", f"anullsrc=channel_layout=stereo:"
+                      f"sample_rate={AUDIO_SAMPLE_RATE}",
+            ]
+        cmd += ["-map", "0:v:0"]
+        if keep_audio:
+            cmd += ["-map", "1:a:0"] if needs_silence else ["-map", "0:a:0"]
         cmd += [
-            "-i", take.file_path,
             "-t", f"{duration:g}",
             "-r", f"{frame_rate:g}",
             "-vf", scale_filter,
             "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
             "-pix_fmt", "yuv420p",
-            "-an",
-            segment,
         ]
+        if keep_audio:
+            cmd += [
+                "-c:a", "aac",
+                "-ar", str(AUDIO_SAMPLE_RATE),
+                "-ac", str(AUDIO_CHANNELS),
+                "-b:a", AUDIO_BITRATE,
+            ]
+            if needs_silence:
+                # anullsrc never ends; without this a clip shorter than its
+                # timeline slot would be padded with audio-only frames.
+                cmd += ["-shortest"]
+        else:
+            cmd += ["-an"]
+        cmd.append(segment)
 
         ok, err = _run(cmd)
         if not ok:
@@ -193,6 +256,13 @@ def render_review_video(db: Session, project_id: str) -> dict[str, Any]:
             f"Rendered duration {actual:.2f}s differs from the manifest total "
             f"{expected:.2f}s by more than one second."
         )
+    if keep_audio and probe and not probe.get("has_audio"):
+        # The sources had audio but the assembled file does not - report it
+        # rather than let a silent review video pass as correct.
+        warnings.append(
+            "Source takes carry audio but the assembled review video has no "
+            "audio stream."
+        )
 
     logger.info(
         "Rendered review video for project %s: %s (%d segments)",
@@ -211,4 +281,6 @@ def render_review_video(db: Session, project_id: str) -> dict[str, Any]:
         "duration_sec": actual or expected,
         "codec": probe.get("codec", "h264"),
         "size_bytes": os.path.getsize(output_path),
+        "has_audio": bool(probe.get("has_audio")) if probe else keep_audio,
+        "audio_codec": probe.get("audio_codec", "aac" if keep_audio else ""),
     }

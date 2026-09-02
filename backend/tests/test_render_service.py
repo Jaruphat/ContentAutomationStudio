@@ -258,6 +258,170 @@ class TestRenderExecution:
 
 
 # ---------------------------------------------------------------------------
+# Audio preservation
+# ---------------------------------------------------------------------------
+
+@ffmpeg_required
+@ffprobe_required
+class TestAudioPreservation:
+    """MiniMax H3 takes carry native stereo audio (verified: h264 864x480 +
+    aac 32 kHz stereo). The review render used to normalise every segment with
+    `-an`, so that audio never reached `review.mp4`. Segments must share one
+    audio layout for the concat demuxer's stream copy, so a timeline that
+    carries audio anywhere gets a silent track synthesised for the segments
+    that have none."""
+
+    def test_video_take_audio_reaches_the_review_render(
+        self, db_session, sample_project, sample_shot, tmp_path, synthesise_clip
+    ):
+        media = synthesise_clip(str(tmp_path / "with_audio.mp4"), with_audio=True)
+        assert render_service.probe_media(media)["has_audio"] is True
+
+        add_approved_take_on_timeline(
+            db_session, sample_project.id, sample_shot.id, media, duration=1.0
+        )
+        result = render_service.render_review_video(db_session, sample_project.id)
+        assert result["rendered"] is True, result["reason"]
+
+        probe = render_service.probe_media(result["output_path"])
+        assert probe["has_audio"] is True
+        assert probe["audio_codec"] == "aac"
+        assert probe["codec"] == "h264"
+        assert result["has_audio"] is True
+        assert result["audio_codec"] == "aac"
+
+    def test_still_only_timeline_stays_silent(
+        self, db_session, sample_project, sample_shot, tmp_path
+    ):
+        """Nothing on the timeline carries audio, so nothing is invented."""
+        media = str(tmp_path / "frame.png")
+        _create_placeholder_png(media, 320, 180)
+        add_approved_take_on_timeline(
+            db_session, sample_project.id, sample_shot.id, media, duration=1.0
+        )
+
+        result = render_service.render_review_video(db_session, sample_project.id)
+        assert result["rendered"] is True, result["reason"]
+        assert render_service.probe_media(result["output_path"])["has_audio"] is False
+        assert result["has_audio"] is False
+
+    def test_silent_video_take_renders_without_audio(
+        self, db_session, sample_project, sample_shot, tmp_path, synthesise_clip
+    ):
+        """A silent source video must still render - the audio handling may not
+        assume every video has a track."""
+        media = synthesise_clip(str(tmp_path / "silent.mp4"), with_audio=False)
+        assert render_service.probe_media(media)["has_audio"] is False
+
+        add_approved_take_on_timeline(
+            db_session, sample_project.id, sample_shot.id, media, duration=1.0
+        )
+        result = render_service.render_review_video(db_session, sample_project.id)
+        assert result["rendered"] is True, result["reason"]
+        assert render_service.probe_media(result["output_path"])["has_audio"] is False
+
+    def test_mixed_timeline_keeps_audio_and_full_duration(
+        self, db_session, sample_project, sample_scene, tmp_path, synthesise_clip
+    ):
+        """A still, then a silent clip, then a clip with audio. The concat
+        stream copy only carries audio through if every segment has one, and
+        the silent fillers must not shorten the result."""
+        from app.models import Shot
+
+        still = str(tmp_path / "frame.png")
+        _create_placeholder_png(still, 320, 180)
+        silent = synthesise_clip(str(tmp_path / "silent.mp4"), with_audio=False)
+        voiced = synthesise_clip(str(tmp_path / "voiced.mp4"), with_audio=True)
+
+        for order, media in enumerate([still, silent, voiced]):
+            shot = Shot(
+                id=str(uuid.uuid4()),
+                scene_id=sample_scene.id,
+                order=order,
+                generation_mode="video",
+                planned_duration_sec=1.0,
+            )
+            db_session.add(shot)
+            db_session.commit()
+            add_approved_take_on_timeline(
+                db_session, sample_project.id, shot.id, media,
+                order=order, duration=1.0,
+            )
+
+        result = render_service.render_review_video(db_session, sample_project.id)
+        assert result["rendered"] is True, result["reason"]
+        assert result["segment_count"] == 3
+
+        probe = render_service.probe_media(result["output_path"])
+        assert probe["has_audio"] is True
+        assert probe["audio_codec"] == "aac"
+        assert probe["duration_sec"] == pytest.approx(3.0, abs=0.35)
+        assert result["warnings"] == []
+
+    def test_every_segment_gets_the_same_audio_layout(
+        self, db_session, sample_project, sample_scene, tmp_path, synthesise_clip
+    ):
+        """Uniform channel count and sample rate across segments is what makes
+        the concat stream copy legal; assert it on the intermediates."""
+        from app.models import Shot
+
+        still = str(tmp_path / "frame.png")
+        _create_placeholder_png(still, 320, 180)
+        voiced = synthesise_clip(str(tmp_path / "voiced.mp4"), with_audio=True)
+
+        for order, media in enumerate([still, voiced]):
+            shot = Shot(
+                id=str(uuid.uuid4()),
+                scene_id=sample_scene.id,
+                order=order,
+                generation_mode="video",
+                planned_duration_sec=1.0,
+            )
+            db_session.add(shot)
+            db_session.commit()
+            add_approved_take_on_timeline(
+                db_session, sample_project.id, shot.id, media,
+                order=order, duration=1.0,
+            )
+
+        result = render_service.render_review_video(db_session, sample_project.id)
+        assert result["rendered"] is True, result["reason"]
+
+        segments_dir = os.path.join(
+            os.path.dirname(result["output_path"]), "segments"
+        )
+        layouts = {
+            _audio_layout(os.path.join(segments_dir, name))
+            for name in sorted(os.listdir(segments_dir))
+            if name.startswith("seg_")
+        }
+        assert len(layouts) == 1, layouts
+        codec, channels, sample_rate = layouts.pop()
+        assert codec == "aac"
+        assert channels == 2
+        assert sample_rate == render_service.AUDIO_SAMPLE_RATE
+
+
+def _audio_layout(path: str) -> tuple[str, int, int]:
+    """(codec, channels, sample_rate) of a file's first audio stream."""
+    import json
+
+    from app.services.media_probe import ffprobe_path, run_captured
+
+    returncode, stdout, stderr = run_captured([
+        ffprobe_path(), "-v", "error",
+        "-select_streams", "a:0",
+        "-show_entries", "stream=codec_name,channels,sample_rate",
+        "-of", "json", path,
+    ], timeout=30)
+    assert returncode == 0, stderr
+    streams = json.loads(stdout or "{}").get("streams") or []
+    assert streams, f"{path} has no audio stream"
+    stream = streams[0]
+    return stream["codec_name"], int(stream["channels"]), int(stream["sample_rate"])
+
+
+# ---------------------------------------------------------------------------
 # probe_media
 # ---------------------------------------------------------------------------
 

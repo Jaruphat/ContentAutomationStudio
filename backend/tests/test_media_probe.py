@@ -8,8 +8,6 @@ shot's planned duration instead of the media's real length. Found during the
 first real generation against a live instance.
 """
 
-import os
-
 import pytest
 
 from app.services import media_probe
@@ -98,12 +96,8 @@ class TestAudioDetection:
     metadata has to distinguish a silent clip from one carrying audio."""
 
     @pytest.fixture()
-    def clip_with_audio(self, tmp_path) -> str:
-        path = str(tmp_path / "with_audio.mp4")
-        ok, err = _run_ffmpeg_with_audio(path)
-        if not ok:
-            pytest.skip(f"could not synthesise an audio clip: {err}")
-        return path
+    def clip_with_audio(self, tmp_path, synthesise_clip) -> str:
+        return synthesise_clip(str(tmp_path / "with_audio.mp4"), with_audio=True)
 
     def test_audio_track_is_detected(self, clip_with_audio):
         probe = probe_media_file(clip_with_audio)
@@ -116,24 +110,6 @@ class TestAudioDetection:
         assert probe["codec"] == "h264"
         assert probe["width"] == 320
         assert probe["frame_rate"] == 24.0
-
-
-def _run_ffmpeg_with_audio(path: str) -> tuple[bool, str]:
-    """Synthesise a short clip carrying both video and stereo audio."""
-    ffmpeg = media_probe.ffmpeg_path()
-    if not ffmpeg:
-        return False, "ffmpeg missing"
-    cmd = [
-        ffmpeg, "-y", "-loglevel", "error",
-        "-f", "lavfi", "-i", "color=c=gray:s=320x180:r=24:d=1",
-        "-f", "lavfi", "-i", "sine=frequency=440:duration=1:sample_rate=32000",
-        "-ac", "2",
-        "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p",
-        "-c:a", "aac",
-        "-shortest", path,
-    ]
-    returncode, _out, err = media_probe.run_captured(cmd, timeout=60)
-    return returncode == 0 and os.path.isfile(path), err
 
 
 class TestProviderMetadata:
