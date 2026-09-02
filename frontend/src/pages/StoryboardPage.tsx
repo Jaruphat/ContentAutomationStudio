@@ -22,7 +22,8 @@ import api from "../api/client";
 import { useAppState, useAppDispatch } from "../store/useProjectStore";
 import StatusBadge from "../components/StatusBadge";
 import AIGenerationPanel from "../components/AIGenerationPanel";
-import type { Scene, Shot, ShotCreate } from "../types";
+import MediaProviderFields from "../components/MediaProviderFields";
+import type { MediaProviderId, Scene, Shot, ShotCreate } from "../types";
 
 // ── Shot row ─────────────────────────────────────────────────────────────
 
@@ -49,6 +50,15 @@ function ShotRow({
   const [imagePrompt, setImagePrompt] = useState(shot.image_prompt);
   const [duration, setDuration] = useState(String(shot.planned_duration_sec));
   const [genMode, setGenMode] = useState(shot.generation_mode);
+  const [imageProviderId, setImageProviderId] = useState<MediaProviderId>(
+    shot.image_provider_id ?? "comfyui",
+  );
+  const [imageModel, setImageModel] = useState(shot.image_model || "workflow");
+
+  const mediaProvidersQ = useQuery({
+    queryKey: ["media-providers"],
+    queryFn: api.media.providers,
+  });
 
   const updateMut = useMutation({
     mutationFn: (data: Partial<ShotCreate>) =>
@@ -70,7 +80,7 @@ function ShotRow({
       <tr className="border-t border-zinc-800 bg-zinc-800/40">
         <td colSpan={7} className="px-3 py-3">
           <div className="space-y-2">
-            <div className="grid grid-cols-4 gap-2">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
               <div>
                 <label className="text-[10px] text-zinc-500 uppercase">Type</label>
                 <input value={shotType} onChange={(e) => setShotType(e.target.value)} className="w-full rounded px-2 py-1 text-xs" placeholder="wide, close-up..." />
@@ -88,7 +98,7 @@ function ShotRow({
                 <input value={subject} onChange={(e) => setSubject(e.target.value)} className="w-full rounded px-2 py-1 text-xs" />
               </div>
             </div>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
               <div>
                 <label className="text-[10px] text-zinc-500 uppercase">Action</label>
                 <input value={action} onChange={(e) => setAction(e.target.value)} className="w-full rounded px-2 py-1 text-xs" placeholder="character walks..." />
@@ -106,6 +116,17 @@ function ShotRow({
                 </select>
               </div>
             </div>
+            <MediaProviderFields
+              catalogue={mediaProvidersQ.data}
+              generationMode={genMode}
+              providerId={imageProviderId}
+              model={imageModel}
+              onProviderChange={(providerId, defaultModel) => {
+                setImageProviderId(providerId);
+                setImageModel(defaultModel);
+              }}
+              onModelChange={setImageModel}
+            />
             <div>
               <label className="text-[10px] text-zinc-500 uppercase">Image Prompt</label>
               <textarea value={imagePrompt} onChange={(e) => setImagePrompt(e.target.value)} className="w-full rounded px-2 py-1 text-xs" rows={2} />
@@ -128,6 +149,8 @@ function ShotRow({
                     image_prompt: imagePrompt,
                     planned_duration_sec: parseFloat(duration) || 0,
                     generation_mode: genMode,
+                    image_provider_id: imageProviderId,
+                    image_model: imageModel,
                   })
                 }
                 disabled={updateMut.isPending}
