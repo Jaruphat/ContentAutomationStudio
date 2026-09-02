@@ -23,6 +23,7 @@ may hold approved takes.
 """
 
 import logging
+import re
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -91,6 +92,11 @@ class TaskOutcome:
     warnings: list[str] = field(default_factory=list)
     #: The model's own notes to the writer, lifted out of ``data``.
     notes: str = ""
+    #: Durable audit identifiers populated by the HTTP orchestration layer.
+    preview_revision_id: str = ""
+    preview_sha256: str = ""
+    applied_revision_id: str = ""
+    applied_sha256: str = ""
 
 
 def _provenance(result: StructuredResult, provider: AIProvider) -> dict[str, Any]:
@@ -742,6 +748,19 @@ def _shot_for_prompt(shot: Shot, scene: Scene) -> dict[str, Any]:
     }
 
 
+def _deduplicate_prompt_fragments(value: str) -> str:
+    """Remove repeated comma/semicolon prompt fragments without reordering."""
+    seen: set[str] = set()
+    unique: list[str] = []
+    for fragment in re.split(r"[,;]", value):
+        cleaned = fragment.strip()
+        key = " ".join(cleaned.casefold().split())
+        if cleaned and key not in seen:
+            seen.add(key)
+            unique.append(cleaned)
+    return ", ".join(unique)
+
+
 def _apply_shot_prompts(
     db: Session,
     project: Project,
@@ -769,9 +788,15 @@ def _apply_shot_prompts(
             continue
         seen.add(shot_id)
 
-        image_prompt = str(entry.get("image_prompt") or "").strip()
-        video_prompt = str(entry.get("video_prompt") or "").strip()
-        negative_prompt = str(entry.get("negative_prompt") or "").strip()
+        image_prompt = _deduplicate_prompt_fragments(
+            str(entry.get("image_prompt") or "")
+        )
+        video_prompt = _deduplicate_prompt_fragments(
+            str(entry.get("video_prompt") or "")
+        )
+        negative_prompt = _deduplicate_prompt_fragments(
+            str(entry.get("negative_prompt") or "")
+        )
 
         if image_prompt:
             shot.image_prompt = image_prompt

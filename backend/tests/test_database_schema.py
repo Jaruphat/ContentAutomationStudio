@@ -36,6 +36,28 @@ def columns_of(engine, table: str) -> set[str]:
 
 
 class TestEnsureSchema:
+    def test_init_adds_authoring_revision_table_to_legacy_database(
+        self, tmp_path, monkeypatch,
+    ):
+        engine = create_engine(f"sqlite:///{tmp_path / 'pre-authoring.db'}")
+        with engine.begin() as conn:
+            conn.execute(text(
+                "CREATE TABLE projects (id VARCHAR PRIMARY KEY, title VARCHAR NOT NULL)"
+            ))
+            conn.execute(text(
+                "INSERT INTO projects (id, title) VALUES ('project-1', 'Kept')"
+            ))
+        monkeypatch.setattr(database, "engine", engine)
+
+        database.init_db()
+
+        assert "ai_authoring_revisions" in inspect(engine).get_table_names()
+        with engine.begin() as conn:
+            assert conn.execute(text(
+                "SELECT title FROM projects WHERE id = 'project-1'"
+            )).scalar_one() == "Kept"
+        engine.dispose()
+
     def test_adds_missing_columns(self, legacy_db):
         before = columns_of(legacy_db, "generation_jobs")
         assert "workflow_snapshot_path" not in before

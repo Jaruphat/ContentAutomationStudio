@@ -844,6 +844,10 @@ class AITaskRequest(BaseModel):
     #: asking the provider again - so what the user reviewed is what lands in
     #: the project, and applying costs no second generation.
     draft: Optional[dict[str, Any]] = None
+    #: Durable preview being reviewed. Required when applying ``draft``.
+    reviewed_preview_id: str = ""
+    #: Digest returned with that preview; detects stale or altered references.
+    reviewed_preview_sha256: str = ""
 
 
 class AIStoryBibleRequest(AITaskRequest):
@@ -877,6 +881,10 @@ class AITaskResponse(BaseModel):
     warnings: list[str] = Field(default_factory=list)
     #: The model's own notes to the writer.
     notes: str = ""
+    preview_revision_id: str = ""
+    preview_sha256: str = ""
+    applied_revision_id: str = ""
+    applied_sha256: str = ""
 
 
 class AIErrorResponse(BaseModel):

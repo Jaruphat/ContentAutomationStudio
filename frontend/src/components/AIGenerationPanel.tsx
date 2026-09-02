@@ -18,7 +18,12 @@ export function withReviewedDraft<T extends AITaskRequest>(
   preview: AITaskResponse | null,
 ): T {
   if (!request.apply || !preview) return request;
-  return { ...request, draft: preview.data };
+  return {
+    ...request,
+    draft: preview.data,
+    reviewed_preview_id: preview.preview_revision_id,
+    reviewed_preview_sha256: preview.preview_sha256,
+  };
 }
 
 export default function AIGenerationPanel<T extends AITaskRequest>({

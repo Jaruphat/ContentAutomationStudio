@@ -466,6 +466,33 @@ class TestOfflineEndToEnd:
         # Preflight sees the shots that AI created, whatever its verdict.
         assert preflight.json()["total_shots"] >= 4
 
+    def test_preflight_identifies_only_shots_breaking_recurring_prop_continuity(
+        self, client, db_session, sample_project, sample_scene, sample_shot,
+        sample_location,
+    ):
+        sample_location.props = "Exactly one recurring white paper boat throughout."
+        sample_shot.subject = "Alice holding the paper boat"
+        sample_shot.image_prompt = "Alice holding a boat"
+        other = Shot(
+            id=str(uuid.uuid4()),
+            scene_id=sample_scene.id,
+            order=2,
+            subject="empty forest",
+            image_prompt="empty forest",
+            generation_mode="image",
+            status="Draft",
+        )
+        db_session.add(other)
+        db_session.commit()
+
+        body = client.get(f"/api/projects/{sample_project.id}/preflight").json()
+
+        continuity = [
+            issue for issue in body["issues"]
+            if any("recurring prop continuity" in text for text in issue["issues"])
+        ]
+        assert [issue["shot_id"] for issue in continuity] == [sample_shot.id]
+
     def test_generated_scenes_survive_a_new_session(
         self, client, db_engine, story_project
     ):

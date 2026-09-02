@@ -9,12 +9,12 @@ resolution and frame rate as its own intermediate (stills held for the shot
 duration, video trimmed), then the intermediates are concatenated.
 
 Audio is preserved when any approved take carries it - MiniMax H3 emits video
-with a native stereo track. The concat demuxer stream-copies the
-intermediates, so they must all share one stream layout: when the timeline
-carries audio anywhere, every segment gets an AAC stereo track and the ones
-with no source audio (stills, silent clips) get silence synthesised. When
-nothing on the timeline has audio, the render stays video-only rather than
-padding a silent track onto it.
+with a native stereo track. The concat demuxer requires the intermediates to
+share one stream layout: when the timeline carries audio anywhere, every
+segment gets an AAC stereo track and the ones with no source audio (stills,
+silent clips) get silence synthesised. The assembled program is then loudness
+normalised while its video is stream-copied. When nothing on the timeline has
+audio, the render stays video-only rather than padding a silent track onto it.
 
 The delivered MP4 carries no inherited container metadata. ComfyUI's SaveVideo
 embeds the whole prompt graph - creative prompt text, node classes and local
@@ -33,6 +33,7 @@ is missing. A failed render never touches approved takes or project state
 import hashlib
 import json
 import logging
+import math
 import os
 from datetime import datetime, timezone
 from typing import Any
@@ -61,6 +62,9 @@ logger = logging.getLogger("cas.render_service")
 AUDIO_SAMPLE_RATE = 48000
 AUDIO_CHANNELS = 2
 AUDIO_BITRATE = "192k"
+AUDIO_TARGET_LUFS = -16.0
+AUDIO_TRUE_PEAK_DBTP = -1.5
+AUDIO_LOUDNESS_RANGE = 11.0
 
 #: Drop every tag and chapter the input carried. Applied to each segment and
 #: again to the concat output, because either stage would otherwise inherit
@@ -223,6 +227,17 @@ def write_render_provenance(
     Returns the sidecar path, or '' when it could not be written - a provenance
     failure must not fail an otherwise good render.
     """
+    output_probe = probe_media_file(output_path)
+    output_width = int(output_probe.get("width") or render_settings.get("width") or 0)
+    output_height = int(
+        output_probe.get("height") or render_settings.get("height") or 0
+    )
+    divisor = math.gcd(output_width, output_height)
+    output_aspect_ratio = (
+        f"{output_width // divisor}:{output_height // divisor}"
+        if divisor else project.aspect_ratio
+    )
+
     payload = {
         "kind": "cas.review_render.provenance",
         "schema_version": 1,
@@ -232,7 +247,7 @@ def write_render_provenance(
             "title": project.title,
             "target_resolution": project.target_resolution,
             "frame_rate": project.frame_rate,
-            "aspect_ratio": project.aspect_ratio,
+            "aspect_ratio": output_aspect_ratio,
         },
         "output": {
             "path": output_path,
@@ -241,7 +256,7 @@ def write_render_provenance(
             "size_bytes": (
                 os.path.getsize(output_path) if os.path.isfile(output_path) else 0
             ),
-            "probe": probe_media_file(output_path),
+            "probe": output_probe,
             "container_tags": read_container_tags(output_path),
         },
         "render_settings": render_settings,
@@ -395,8 +410,8 @@ def render_review_video(db: Session, project_id: str) -> dict[str, Any]:
             )
         segment_paths.append(segment)
 
-    # Concatenate the normalised segments. They now share codec, resolution and
-    # frame rate, so a stream copy is safe.
+    # Concatenate the normalised segments. Video can be stream-copied; audio is
+    # decoded once so loudness normalisation applies to the assembled program.
     concat_file = os.path.join(out_dir, "concat_list.txt")
     with open(concat_file, "w", encoding="utf-8") as f:
         for seg in segment_paths:
@@ -405,12 +420,26 @@ def render_review_video(db: Session, project_id: str) -> dict[str, Any]:
             f.write("file '" + escaped + "'\n")
 
     output_path = os.path.join(out_dir, "review.mp4")
-    ok, err = _run([
+    concat_cmd = [
         ffmpeg, "-y", "-loglevel", "error",
         "-f", "concat", "-safe", "0", "-i", concat_file,
         *STRIP_METADATA_ARGS,
-        "-c", "copy", output_path,
-    ])
+        "-c:v", "copy",
+    ]
+    if keep_audio:
+        concat_cmd += [
+            "-af",
+            f"loudnorm=I={AUDIO_TARGET_LUFS:g}:TP={AUDIO_TRUE_PEAK_DBTP:g}:"
+            f"LRA={AUDIO_LOUDNESS_RANGE:g}",
+            "-c:a", "aac",
+            "-ar", str(AUDIO_SAMPLE_RATE),
+            "-ac", str(AUDIO_CHANNELS),
+            "-b:a", AUDIO_BITRATE,
+        ]
+    else:
+        concat_cmd += ["-an"]
+    concat_cmd.append(output_path)
+    ok, err = _run(concat_cmd)
     if not ok:
         return _blocked(project_id, f"FFmpeg concat failed: {err}")
 
@@ -452,6 +481,9 @@ def render_review_video(db: Session, project_id: str) -> dict[str, Any]:
                 "sample_rate": AUDIO_SAMPLE_RATE if keep_audio else 0,
                 "channels": AUDIO_CHANNELS if keep_audio else 0,
                 "bitrate": AUDIO_BITRATE if keep_audio else "",
+                "target_lufs": AUDIO_TARGET_LUFS if keep_audio else None,
+                "true_peak_dbtp": AUDIO_TRUE_PEAK_DBTP if keep_audio else None,
+                "loudness_range_lu": AUDIO_LOUDNESS_RANGE if keep_audio else None,
             },
             "container_metadata_stripped": True,
         },

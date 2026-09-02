@@ -31,6 +31,10 @@ const preview: AITaskResponse = {
   summary: {},
   warnings: [],
   notes: "",
+  preview_revision_id: "preview-1",
+  preview_sha256: "a".repeat(64),
+  applied_revision_id: "",
+  applied_sha256: "",
 };
 
 describe("withReviewedDraft", () => {
@@ -45,6 +49,8 @@ describe("withReviewedDraft", () => {
 
     expect(request.apply).toBe(true);
     expect(request.draft).toBe(preview.data);
+    expect(request.reviewed_preview_id).toBe("preview-1");
+    expect(request.reviewed_preview_sha256).toBe("a".repeat(64));
   });
 
   it("does not attach a draft to a preview request", () => {

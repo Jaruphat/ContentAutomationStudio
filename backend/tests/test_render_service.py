@@ -6,7 +6,9 @@ installed, so the suite stays green on a machine without it - but when FFmpeg
 is present they assert against a real probed MP4, never a claimed one.
 """
 
+import json
 import os
+import re
 import uuid
 
 import pytest
@@ -290,6 +292,33 @@ class TestAudioPreservation:
         assert result["has_audio"] is True
         assert result["audio_codec"] == "aac"
 
+    def test_near_silent_audio_is_normalized_to_delivery_loudness(
+        self, db_session, sample_project, sample_shot, tmp_path, synthesise_clip
+    ):
+        """A quiet generated track must be made audible without unsafe peaks."""
+        source = synthesise_clip(
+            str(tmp_path / "source.mp4"), with_audio=True, duration=3.0
+        )
+        media = str(tmp_path / "near_silent.mp4")
+        returncode, _stdout, stderr = render_service.run_captured([
+            render_service.ffmpeg_path(), "-y", "-loglevel", "error",
+            "-i", source, "-c:v", "copy", "-af", "volume=0.03",
+            "-c:a", "aac", media,
+        ], timeout=30)
+        assert returncode == 0, stderr
+        source_loudness = _audio_loudness(media)
+        assert -65.0 < source_loudness["input_i"] < -40.0
+
+        add_approved_take_on_timeline(
+            db_session, sample_project.id, sample_shot.id, media, duration=3.0
+        )
+        result = render_service.render_review_video(db_session, sample_project.id)
+        assert result["rendered"] is True, result["reason"]
+
+        output_loudness = _audio_loudness(result["output_path"])
+        assert output_loudness["input_i"] == pytest.approx(-16.0, abs=1.0)
+        assert output_loudness["input_tp"] <= -1.0
+
     def test_still_only_timeline_stays_silent(
         self, db_session, sample_project, sample_shot, tmp_path
     ):
@@ -553,6 +582,29 @@ class TestProvenanceSidecar:
         assert segment["shot"]["video_prompt"] == "a calm blue sky with drifting clouds"
         assert record["output"]["sha256"]
 
+    def test_sidecar_aspect_ratio_matches_rendered_resolution(
+        self, db_session, sample_project, sample_shot, tmp_path
+    ):
+        """A stale project declaration must not mislabel the rendered pixels."""
+        sample_project.target_resolution = "864x480"
+        sample_project.aspect_ratio = "16:9"
+        db_session.commit()
+
+        media = str(tmp_path / "frame.png")
+        _create_placeholder_png(media, 320, 180)
+        add_approved_take_on_timeline(
+            db_session, sample_project.id, sample_shot.id, media, duration=1.0
+        )
+
+        result = render_service.render_review_video(db_session, sample_project.id)
+        assert result["rendered"] is True, result["reason"]
+        with open(result["provenance_path"], encoding="utf-8") as f:
+            record = json.load(f)
+
+        output_probe = record["output"]["probe"]
+        assert (output_probe["width"], output_probe["height"]) == (864, 480)
+        assert record["project"]["aspect_ratio"] == "9:5"
+
     def test_sidecar_carries_job_and_workflow_provenance(
         self, db_session, sample_project, sample_shot, tmp_path
     ):
@@ -653,6 +705,22 @@ def _audio_layout(path: str) -> tuple[str, int, int]:
     assert streams, f"{path} has no audio stream"
     stream = streams[0]
     return stream["codec_name"], int(stream["channels"]), int(stream["sample_rate"])
+
+
+def _audio_loudness(path: str) -> dict[str, float]:
+    """Measure integrated LUFS and true peak with FFmpeg's loudnorm filter."""
+    from app.services.media_probe import ffmpeg_path, run_captured
+
+    returncode, _stdout, stderr = run_captured([
+        ffmpeg_path(), "-hide_banner", "-nostats", "-i", path,
+        "-af", "loudnorm=I=-16:TP=-1.5:LRA=11:print_format=json",
+        "-f", "null", "-",
+    ], timeout=30)
+    assert returncode == 0, stderr
+    matches = re.findall(r"\{[^{}]+\}", stderr)
+    assert matches, f"no loudnorm measurement in ffmpeg output: {stderr[-500:]}"
+    payload = json.loads(matches[-1])
+    return {key: float(payload[key]) for key in ("input_i", "input_tp")}
 
 
 # ---------------------------------------------------------------------------

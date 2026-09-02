@@ -27,20 +27,20 @@ from app.models import Project
 from app.schemas import (
     AIHealthResponse,
     AIPromptCompileRequest,
-    AITaskRequest,
     AIProviderCatalogue,
     AIStoryBibleRequest,
     AIStoryboardRequest,
+    AITaskRequest,
     AITaskResponse,
 )
-from app.services.ai import registry
+from app.services.ai import authoring_revisions, registry
 from app.services.ai.base import AIProviderError
 from app.services.ai.tasks import (
     AITaskError,
     TaskOutcome,
     compile_shot_prompts,
-    generate_storyboard,
     generate_story_bible,
+    generate_storyboard,
 )
 
 logger = logging.getLogger("cas.ai.api")
@@ -124,7 +124,57 @@ def _outcome_response(outcome: TaskOutcome) -> dict:
         "summary": outcome.summary,
         "warnings": outcome.warnings,
         "notes": outcome.notes,
+        "preview_revision_id": outcome.preview_revision_id,
+        "preview_sha256": outcome.preview_sha256,
+        "applied_revision_id": outcome.applied_revision_id,
+        "applied_sha256": outcome.applied_sha256,
     }
+
+
+def _reviewed_source(
+    db: Session, project: Project, task: str, payload: AITaskRequest,
+):
+    """Verify the durable preview before any reviewed payload is applied."""
+    if not (payload.apply and payload.draft is not None):
+        return None
+    if not payload.reviewed_preview_id:
+        raise AITaskError(
+            "conflict",
+            "Applying a reviewed draft requires its preview revision id.",
+        )
+    try:
+        return authoring_revisions.require_reviewed_preview(
+            db,
+            project_id=project.id,
+            task=task,
+            revision_id=payload.reviewed_preview_id,
+            expected_sha256=payload.reviewed_preview_sha256,
+        )
+    except ValueError as exc:
+        raise AITaskError("conflict", str(exc)) from exc
+
+
+def _capture_outcome(
+    db: Session, project: Project, outcome: TaskOutcome, reviewed_source=None,
+) -> None:
+    """Append audit rows after task validation/application has succeeded."""
+    source = reviewed_source
+    if source is None:
+        source = authoring_revisions.create_preview(
+            db, project, outcome.task, outcome.data, outcome.provenance,
+        )
+        outcome.preview_revision_id = source.id
+        outcome.preview_sha256 = source.revision_sha256
+    else:
+        outcome.preview_revision_id = source.id
+        outcome.preview_sha256 = source.revision_sha256
+
+    if outcome.applied:
+        applied = authoring_revisions.create_applied(
+            db, project, outcome.task, outcome.data, outcome.provenance, source,
+        )
+        outcome.applied_revision_id = applied.id
+        outcome.applied_sha256 = applied.revision_sha256
 
 
 # ---------------------------------------------------------------------------
@@ -194,12 +244,14 @@ async def ai_story_bible(
         return project
 
     try:
+        reviewed_source = _reviewed_source(db, project, "story_bible", payload)
         provider = _provider_for(payload)
         outcome = await generate_story_bible(
             db, project, provider,
             guidance=payload.guidance, apply=payload.apply,
             draft=payload.draft,
         )
+        _capture_outcome(db, project, outcome, reviewed_source)
     except (AIProviderError, AITaskError) as exc:
         return _error_response(exc.category, exc.message, payload.provider_id)
 
@@ -228,6 +280,9 @@ async def ai_storyboard(
         return project
 
     try:
+        reviewed_source = _reviewed_source(
+            db, project, "scene_decomposition", payload,
+        )
         provider = _provider_for(payload)
         outcome = await generate_storyboard(
             db, project, provider,
@@ -239,6 +294,7 @@ async def ai_storyboard(
             replace_existing=payload.replace_existing,
             draft=payload.draft,
         )
+        _capture_outcome(db, project, outcome, reviewed_source)
     except (AIProviderError, AITaskError) as exc:
         return _error_response(exc.category, exc.message, payload.provider_id)
 
@@ -265,6 +321,7 @@ async def ai_compile_prompts(
         return project
 
     try:
+        reviewed_source = _reviewed_source(db, project, "shot_prompts", payload)
         provider = _provider_for(payload)
         outcome = await compile_shot_prompts(
             db, project, provider,
@@ -273,8 +330,20 @@ async def ai_compile_prompts(
             apply=payload.apply,
             draft=payload.draft,
         )
+        _capture_outcome(db, project, outcome, reviewed_source)
     except (AIProviderError, AITaskError) as exc:
         return _error_response(exc.category, exc.message, payload.provider_id)
 
     response.status_code = 200
     return _outcome_response(outcome)
+
+
+@router.get("/api/projects/{project_id}/ai/revisions")
+def list_ai_authoring_revisions(
+    project_id: str, db: Session = Depends(get_db),
+):
+    """Project-scoped Brief → preview → applied authoring audit trail."""
+    project = _project_or_error(db, project_id)
+    if isinstance(project, JSONResponse):
+        return project
+    return authoring_revisions.project_audit(db, project)

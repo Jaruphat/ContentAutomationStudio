@@ -735,6 +735,28 @@ async def test_a_duplicated_shot_id_is_only_applied_once(
 
 
 @pytest.mark.asyncio
+async def test_compiled_prompt_fragments_are_deduplicated_in_first_seen_order(
+    db_session, story_project, sample_scene, sample_shot
+):
+    scripted = ScriptedProvider({
+        "prompts": [{
+            "shot_id": sample_shot.id,
+            "image_prompt": "white boat, rain, WHITE BOAT, wet street",
+            "video_prompt": "",
+            "negative_prompt": "text, watermark, text, blur, WATERMARK",
+            "rationale": "",
+        }],
+        "notes": "",
+    })
+
+    await compile_shot_prompts(db_session, story_project, scripted, apply=True)
+
+    db_session.refresh(sample_shot)
+    assert sample_shot.image_prompt == "white boat, rain, wet street"
+    assert sample_shot.negative_prompt == "text, watermark, blur"
+
+
+@pytest.mark.asyncio
 async def test_a_shot_left_out_of_the_response_is_left_unchanged(
     db_session, story_project, sample_scene, sample_shot
 ):
@@ -886,6 +908,24 @@ async def test_guidance_is_appended_to_the_prompt(
         db_session, story_project, scripted, guidance="Keep it wordless.",
     )
     assert "Keep it wordless." in scripted.prompts[0]
+
+
+@pytest.mark.asyncio
+async def test_final_scene_direction_is_scoped_separately_from_global_invariants(
+    db_session, story_project, sample_scene, sample_shot
+):
+    scripted = ScriptedProvider({"prompts": [], "notes": ""})
+    await compile_shot_prompts(
+        db_session,
+        story_project,
+        scripted,
+        guidance="Paper boat stays white. Warm golden sunlight in final scene.",
+    )
+
+    prompt = scripted.prompts[0]
+    assert "GLOBAL INVARIANTS\nPaper boat stays white." in prompt
+    assert "SCENE-SPECIFIC DIRECTION\n- final scene: Warm golden sunlight" in prompt
+    assert "Never copy scene-specific direction into other scenes." in prompt
 
 
 # ===========================================================================

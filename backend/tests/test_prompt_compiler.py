@@ -337,6 +337,22 @@ class TestCompilePromptNegativePrompt:
         assert "noise" in result.negative_prompt
         assert "artifacts" in result.negative_prompt
 
+    def test_repeated_positive_and_negative_fragments_are_deduplicated(self):
+        result = compile_prompt(
+            shot={
+                "subject": "white boat",
+                "image_prompt": "rain, WHITE BOAT, wet street, rain",
+                "negative_prompt": "text, watermark, text",
+            },
+            scene={},
+            characters=[],
+            locations=[],
+            styles=[{"negative_constraints": "watermark, blur"}],
+        )
+
+        assert result.positive_prompt == "white boat, rain, wet street"
+        assert result.negative_prompt == "text, watermark, blur"
+
 
 class TestCompilePromptLayerIsolation:
     """Test that layers are isolated and independently populated."""

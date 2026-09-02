@@ -29,6 +29,7 @@ from app.schemas import (
     QueueStatus,
 )
 from app.services import (
+    continuity,
     generation_planning,
     job_payload,
     media_providers,
@@ -127,6 +128,36 @@ async def preflight_validation(project_id: str, db: Session = Depends(get_db)):
     # preflight cannot approve a route the queue would not take.
     plans = {shot.id: generation_planning.plan_shot(db, project, shot) for shot in shots}
 
+    # Story/Style Bible prose can carry explicit recurring-prop invariants.
+    # Keep these findings shot-addressable so only failed shots need regeneration.
+    bible_requirements = [
+        loc.props or ""
+        for loc in db.query(Location).filter(Location.project_id == project_id).all()
+    ]
+    bible_requirements.extend(
+        value
+        for style in db.query(Style).filter(Style.project_id == project_id).all()
+        for value in (style.visual_keywords, style.lighting_rules, style.negative_constraints)
+        if value
+    )
+    continuity_findings = continuity.find_continuity_issues(
+        [
+            {
+                "id": shot.id,
+                "subject": shot.subject,
+                "action": shot.action,
+                "environment": shot.environment,
+                "image_prompt": shot.image_prompt,
+                "video_prompt": shot.video_prompt,
+            }
+            for shot in shots
+        ],
+        bible_requirements,
+    )
+    continuity_by_shot = {
+        finding["shot_id"]: finding for finding in continuity_findings
+    }
+
     def _resolve_workflow_id(shot: Shot) -> str | None:
         # A shot generated through a hosted image API has no graph to validate.
         return plans[shot.id].workflow_id
@@ -224,6 +255,12 @@ async def preflight_validation(project_id: str, db: Session = Depends(get_db)):
     for shot in shots:
         shot_issues: list[str] = []
         plan = plans[shot.id]
+
+        finding = continuity_by_shot.get(shot.id)
+        if finding:
+            shot_issues.append(
+                "recurring prop continuity missing " + ", ".join(finding["missing"])
+            )
 
         if shot.generation_mode == "image" and not shot.image_prompt:
             shot_issues.append("Missing image prompt")

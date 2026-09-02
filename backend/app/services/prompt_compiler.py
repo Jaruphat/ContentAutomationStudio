@@ -33,6 +33,19 @@ def _join_nonempty(*parts: str) -> str:
     return ", ".join(p.strip() for p in parts if p and p.strip())
 
 
+def _deduplicate_fragments(value: str) -> str:
+    """Deduplicate comma/semicolon fragments, preserving first-seen order."""
+    seen: set[str] = set()
+    unique: list[str] = []
+    for fragment in value.replace(";", ",").split(","):
+        cleaned = fragment.strip()
+        key = " ".join(cleaned.casefold().split())
+        if cleaned and key not in seen:
+            seen.add(key)
+            unique.append(cleaned)
+    return ", ".join(unique)
+
+
 def compile_prompt(
     shot: dict[str, Any],
     scene: dict[str, Any],
@@ -183,8 +196,10 @@ def compile_prompt(
         layers["action_expression"],
         layers["technical_tokens"],
     ]
-    positive_prompt = ", ".join(part for part in positive_layers if part)
-    negative_prompt = layers["negative_prompt"]
+    positive_prompt = _deduplicate_fragments(
+        ", ".join(part for part in positive_layers if part)
+    )
+    negative_prompt = _deduplicate_fragments(layers["negative_prompt"])
 
     return CompiledPrompt(
         positive_prompt=positive_prompt,

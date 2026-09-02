@@ -17,8 +17,8 @@ from sqlalchemy import (
     String,
     Text,
 )
-from sqlalchemy.types import JSON
 from sqlalchemy.orm import relationship
+from sqlalchemy.types import JSON
 
 from app.database import Base
 
@@ -62,6 +62,47 @@ class Project(Base):
     styles = relationship("Style", back_populates="project", cascade="all, delete-orphan")
     scenes = relationship("Scene", back_populates="project", cascade="all, delete-orphan")
     timeline_items = relationship("TimelineItem", back_populates="project", cascade="all, delete-orphan")
+    ai_authoring_revisions = relationship(
+        "AIAuthoringRevision", back_populates="project", cascade="all, delete-orphan"
+    )
+
+
+# ---------------------------------------------------------------------------
+# AI authoring audit trail
+# ---------------------------------------------------------------------------
+
+class AIAuthoringRevision(Base):
+    """Append-only preview/applied payload with provider-neutral provenance.
+
+    The hashes make out-of-band database edits detectable. The application has
+    no update/delete route for revisions; a new decision always appends a row.
+    """
+
+    __tablename__ = "ai_authoring_revisions"
+
+    id = Column(String, primary_key=True, default=_uuid)
+    project_id = Column(
+        String, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False,
+    )
+    kind = Column(String, nullable=False)  # preview / applied
+    task = Column(String, nullable=False)
+    payload = Column(JSON, nullable=False)
+    payload_sha256 = Column(String, nullable=False)
+    revision_sha256 = Column(String, nullable=False)
+    provider_id = Column(String, default="")
+    model = Column(String, default="")
+    prompt_version = Column(String, default="")
+    schema_version = Column(String, default="")
+    usage = Column(JSON, default=dict)
+    provenance = Column(JSON, default=dict)
+    brief_snapshot = Column(JSON, default=dict)
+    source_revision_id = Column(
+        String, ForeignKey("ai_authoring_revisions.id"), nullable=True,
+    )
+    source_revision_sha256 = Column(String, default="")
+    created_at = Column(DateTime, default=_utcnow, nullable=False)
+
+    project = relationship("Project", back_populates="ai_authoring_revisions")
 
 
 # ---------------------------------------------------------------------------

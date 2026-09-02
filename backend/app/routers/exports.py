@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import Project
 from app.services import export_service
+from app.services.ai.authoring_revisions import project_audit
 
 router = APIRouter(prefix="/api/projects/{project_id}/export", tags=["exports"])
 
@@ -104,4 +105,17 @@ def export_project_archive(project_id: str, db: Session = Depends(get_db)):
     return JSONResponse(
         content=data,
         headers={"Content-Disposition": f'attachment; filename="archive_{project_id}.json"'},
+    )
+
+
+@router.get("/authoring-audit")
+def export_authoring_audit(project_id: str, db: Session = Depends(get_db)):
+    """Export the Brief → reviewed preview → applied revision audit trail."""
+    project = _get_project_or_404(db, project_id)
+    return JSONResponse(
+        content=project_audit(db, project),
+        headers={
+            "Content-Disposition":
+                f'attachment; filename="authoring_audit_{project_id}.json"'
+        },
     )

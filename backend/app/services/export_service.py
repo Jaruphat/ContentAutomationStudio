@@ -26,8 +26,8 @@ from app.models import (
     Take,
     TimelineItem,
 )
+from app.services.ai.authoring_revisions import project_audit
 from app.services.prompt_compiler import compile_prompt
-
 
 # ---------------------------------------------------------------------------
 # Storyboard export
@@ -435,6 +435,7 @@ def export_project_archive(db: Session, project_id: str) -> dict[str, Any]:
                 for s in styles
             ],
         },
+        "ai_authoring_audit": project_audit(db, project),
         "scenes": [],
         "timeline": [
             {

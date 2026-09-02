@@ -525,6 +525,10 @@ export interface AITaskResponse {
   warnings: string[];
   /** The model's own notes to the writer. */
   notes: string;
+  preview_revision_id: string;
+  preview_sha256: string;
+  applied_revision_id: string;
+  applied_sha256: string;
 }
 
 /**
@@ -566,6 +570,8 @@ export interface AITaskRequest {
    * receives exactly what was reviewed, with no second (billable) generation.
    */
   draft?: Record<string, unknown> | null;
+  reviewed_preview_id?: string;
+  reviewed_preview_sha256?: string;
 }
 
 export interface AIStoryboardRequest extends AITaskRequest {

@@ -12,12 +12,13 @@ strings, which keeps them trivially testable and keeps provider modules free of
 domain knowledge.
 """
 
+import re
 from typing import Any
 
 PROMPT_VERSIONS: dict[str, str] = {
     "scene_decomposition": "1.0",
     "story_bible": "1.0",
-    "shot_prompts": "1.0",
+    "shot_prompts": "1.1",
 }
 
 #: Shared preamble. Every task returns JSON only, and every task is told not to
@@ -215,6 +216,9 @@ SHOT_PROMPTS_SYSTEM = (
     "character's prompt_tokens verbatim, and a shot in a known location must "
     "repeat that location's descriptors.\n"
     "- Each prompt must stand alone. Never reference another shot.\n"
+    "- Treat GLOBAL INVARIANTS as applying to every relevant shot. Treat "
+    "SCENE-SPECIFIC DIRECTION as applying only to its named scene; never copy "
+    "final-scene, opening-scene, or numbered-scene direction elsewhere.\n"
     "- image_prompt describes a single frame: subject, action, setting, "
     "framing, lens, lighting, look. No camera motion, no time passing.\n"
     "- video_prompt describes motion over the shot's duration: what moves and "
@@ -225,6 +229,30 @@ SHOT_PROMPTS_SYSTEM = (
     "each shot_id verbatim.\n\n"
     + _JSON_DISCIPLINE
 )
+
+
+_SCENE_SCOPE = re.compile(
+    r"\b(?:in|for|during)\s+(?P<scope>(?:the\s+)?(?:final|last|first|opening)\s+scene|scene\s+\d+)\b",
+    re.IGNORECASE,
+)
+
+
+def _scoped_guidance(extra_guidance: str) -> tuple[list[str], list[tuple[str, str]]]:
+    """Separate cross-shot invariants from explicitly scene-scoped clauses."""
+    global_items: list[str] = []
+    scene_items: list[tuple[str, str]] = []
+    for clause in re.findall(r"[^.!?]+[.!?]?", extra_guidance.strip()):
+        clause = clause.strip()
+        if not clause:
+            continue
+        match = _SCENE_SCOPE.search(clause)
+        if match is None:
+            global_items.append(clause)
+            continue
+        direction = (clause[: match.start()] + clause[match.end() :]).strip(" ,.;")
+        scope = re.sub(r"^the\s+", "", match.group("scope"), flags=re.IGNORECASE).lower()
+        scene_items.append((scope, direction))
+    return global_items, scene_items
 
 
 def _shot_line(shot: dict[str, Any]) -> str:
@@ -262,5 +290,14 @@ def build_shot_prompts_prompt(
         "\n".join(_shot_line(shot) for shot in shots),
     ]
     if extra_guidance.strip():
-        parts += ["", "ADDITIONAL DIRECTION FROM THE USER", extra_guidance.strip()]
+        global_items, scene_items = _scoped_guidance(extra_guidance)
+        if global_items:
+            parts += ["", "GLOBAL INVARIANTS", "\n".join(global_items)]
+        if scene_items:
+            parts += [
+                "",
+                "SCENE-SPECIFIC DIRECTION",
+                "\n".join(f"- {scope}: {direction}" for scope, direction in scene_items),
+                "Never copy scene-specific direction into other scenes.",
+            ]
     return "\n".join(parts)
