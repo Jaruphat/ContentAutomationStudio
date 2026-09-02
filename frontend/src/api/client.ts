@@ -5,6 +5,14 @@
 
 import axios from "axios";
 import type {
+  AIErrorBody,
+  AIErrorCategory,
+  AIHealthResponse,
+  AIPromptCompileRequest,
+  AIProviderCatalogue,
+  AIStoryboardRequest,
+  AITaskRequest,
+  AITaskResponse,
   Project,
   ProjectCreate,
   Character,
@@ -349,6 +357,75 @@ export const timeline = {
       .then((r) => r.data),
 };
 
+// ── AI providers and story tasks ─────────────────────────────────────────
+
+export const ai = {
+  /**
+   * Every provider the build can use. Makes no network call on the backend,
+   * so the selector can populate before health is known.
+   */
+  providers: () =>
+    http.get<AIProviderCatalogue>("/ai/providers").then((r) => r.data),
+
+  /** Live health. Omit `providerId` for every provider. */
+  health: (providerId?: string) =>
+    http
+      .get<AIHealthResponse>("/ai/health", {
+        params: providerId ? { provider_id: providerId } : undefined,
+      })
+      .then((r) => r.data),
+
+  storyBible: (projectId: string, req: AITaskRequest) =>
+    http
+      .post<AITaskResponse>(`/projects/${projectId}/ai/story-bible`, req)
+      .then((r) => r.data),
+
+  storyboard: (projectId: string, req: AIStoryboardRequest) =>
+    http
+      .post<AITaskResponse>(`/projects/${projectId}/ai/storyboard`, req)
+      .then((r) => r.data),
+
+  prompts: (projectId: string, req: AIPromptCompileRequest) =>
+    http
+      .post<AITaskResponse>(`/projects/${projectId}/ai/prompts`, req)
+      .then((r) => r.data),
+};
+
+/**
+ * Normalise a thrown request error into the backend's AI error body.
+ *
+ * Every AI endpoint fails with `{detail, category, provider_id}`, which is
+ * what lets the UI offer a specific next step. A network-level failure never
+ * reaches the backend and so has no category of its own; it is reported as
+ * `connection`, which is what it is.
+ */
+export function toAIError(err: unknown): AIErrorBody {
+  if (axios.isAxiosError(err)) {
+    const body = err.response?.data as Partial<AIErrorBody> | undefined;
+    if (body && typeof body.detail === "string") {
+      return {
+        detail: body.detail,
+        category: (body.category as AIErrorCategory) ?? "unknown",
+        provider_id: body.provider_id ?? "",
+      };
+    }
+    if (!err.response) {
+      return {
+        detail:
+          "Could not reach the Content Automation Studio backend. Check that " +
+          "it is running on port 8001.",
+        category: "connection",
+        provider_id: "",
+      };
+    }
+  }
+  return {
+    detail: err instanceof Error ? err.message : "Unexpected error.",
+    category: "unknown",
+    provider_id: "",
+  };
+}
+
 // ── Exports ──────────────────────────────────────────────────────────────
 
 export const exports_ = {
@@ -389,6 +466,7 @@ export const exports_ = {
 // ── Default export for convenience ───────────────────────────────────────
 
 const api = {
+  ai,
   health,
   projects,
   characters,

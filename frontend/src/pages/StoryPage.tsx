@@ -19,6 +19,7 @@ import {
   ChevronRight,
 } from "lucide-react";
 import api from "../api/client";
+import AIGenerationPanel from "../components/AIGenerationPanel";
 import { useAppState, useAppDispatch } from "../store/useProjectStore";
 import type {
   Project,
@@ -635,6 +636,20 @@ export default function StoryPage() {
       </Section>
 
       {/* ── Story Bible: Characters ──────────────────────────────────────── */}
+      {currentProjectId && (
+        <AIGenerationPanel
+          title="Generate Story Bible with AI"
+          description="Save the brief and plot first. Preview a validated draft before writing characters, locations and visual style."
+          buildRequest={(base) => base}
+          run={(request) => api.ai.storyBible(currentProjectId, request)}
+          onApplied={() => {
+            qc.invalidateQueries({ queryKey: ["characters", currentProjectId] });
+            qc.invalidateQueries({ queryKey: ["locations", currentProjectId] });
+            qc.invalidateQueries({ queryKey: ["styles", currentProjectId] });
+          }}
+        />
+      )}
+
       {currentProjectId && (
         <Section
           title="Characters"

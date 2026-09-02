@@ -11,8 +11,10 @@ import {
   CheckCircle,
   Film,
   Download,
+  MonitorCog,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import { useTheme, type ThemePreference } from "../theme";
 
 interface Stage {
   label: string;
@@ -32,6 +34,7 @@ const stages: Stage[] = [
 export default function StageRail() {
   const location = useLocation();
   const navigate = useNavigate();
+  const { preference, setPreference } = useTheme();
 
   return (
     <nav className="flex h-full w-[68px] flex-col items-center bg-zinc-950 py-4 panel-border-r select-none">
@@ -62,6 +65,21 @@ export default function StageRail() {
           );
         })}
       </div>
+
+      <label className="flex w-14 flex-col items-center gap-1 text-[10px] text-zinc-500" title="Color theme">
+        <MonitorCog size={16} />
+        <span>Theme</span>
+        <select
+          aria-label="Color theme"
+          value={preference}
+          onChange={(event) => setPreference(event.target.value as ThemePreference)}
+          className="w-14 rounded px-0.5 py-1 text-[10px]"
+        >
+          <option value="system">System</option>
+          <option value="light">Light</option>
+          <option value="dark">Dark</option>
+        </select>
+      </label>
     </nav>
   );
 }

@@ -21,6 +21,7 @@ import {
 import api from "../api/client";
 import { useAppState, useAppDispatch } from "../store/useProjectStore";
 import StatusBadge from "../components/StatusBadge";
+import AIGenerationPanel from "../components/AIGenerationPanel";
 import type { Scene, Shot, ShotCreate } from "../types";
 
 // ── Shot row ─────────────────────────────────────────────────────────────
@@ -402,6 +403,24 @@ export default function StoryboardPage() {
       </div>
 
       {/* Loading */}
+      <AIGenerationPanel
+        title="Generate Storyboard with AI"
+        description="Creates a 3-scene, 9–15 shot draft from the saved plot. Existing scenes are never replaced silently."
+        buildRequest={(base) => ({ ...base, scene_count: 3, min_shots: 9, max_shots: 15, replace_existing: (scenesQ.data?.length ?? 0) > 0 })}
+        run={(request) => api.ai.storyboard(currentProjectId, request)}
+        onApplied={() => qc.invalidateQueries({ queryKey: ["scenes", currentProjectId] })}
+      />
+
+      {(scenesQ.data?.length ?? 0) > 0 && (
+        <AIGenerationPanel
+          title="Compile Shot Prompts with AI"
+          description="Preview then apply image and video prompts for every existing shot."
+          buildRequest={(base) => base}
+          run={(request) => api.ai.prompts(currentProjectId, request)}
+          onApplied={() => qc.invalidateQueries({ queryKey: ["shots"] })}
+        />
+      )}
+
       {scenesQ.isLoading && (
         <div className="flex items-center gap-2 text-zinc-500 py-12 justify-center">
           <Loader2 size={16} className="animate-spin" /> Loading storyboard...

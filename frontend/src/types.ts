@@ -403,14 +403,188 @@ export interface WorkflowsHealth {
   submittable: number;
 }
 
+/** AI section of the system health endpoint. Reported without a network call. */
+export interface AIHealthSummary {
+  default_provider_id: string;
+  /** True when no real language model is configured. */
+  mock: boolean;
+  providers: {
+    id: string;
+    label: string;
+    configured: boolean;
+    mock: boolean;
+  }[];
+}
+
 export interface HealthStatus {
   status: string;
   service: string;
   version: string;
+  ai: AIHealthSummary;
   comfyui: ComfyUIHealth;
   queue: QueueHealth;
   workflows: WorkflowsHealth;
   blockers: string[];
+}
+
+// ── AI providers and story tasks ─────────────────────────────────────────
+
+export interface AIModelInfo {
+  id: string;
+  label: string;
+  /** False when the vendor cannot enforce a JSON Schema server-side. */
+  supports_structured_output: boolean;
+  note: string;
+}
+
+export interface AIProviderInfo {
+  id: string;
+  label: string;
+  /**
+   * Whether the required environment variable is set. Never whether the key
+   * is valid -- only the health endpoint can establish that.
+   */
+  configured: boolean;
+  requires_network: boolean;
+  requires_key: boolean;
+  /** Name of the variable to set. Never a key value. */
+  api_key_env: string;
+  default_model: string;
+  /** True for the offline deterministic provider. */
+  mock: boolean;
+  models: AIModelInfo[];
+}
+
+export interface AIProviderCatalogue {
+  /** Used when a request does not name a provider. */
+  default_provider_id: string;
+  providers: AIProviderInfo[];
+}
+
+export interface AIProviderHealth {
+  provider_id: string;
+  configured: boolean;
+  online: boolean;
+  /** Models the vendor reported. Empty when it was not reachable. */
+  models: string[];
+  error: string;
+  mock: boolean;
+}
+
+export interface AIHealthResponse {
+  providers: AIProviderHealth[];
+  blockers: string[];
+}
+
+/** What produced a generation. Carried with every AI result. */
+export interface AIProvenance {
+  provider_id: string;
+  model: string;
+  /** True when no language model ran; the UI must label such output. */
+  mock: boolean;
+  prompt_version: string;
+  schema_version: string;
+  attempts: number;
+  latency_ms: number;
+  usage: Record<string, number>;
+  response_id: string;
+  generated_at: string;
+}
+
+export type AITaskName =
+  | "story_bible"
+  | "scene_decomposition"
+  | "shot_prompts";
+
+export interface AITaskResponse {
+  task: AITaskName;
+  /** True when the draft was written to the database. */
+  applied: boolean;
+  data: Record<string, unknown>;
+  provenance: AIProvenance;
+  /** Counts of what was created or updated. Empty when applied is false. */
+  summary: Record<string, number>;
+  warnings: string[];
+  /** The model's own notes to the writer. */
+  notes: string;
+}
+
+/**
+ * Machine-readable failure reason, so the UI can offer the right next step
+ * instead of showing a raw message.
+ */
+export type AIErrorCategory =
+  | "not_configured"
+  | "conflict"
+  | "bad_request"
+  | "content_filter"
+  | "rate_limit"
+  | "quota"
+  | "auth"
+  | "timeout"
+  | "connection"
+  | "server_error"
+  | "invalid_json"
+  | "schema_violation"
+  | "unknown";
+
+export interface AIErrorBody {
+  detail: string;
+  category: AIErrorCategory;
+  provider_id: string;
+}
+
+/** Shared request fields for every AI task. */
+export interface AITaskRequest {
+  /** Empty means the configured default. */
+  provider_id?: string;
+  /** Empty means the provider's default model. */
+  model?: string;
+  guidance?: string;
+  /** False returns the draft without writing anything. */
+  apply?: boolean;
+}
+
+export interface AIStoryboardRequest extends AITaskRequest {
+  scene_count?: number;
+  min_shots?: number;
+  max_shots?: number;
+  /** Required to overwrite a project that already has scenes. */
+  replace_existing?: boolean;
+}
+
+export interface AIPromptCompileRequest extends AITaskRequest {
+  /** Omit for every shot in the project. */
+  shot_ids?: string[];
+}
+
+/** Shape of the scene decomposition draft, for previewing before applying. */
+export interface AISceneDraft {
+  order: number;
+  title: string;
+  purpose: string;
+  summary: string;
+  time_of_day: string;
+  emotional_beat: string;
+  planned_duration_sec: number;
+  character_names: string[];
+  location_name: string;
+  shots: {
+    order: number;
+    shot_type: string;
+    camera_angle: string;
+    camera_movement: string;
+    lens_framing: string;
+    subject: string;
+    action: string;
+    environment: string;
+    dialogue: string;
+    planned_duration_sec: number;
+    generation_mode: GenerationMode;
+    image_prompt: string;
+    video_prompt: string;
+    negative_prompt: string;
+  }[];
 }
 
 // ── Form / create DTOs ───────────────────────────────────────────────────

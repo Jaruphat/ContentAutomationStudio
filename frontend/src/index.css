@@ -1,9 +1,84 @@
 @import "tailwindcss";
 
-/* ── Base dark theme resets ────────────────────────────────────────────── */
+/* ══════════════════════════════════════════════════════════════════════════
+   Theming
+   ──────────────────────────────────────────────────────────────────────────
+   The cockpit is drawn almost entirely in Tailwind's `zinc` ramp plus a few
+   accents. Tailwind v4 compiles `bg-zinc-900` to
+   `background-color: var(--color-zinc-900)`, so redefining the ramp under
+   `html.theme-light` re-skins every existing utility at once -- no `dark:`
+   variant on 4,700 lines of markup, and no way for a component to be styled
+   for one theme and forgotten in the other.
+
+   Two rules govern which steps are redefined:
+
+   * The neutral ramp is *mirrored*: 950 becomes the lightest surface, 100 the
+     darkest text. Contrast is preserved by construction, because every
+     foreground/background pair keeps the same distance it had.
+   * Accents are only redefined at the steps used as tints or as text on a
+     neutral background -- 300, 400, 900 and 950. Steps 500-800 are the
+     saturated ones used as solid button fills under white text, and read
+     correctly against either theme, so they are left alone.
+   ══════════════════════════════════════════════════════════════════════════ */
+
 :root {
   color-scheme: dark;
 }
+
+html.theme-light {
+  color-scheme: light;
+
+  /* Neutral ramp, mirrored. 950 is the rail and 900 the page, which keeps the
+     rail's separation from the canvas in both directions. */
+  --color-zinc-950: #ffffff;
+  --color-zinc-900: #f7f7f8;
+  --color-zinc-800: #e4e4e7;
+  --color-zinc-700: #d4d4d8;
+  --color-zinc-600: #8f8f99;
+  --color-zinc-500: #6b6b76;
+  --color-zinc-400: #52525b;
+  --color-zinc-300: #3f3f46;
+  --color-zinc-200: #27272a;
+  --color-zinc-100: #18181b;
+  --color-zinc-50: #09090b;
+
+  /* Accent tints: the -900/-950 steps back alert and selection surfaces. */
+  --color-indigo-950: #eef2ff;
+  --color-indigo-900: #e0e7ff;
+  --color-red-950: #fef2f2;
+  --color-red-900: #fee2e2;
+  --color-green-950: #f0fdf4;
+  --color-green-900: #dcfce7;
+  --color-emerald-900: #d1fae5;
+  --color-amber-950: #fffbeb;
+  --color-amber-900: #fef3c7;
+  --color-yellow-950: #fefce8;
+  --color-yellow-900: #fef9c3;
+  --color-blue-950: #eff6ff;
+  --color-blue-900: #dbeafe;
+
+  /* Accent text: the -300/-400 steps carry status and link text, and must be
+     dark enough to read on a white-to-#f7f7f8 surface. Every value below
+     clears 4.5:1 against #f7f7f8. */
+  --color-indigo-400: #4338ca;
+  --color-indigo-300: #4f46e5;
+  --color-red-400: #b91c1c;
+  --color-red-300: #991b1b;
+  --color-green-400: #15803d;
+  --color-green-300: #166534;
+  --color-emerald-400: #047857;
+  --color-emerald-300: #065f46;
+  --color-amber-400: #a16207;
+  --color-amber-300: #854d0e;
+  --color-yellow-400: #a16207;
+  --color-yellow-300: #854d0e;
+  --color-blue-400: #1d4ed8;
+  --color-blue-300: #1e40af;
+  --color-orange-400: #c2410c;
+  --color-orange-300: #9a3412;
+}
+
+/* ── Base resets ───────────────────────────────────────────────────────── */
 
 html,
 body,
@@ -21,6 +96,13 @@ body,
     "Segoe UI",
     Roboto,
     sans-serif;
+}
+
+html.theme-light,
+html.theme-light body,
+html.theme-light #root {
+  background-color: #f7f7f8;
+  color: #18181b;
 }
 
 /* ── Custom scrollbars (Webkit + Firefox) ──────────────────────────────── */
@@ -47,7 +129,27 @@ body,
   background-color: #52525b;
 }
 
-/* ── Status badge color utilities ──────────────────────────────────────── */
+html.theme-light * {
+  scrollbar-color: #c4c4cb #f0f0f2;
+}
+
+html.theme-light *::-webkit-scrollbar-track {
+  background: #f0f0f2;
+}
+
+html.theme-light *::-webkit-scrollbar-thumb {
+  background-color: #c4c4cb;
+}
+
+html.theme-light *::-webkit-scrollbar-thumb:hover {
+  background-color: #a1a1aa;
+}
+
+/* ── Status badge colors ───────────────────────────────────────────────────
+   Written out per theme rather than derived from the ramp: these pairs are
+   the product's status vocabulary and need deliberate contrast, not whatever
+   a mirrored ramp happens to produce. Every pair below clears 4.5:1.
+   ─────────────────────────────────────────────────────────────────────────*/
 .status-draft {
   background-color: #3f3f46;
   color: #d4d4d8;
@@ -108,6 +210,42 @@ body,
   color: #d4d4d8;
 }
 
+html.theme-light .status-draft,
+html.theme-light .status-pending,
+html.theme-light .status-cancelled {
+  background-color: #e4e4e7;
+  color: #3f3f46;
+}
+
+html.theme-light .status-ready,
+html.theme-light .status-queued {
+  background-color: #dbeafe;
+  color: #1e40af;
+}
+
+html.theme-light .status-generating,
+html.theme-light .status-running {
+  background-color: #fef3c7;
+  color: #854d0e;
+}
+
+html.theme-light .status-needsreview {
+  background-color: #ffedd5;
+  color: #9a3412;
+}
+
+html.theme-light .status-approved,
+html.theme-light .status-completed {
+  background-color: #dcfce7;
+  color: #166534;
+}
+
+html.theme-light .status-failed,
+html.theme-light .status-rejected {
+  background-color: #fee2e2;
+  color: #991b1b;
+}
+
 /* ── Cockpit panel borders ─────────────────────────────────────────────── */
 .panel-border-r {
   border-right: 1px solid #27272a;
@@ -117,7 +255,19 @@ body,
   border-left: 1px solid #27272a;
 }
 
-/* ── Dark-theme form element overrides ─────────────────────────────────── */
+html.theme-light .panel-border-r {
+  border-right-color: #e4e4e7;
+}
+
+html.theme-light .panel-border-l {
+  border-left-color: #e4e4e7;
+}
+
+/* ── Form elements ─────────────────────────────────────────────────────────
+   Styled globally because the pages render bare <input>/<select>/<textarea>
+   with layout classes only; a theme that missed these would leave dark fields
+   on a light page.
+   ─────────────────────────────────────────────────────────────────────────*/
 input,
 textarea,
 select {
@@ -132,6 +282,37 @@ select:focus {
   outline: none;
   border-color: #6366f1;
   box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.25);
+}
+
+html.theme-light input,
+html.theme-light textarea,
+html.theme-light select {
+  background-color: #ffffff;
+  color: #18181b;
+  border-color: #d4d4d8;
+}
+
+html.theme-light input::placeholder,
+html.theme-light textarea::placeholder {
+  color: #71717a;
+}
+
+html.theme-light input:focus,
+html.theme-light textarea:focus,
+html.theme-light select:focus {
+  border-color: #4f46e5;
+  box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.2);
+}
+
+/* Keyboard focus must stay visible in both themes, including on the icon
+   buttons that carry no border of their own. */
+:focus-visible {
+  outline: 2px solid #6366f1;
+  outline-offset: 2px;
+}
+
+html.theme-light :focus-visible {
+  outline-color: #4f46e5;
 }
 
 /* ── Panel transition ──────────────────────────────────────────────────── */

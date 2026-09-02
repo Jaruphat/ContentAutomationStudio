@@ -12,6 +12,7 @@ import GeneratePage from "./pages/GeneratePage";
 import ReviewPage from "./pages/ReviewPage";
 import TimelinePage from "./pages/TimelinePage";
 import ExportPage from "./pages/ExportPage";
+import { ThemeProvider } from "./theme";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -25,6 +26,7 @@ const queryClient = new QueryClient({
 
 export default function App() {
   return (
+    <ThemeProvider>
     <QueryClientProvider client={queryClient}>
       <ProjectStoreProvider>
         <BrowserRouter>
@@ -42,5 +44,6 @@ export default function App() {
         </BrowserRouter>
       </ProjectStoreProvider>
     </QueryClientProvider>
+    </ThemeProvider>
   );
 }
