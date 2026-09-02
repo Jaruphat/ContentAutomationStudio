@@ -13,6 +13,7 @@
 
 import { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
 import {
   Zap,
   Shield,
@@ -72,6 +73,39 @@ function Chip({ tone, children }: { tone: Tone; children: React.ReactNode }) {
     >
       {children}
     </span>
+  );
+}
+
+function RuntimeBanner({
+  health,
+  loading,
+}: {
+  health: MediaHealthResponse | undefined;
+  loading: boolean;
+}) {
+  const comfyui = health?.providers.find((provider) => provider.id === "comfyui");
+  const mode = loading
+    ? { text: "CHECKING · ComfyUI runtime", tone: "muted" as Tone }
+    : comfyui?.mock
+      ? { text: "SIMULATION · Mock", tone: "warn" as Tone }
+      : comfyui?.online
+        ? { text: "REAL · ComfyUI connected", tone: "ok" as Tone }
+        : { text: "OFFLINE · ComfyUI unavailable", tone: "bad" as Tone };
+
+  return (
+    <div
+      role="status"
+      className={`flex items-center gap-2 rounded-lg border px-4 py-3 text-sm font-semibold ${TONE_CLASS[mode.tone]}`}
+    >
+      {mode.tone === "ok" ? (
+        <CheckCircle2 size={16} />
+      ) : mode.tone === "muted" ? (
+        <Loader2 size={16} className="animate-spin" />
+      ) : (
+        <AlertTriangle size={16} />
+      )}
+      {mode.text}
+    </div>
   );
 }
 
@@ -275,6 +309,10 @@ function RunPanel({
   onPause,
   onResume,
   queueBusy,
+  simulationRequired,
+  simulationAcknowledged,
+  onSimulationAcknowledged,
+  comfyuiRuntimeUnavailable,
 }: {
   estimate: GenerationEstimate | undefined;
   loading: boolean;
@@ -287,6 +325,10 @@ function RunPanel({
   onPause: () => void;
   onResume: () => void;
   queueBusy: boolean;
+  simulationRequired: boolean;
+  simulationAcknowledged: boolean;
+  onSimulationAcknowledged: (checked: boolean) => void;
+  comfyuiRuntimeUnavailable: boolean;
 }) {
   const nothingToRun = !!estimate && estimate.shot_count === 0;
   const paid = !!estimate?.requires_confirmation;
@@ -421,6 +463,29 @@ function RunPanel({
         </div>
       )}
 
+      {simulationRequired && (
+        <label className="mt-3 flex items-start gap-2 rounded-md border border-amber-800/60 bg-amber-900/20 px-3 py-2 text-sm text-amber-200">
+          <input
+            type="checkbox"
+            checked={simulationAcknowledged}
+            onChange={(event) => onSimulationAcknowledged(event.target.checked)}
+            className="mt-0.5"
+          />
+          <span>
+            I intend to generate placeholder media in Simulation Mode. This is
+            not a real ComfyUI render.
+          </span>
+        </label>
+      )}
+
+      {comfyuiRuntimeUnavailable && (
+        <div className="mt-3 flex items-start gap-2 rounded-md border border-red-800/60 bg-red-900/20 px-3 py-2 text-sm text-red-300">
+          <AlertCircle size={14} className="mt-0.5 shrink-0" />
+          Live ComfyUI runtime is not available. Generation remains disabled
+          until health confirms either a real connection or Simulation Mode.
+        </div>
+      )}
+
       {/* Controls */}
       <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-zinc-800 pt-3">
         {queuePaused ? (
@@ -445,7 +510,14 @@ function RunPanel({
 
         <button
           onClick={onGenerate}
-          disabled={generating || loading || !estimate || nothingToRun}
+          disabled={
+            generating ||
+            loading ||
+            !estimate ||
+            nothingToRun ||
+            comfyuiRuntimeUnavailable ||
+            (simulationRequired && !simulationAcknowledged)
+          }
           className="flex h-9 items-center gap-1.5 rounded-md bg-indigo-600 px-4 text-sm font-medium text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {generating ? (
@@ -630,14 +702,24 @@ function JobRow({
         {job.shot_id.slice(0, 8)}
       </td>
       <td className="px-3 py-2 text-xs text-zinc-300">
-        <div className="flex flex-wrap items-center gap-1">
-          {providerLabel(job.media_provider_id)}
-          {isMockJob(job) && (
-            <span className="rounded bg-amber-900 px-1.5 py-0.5 text-[11px] font-medium text-amber-300">
-              mock
-            </span>
-          )}
-        </div>
+        <div>{providerLabel(job.media_provider_id)}</div>
+        {job.media_provider_id === "openai" ? (
+          <div className="mt-1 text-[11px] font-medium text-sky-300">
+            {providerLabel("openai")} · {job.media_model}
+          </div>
+        ) : isMockJob(job) ? (
+          <div className="mt-1 text-[11px] font-medium text-amber-300">
+            SIMULATION · Mock
+          </div>
+        ) : job.comfyui_prompt_id ? (
+          <div className="mt-1 font-mono text-[11px] text-green-300">
+            ComfyUI prompt {job.comfyui_prompt_id}
+          </div>
+        ) : (
+          <div className="mt-1 text-[11px] text-zinc-500">
+            ComfyUI prompt pending
+          </div>
+        )}
       </td>
       <td className="px-3 py-2 font-mono text-xs text-zinc-400">
         {job.media_model || "--"}
@@ -705,8 +787,12 @@ function JobRow({
 export default function GeneratePage() {
   const { currentProjectId, queuePaused } = useAppState();
   const dispatch = useAppDispatch();
+  const navigate = useNavigate();
   const qc = useQueryClient();
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [simulationAckProjectId, setSimulationAckProjectId] = useState<
+    string | null
+  >(null);
   // Analysing a workflow is a real backend cost, so the diagnostics queries
   // only mount once the disclosure has actually been opened.
   const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
@@ -729,10 +815,17 @@ export default function GeneratePage() {
     refetchInterval: 30_000,
   });
 
+  const projectQ = useQuery({
+    queryKey: ["selected-project", currentProjectId],
+    queryFn: () => api.projects.get(currentProjectId!),
+    enabled: !!currentProjectId,
+  });
+  const projectAvailable = projectQ.isSuccess;
+
   const preflightQ = useQuery({
     queryKey: ["preflight", currentProjectId],
     queryFn: () => api.generation.preflight(currentProjectId!),
-    enabled: !!currentProjectId,
+    enabled: !!currentProjectId && projectAvailable,
   });
 
   // Safe to fetch on load: the estimate endpoint creates nothing and calls no
@@ -740,14 +833,14 @@ export default function GeneratePage() {
   const estimateQ = useQuery({
     queryKey: ["generation-estimate", currentProjectId],
     queryFn: () => api.generation.estimate(currentProjectId!),
-    enabled: !!currentProjectId,
+    enabled: !!currentProjectId && projectAvailable,
   });
 
   const jobsQ = useQuery({
     queryKey: ["jobs", currentProjectId],
     queryFn: () => api.generation.listJobs(currentProjectId!),
-    enabled: !!currentProjectId,
-    refetchInterval: 2000,
+    enabled: !!currentProjectId && projectAvailable,
+    refetchInterval: projectAvailable ? 2000 : false,
   });
 
   // ── Mutations ──────────────────────────────────────────────────────────
@@ -790,8 +883,56 @@ export default function GeneratePage() {
     );
   }
 
+  if (projectQ.isError) {
+    const staleProjectId = currentProjectId;
+    return (
+      <div className="flex h-full flex-col items-center justify-center px-8 text-center">
+        <AlertTriangle size={32} className="mb-3 text-amber-500" />
+        <h2 className="text-lg font-semibold text-zinc-200">
+          Project unavailable
+        </h2>
+        <p className="mt-1 max-w-md text-sm text-zinc-500">
+          The selected project no longer exists or cannot be loaded. Cached
+          generation jobs are hidden and no project actions will run.
+        </p>
+        <button
+          onClick={() => {
+            qc.removeQueries({
+              predicate: (query) => query.queryKey.includes(staleProjectId),
+            });
+            qc.removeQueries({ queryKey: ["projects"] });
+            dispatch({ type: "SET_PROJECT", id: null });
+            navigate("/story");
+          }}
+          className="mt-4 rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500"
+        >
+          Switch project
+        </button>
+      </div>
+    );
+  }
+
+  if (!projectAvailable) {
+    return (
+      <div className="flex h-full items-center justify-center gap-2 text-sm text-zinc-500">
+        <Loader2 size={16} className="animate-spin" /> Checking selected project...
+      </div>
+    );
+  }
+
   const estimate = estimateQ.data;
   const jobs = jobsQ.data;
+  const comfyuiHealth = mediaHealthQ.data?.providers.find(
+    (provider) => provider.id === "comfyui",
+  );
+  const hasComfyuiShots =
+    estimate?.shots.some((shot) => shot.provider_id === "comfyui") ?? false;
+  const simulationRequired =
+    comfyuiHealth?.mock === true && hasComfyuiShots;
+  const comfyuiRuntimeUnavailable =
+    hasComfyuiShots && comfyuiHealth?.online !== true;
+  const simulationAcknowledged =
+    simulationRequired && simulationAckProjectId === currentProjectId;
   const unrunnableWorkflows =
     workflowsQ.data?.filter((w) => w.source_format !== "api") ?? [];
 
@@ -802,7 +943,12 @@ export default function GeneratePage() {
   const failedCount = jobs?.filter((j) => j.status === "Failed").length ?? 0;
 
   const onGenerate = () => {
-    if (!estimate) return;
+    if (
+      !estimate ||
+      comfyuiRuntimeUnavailable ||
+      (simulationRequired && !simulationAcknowledged)
+    )
+      return;
     generateMut.reset();
     if (estimate.requires_confirmation) {
       // A metered provider is involved: the amount has to be acknowledged
@@ -824,6 +970,11 @@ export default function GeneratePage() {
         <Zap size={20} className="text-indigo-400" />
         <h1 className="text-lg font-semibold text-zinc-100">Generate</h1>
       </div>
+
+      <RuntimeBanner
+        health={mediaHealthQ.data}
+        loading={mediaHealthQ.isLoading}
+      />
 
       <ReadinessSummary
         preflight={preflightQ.data}
@@ -847,6 +998,12 @@ export default function GeneratePage() {
         onPause={() => pauseMut.mutate()}
         onResume={() => resumeMut.mutate()}
         queueBusy={pauseMut.isPending || resumeMut.isPending}
+        simulationRequired={simulationRequired}
+        simulationAcknowledged={simulationAcknowledged}
+        onSimulationAcknowledged={(checked) =>
+          setSimulationAckProjectId(checked ? currentProjectId : null)
+        }
+        comfyuiRuntimeUnavailable={comfyuiRuntimeUnavailable}
       />
 
       {/* Stats bar */}
