@@ -313,6 +313,7 @@ function RunPanel({
   simulationAcknowledged,
   onSimulationAcknowledged,
   comfyuiRuntimeUnavailable,
+  preflightReady,
 }: {
   estimate: GenerationEstimate | undefined;
   loading: boolean;
@@ -329,6 +330,7 @@ function RunPanel({
   simulationAcknowledged: boolean;
   onSimulationAcknowledged: (checked: boolean) => void;
   comfyuiRuntimeUnavailable: boolean;
+  preflightReady: boolean;
 }) {
   const nothingToRun = !!estimate && estimate.shot_count === 0;
   const paid = !!estimate?.requires_confirmation;
@@ -509,12 +511,14 @@ function RunPanel({
         <div className="flex-1" />
 
         <button
+          data-testid="generate-button"
           onClick={onGenerate}
           disabled={
             generating ||
             loading ||
             !estimate ||
             nothingToRun ||
+            !preflightReady ||
             comfyuiRuntimeUnavailable ||
             (simulationRequired && !simulationAcknowledged)
           }
@@ -945,6 +949,7 @@ export default function GeneratePage() {
   const onGenerate = () => {
     if (
       !estimate ||
+      preflightQ.data?.ready !== true ||
       comfyuiRuntimeUnavailable ||
       (simulationRequired && !simulationAcknowledged)
     )
@@ -1004,6 +1009,7 @@ export default function GeneratePage() {
           setSimulationAckProjectId(checked ? currentProjectId : null)
         }
         comfyuiRuntimeUnavailable={comfyuiRuntimeUnavailable}
+        preflightReady={preflightQ.data?.ready === true}
       />
 
       {/* Stats bar */}

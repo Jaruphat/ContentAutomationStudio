@@ -216,6 +216,55 @@ describe("Generate runtime truthfulness", () => {
     expect(html).toMatch(/<button disabled=""[^>]*>[\s\S]*?Generate<\/button>/);
   });
 
+  it("keeps Generate disabled when project preflight is not ready", () => {
+    const qc = queryClient();
+    qc.setQueryData(["media-health"], {
+      providers: [
+        {
+          id: "comfyui",
+          configured: true,
+          online: true,
+          mock: false,
+          model: "comfyui",
+          error: "",
+        },
+      ],
+    });
+    qc.setQueryData(["preflight", "project-1"], {
+      ready: false,
+      total_shots: 1,
+      ready_shots: 0,
+      issues: [
+        {
+          shot_id: "shot-1",
+          scene_id: "scene-1",
+          shot_order: 1,
+          issues: ["Shot status is 'NeedsReview'"],
+        },
+      ],
+      workflow_checks: [],
+      warnings: [],
+      comfyui_online: true,
+      comfyui_mock: false,
+    });
+    qc.setQueryData(["generation-estimate", "project-1"], {
+      shot_count: 1,
+      paid_shot_count: 0,
+      requires_confirmation: false,
+      estimated_cost_usd: null,
+      unpriced_paid_shots: 0,
+      providers: [],
+      shots: [],
+      blockers: [],
+    });
+
+    const html = renderPage(qc);
+
+    expect(html).toMatch(
+      /<button(?=[^>]*data-testid="generate-button")(?=[^>]*disabled="")[^>]*>/,
+    );
+  });
+
   it("shows provider-specific runtime evidence for every job", () => {
     const qc = queryClient();
     qc.setQueryData(["project", "project-1"], { id: "project-1", title: "Project" });
