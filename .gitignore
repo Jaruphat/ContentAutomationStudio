@@ -26,6 +26,9 @@ backend/data/
 backend/app/data/
 frontend/dist/
 
+# Local workflow handoff drop; verified copies live under workflows/source/api/
+comfyworkflow/
+
 # IDE
 .vscode/
 .idea/
