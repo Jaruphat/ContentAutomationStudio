@@ -16,6 +16,8 @@ import React from "react";
 
 export interface AppState {
   currentProjectId: string | null;
+  creatingProject: boolean;
+  newProjectTemplateId: "blank" | "plot" | "youtube" | "shorts" | "story";
   selectedSceneId: string | null;
   selectedShotId: string | null;
   selectedTakeId: string | null;
@@ -25,6 +27,8 @@ export interface AppState {
 
 const initialState: AppState = {
   currentProjectId: null,
+  creatingProject: false,
+  newProjectTemplateId: "blank",
   selectedSceneId: null,
   selectedShotId: null,
   selectedTakeId: null,
@@ -47,6 +51,10 @@ function createInitialState(): AppState {
 
 export type AppAction =
   | { type: "SET_PROJECT"; id: string | null }
+  | {
+      type: "START_NEW_PROJECT";
+      template?: AppState["newProjectTemplateId"];
+    }
   | { type: "SELECT_SCENE"; id: string | null }
   | { type: "SELECT_SHOT"; id: string | null }
   | { type: "SELECT_TAKE"; id: string | null }
@@ -60,6 +68,18 @@ function reducer(state: AppState, action: AppAction): AppState {
       return {
         ...state,
         currentProjectId: action.id,
+        creatingProject: false,
+        newProjectTemplateId: "blank",
+        selectedSceneId: null,
+        selectedShotId: null,
+        selectedTakeId: null,
+      };
+    case "START_NEW_PROJECT":
+      return {
+        ...state,
+        currentProjectId: null,
+        creatingProject: true,
+        newProjectTemplateId: action.template ?? "blank",
         selectedSceneId: null,
         selectedShotId: null,
         selectedTakeId: null,

@@ -1,0 +1,37 @@
+{
+  "name": "New Project Regression 20260902-153920",
+  "created_project_id": "92129cd8-a880-48e6-8b87-01e207820828",
+  "required_existing_projects": [
+    "Release AI Mock E2E",
+    "The Lost Garden"
+  ],
+  "stale_query_wait_seconds": 2,
+  "blank_defaults_verified": {
+    "title": "",
+    "objective": "",
+    "audience": "",
+    "duration": "180",
+    "language": "en",
+    "plot": ""
+  },
+  "shorts_preset_verified": true,
+  "create_requests": [
+    {
+      "method": "POST",
+      "url": "http://127.0.0.1:5173/api/projects"
+    }
+  ],
+  "existing_projects_unchanged": true,
+  "cleanup": {
+    "verified_zero_jobs_then_deleted_ids": [
+      "92129cd8-a880-48e6-8b87-01e207820828",
+      "e4cdbffb-f758-4df9-bcf0-1852bb7a90a3",
+      "05f4322a-5ce5-47d5-a3ce-c1c1489872c8"
+    ],
+    "remaining_projects": [
+      "Release AI Mock E2E",
+      "The Lost Garden"
+    ]
+  },
+  "screenshot": "new-project-regression.png"
+}

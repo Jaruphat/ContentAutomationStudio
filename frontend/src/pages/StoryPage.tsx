@@ -32,6 +32,80 @@ import type {
   StyleCreate,
 } from "../types";
 
+export const NEW_PROJECT_DEFAULTS = {
+  title: "",
+  objective: "",
+  audience: "",
+  contentType: "video",
+  aspectRatio: "16:9",
+  duration: "180",
+  language: "en",
+  plot: "",
+} as const;
+
+export type NewProjectTemplateId =
+  | "blank"
+  | "plot"
+  | "youtube"
+  | "shorts"
+  | "story";
+
+export const NEW_PROJECT_TEMPLATES: {
+  id: NewProjectTemplateId;
+  label: string;
+  description: string;
+}[] = [
+  { id: "blank", label: "Blank", description: "Empty creative brief" },
+  { id: "plot", label: "Start from Plot", description: "Story-first video" },
+  { id: "youtube", label: "YouTube", description: "16:9 long-form brief" },
+  { id: "shorts", label: "Shorts", description: "9:16 short-form brief" },
+  { id: "story", label: "Story Video", description: "Narrative video brief" },
+];
+
+export function newProjectTemplate(id: NewProjectTemplateId) {
+  const base = { ...NEW_PROJECT_DEFAULTS };
+  if (id === "plot") {
+    return { ...base, title: "Untitled Story from Plot", objective: "Turn the plot into a structured visual story." };
+  }
+  if (id === "youtube") {
+    return { ...base, title: "Untitled YouTube Video", objective: "Create an engaging YouTube video.", audience: "YouTube viewers", duration: "480" };
+  }
+  if (id === "shorts") {
+    return { ...base, title: "Untitled Short", objective: "Create a concise vertical short.", audience: "Mobile short-form viewers", aspectRatio: "9:16", duration: "45" };
+  }
+  if (id === "story") {
+    return { ...base, title: "Untitled Story Video", objective: "Create a cinematic narrative video.", audience: "Story-driven audiences" };
+  }
+  return base;
+}
+
+export function shouldLoadProjectIntoForm(
+  project: Pick<Project, "id"> | null | undefined,
+  currentProjectId: string | null,
+  creatingProject: boolean,
+) {
+  return !creatingProject && !!currentProjectId && project?.id === currentProjectId;
+}
+
+type ProjectPersistenceClient = {
+  create: (payload: ProjectCreate) => Promise<Project>;
+  update: (id: string, payload: Partial<ProjectCreate>) => Promise<Project>;
+};
+
+export function persistProject(
+  input: {
+    creatingProject: boolean;
+    currentProjectId: string | null;
+    payload: ProjectCreate;
+  },
+  client: ProjectPersistenceClient = api.projects,
+) {
+  if (input.creatingProject || !input.currentProjectId) {
+    return client.create(input.payload);
+  }
+  return client.update(input.currentProjectId, input.payload);
+}
+
 // ── Reusable form input ──────────────────────────────────────────────────
 
 function FormField({
@@ -331,7 +405,7 @@ function StyleForm({
 // ══════════════════════════════════════════════════════════════════════════
 
 export default function StoryPage() {
-  const { currentProjectId } = useAppState();
+  const { currentProjectId, creatingProject, newProjectTemplateId } = useAppState();
   const dispatch = useAppDispatch();
   const qc = useQueryClient();
 
@@ -345,6 +419,18 @@ export default function StoryPage() {
   const [language, setLanguage] = useState("en");
   const [plot, setPlot] = useState("");
 
+  const applyNewProjectTemplate = (id: NewProjectTemplateId) => {
+    const next = newProjectTemplate(id);
+    setTitle(next.title);
+    setObjective(next.objective);
+    setAudience(next.audience);
+    setContentType(next.contentType);
+    setAspectRatio(next.aspectRatio);
+    setDuration(next.duration);
+    setLanguage(next.language);
+    setPlot(next.plot);
+  };
+
   // ── Story Bible inline form toggles ─────────────────────────────────────
   const [showCharacterForm, setShowCharacterForm] = useState(false);
   const [editingCharacter, setEditingCharacter] = useState<Character | null>(null);
@@ -354,11 +440,6 @@ export default function StoryPage() {
   const [editingStyle, setEditingStyle] = useState<Style | null>(null);
 
   // ── Queries ─────────────────────────────────────────────────────────────
-  const projectsQ = useQuery({
-    queryKey: ["projects"],
-    queryFn: api.projects.list,
-  });
-
   const projectQ = useQuery({
     queryKey: ["project", currentProjectId],
     queryFn: () => api.projects.get(currentProjectId!),
@@ -383,10 +464,11 @@ export default function StoryPage() {
     enabled: !!currentProjectId,
   });
 
-  // Populate form when project loads
+  // Populate the form only when this response still belongs to the selected
+  // project. A request that resolves after New starts must not hydrate draft.
   useEffect(() => {
-    if (projectQ.data) {
-      const p = projectQ.data;
+    if (shouldLoadProjectIntoForm(projectQ.data, currentProjectId, creatingProject)) {
+      const p = projectQ.data!;
       setTitle(p.title);
       setObjective(p.objective);
       setAudience(p.audience);
@@ -396,14 +478,21 @@ export default function StoryPage() {
       setLanguage(p.language);
       setPlot(p.plot_text);
     }
-  }, [projectQ.data]);
+  }, [projectQ.data, currentProjectId, creatingProject]);
 
-  // Auto-select first project if none selected
+  // A New action is intentional. Reset every field and do not auto-select an
+  // existing project behind the user's back (which could turn Create into Save).
   useEffect(() => {
-    if (!currentProjectId && projectsQ.data && projectsQ.data.length > 0) {
-      dispatch({ type: "SET_PROJECT", id: projectsQ.data[0].id });
+    if (creatingProject) {
+      applyNewProjectTemplate(newProjectTemplateId);
+      setShowCharacterForm(false);
+      setEditingCharacter(null);
+      setShowLocationForm(false);
+      setEditingLocation(null);
+      setShowStyleForm(false);
+      setEditingStyle(null);
     }
-  }, [currentProjectId, projectsQ.data, dispatch]);
+  }, [creatingProject, newProjectTemplateId]);
 
   // ── Mutations ───────────────────────────────────────────────────────────
   const saveMut = useMutation({
@@ -418,17 +507,12 @@ export default function StoryPage() {
         language,
         plot_text: plot,
       };
-      if (currentProjectId) {
-        return api.projects.update(currentProjectId, payload);
-      }
-      return api.projects.create(payload);
+      return persistProject({ creatingProject, currentProjectId, payload });
     },
     onSuccess: (data: Project) => {
       qc.invalidateQueries({ queryKey: ["projects"] });
       qc.invalidateQueries({ queryKey: ["project", data.id] });
-      if (!currentProjectId) {
-        dispatch({ type: "SET_PROJECT", id: data.id });
-      }
+      dispatch({ type: "SET_PROJECT", id: data.id });
     },
   });
 
@@ -518,22 +602,6 @@ export default function StoryPage() {
           <h1 className="text-lg font-semibold text-zinc-100">Story &amp; Creative Brief</h1>
         </div>
         <div className="flex items-center gap-3">
-          {/* Project selector */}
-          {projectsQ.data && projectsQ.data.length > 1 && (
-            <select
-              value={currentProjectId ?? ""}
-              onChange={(e) =>
-                dispatch({ type: "SET_PROJECT", id: e.target.value || null })
-              }
-              className="rounded-md px-2 py-1 text-sm"
-            >
-              {projectsQ.data.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.title}
-                </option>
-              ))}
-            </select>
-          )}
           <button
             onClick={() => saveMut.mutate()}
             disabled={saveMut.isPending || !title.trim()}
@@ -548,6 +616,31 @@ export default function StoryPage() {
           </button>
         </div>
       </div>
+
+      {creatingProject && (
+        <section
+          aria-label="New project setup"
+          className="rounded-lg border border-indigo-700/70 bg-indigo-950/25 p-4"
+        >
+          <h2 className="text-sm font-semibold text-zinc-100">Start a new project</h2>
+          <p className="mt-1 text-xs text-zinc-400">
+            Choose a starting point. Existing projects are never changed.
+          </p>
+          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-5">
+            {NEW_PROJECT_TEMPLATES.map((template) => (
+              <button
+                type="button"
+                key={template.id}
+                onClick={() => applyNewProjectTemplate(template.id)}
+                className="rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-left hover:border-indigo-500"
+              >
+                <span className="block text-sm font-medium text-zinc-200">{template.label}</span>
+                <span className="mt-0.5 block text-xs text-zinc-500">{template.description}</span>
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
 
       {saveMut.isError && (
         <div className="flex items-center gap-2 rounded-md border border-red-800 bg-red-900/30 px-4 py-2 text-sm text-red-300">
