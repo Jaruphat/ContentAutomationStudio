@@ -89,6 +89,12 @@ backend/data/
 
 ## Running the Application
 
+### One-click start on Windows
+
+Double-click `start-dev.bat` in the project root. It checks ComfyUI on port 8000, starts the backend on 8001 and frontend on 5173, waits until both are ready, then opens the app in Chrome. Running it again is safe: services that are already listening are not duplicated.
+
+Double-click `stop-dev.bat` to stop only the development services listening on ports 8001 and 5173. It does not stop ComfyUI.
+
 Open two terminal windows:
 
 ### 1. Start the Backend
