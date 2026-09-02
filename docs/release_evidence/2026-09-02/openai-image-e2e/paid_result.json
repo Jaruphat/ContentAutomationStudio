@@ -1,0 +1,132 @@
+{
+  "project_id": "94916ace-62fe-47d6-9fd3-415b73de7434",
+  "shot_id": "707cec33-2a0a-4fa7-9435-140d1eb3b2c9",
+  "estimate": {
+    "shot_count": 1,
+    "paid_shot_count": 1,
+    "requires_confirmation": true,
+    "estimated_cost_usd": 0.011,
+    "unpriced_paid_shots": 0,
+    "providers": [
+      {
+        "provider_id": "openai",
+        "model": "gpt-image-1-mini",
+        "shot_count": 1,
+        "paid": true,
+        "configured": true,
+        "estimated_cost_usd": 0.011,
+        "cost_basis": "Estimate only: 1 x gpt-image-1-mini at 1024x1024/medium list price. The charge recorded on your account is authoritative."
+      }
+    ],
+    "shots": [
+      {
+        "shot_id": "707cec33-2a0a-4fa7-9435-140d1eb3b2c9",
+        "generation_mode": "image",
+        "provider_id": "openai",
+        "model": "gpt-image-1-mini",
+        "workflow_id": null,
+        "estimated_cost_usd": 0.011,
+        "cost_basis": "Estimate only: 1 x gpt-image-1-mini at 1024x1024/medium list price. The charge recorded on your account is authoritative.",
+        "paid": true,
+        "blockers": []
+      }
+    ],
+    "blockers": []
+  },
+  "unconfirmed_request": {
+    "status": 409,
+    "detail": "1 of 1 selected shot(s) generate through a metered provider and would cost about $0.01. Re-send with confirm_paid_generation set to true to authorise this run."
+  },
+  "job": {
+    "id": "fb2c786e-7418-48a6-b163-5cf103b3736e",
+    "shot_id": "707cec33-2a0a-4fa7-9435-140d1eb3b2c9",
+    "workflow_id": null,
+    "workflow_version": "",
+    "workflow_snapshot_path": "",
+    "workflow_sha256": "",
+    "parameter_map": {
+      "positivePrompt": "A quiet single-shot release proof., wide shot, Gentle ripples spread from the boat, Minimal cinematic product-style photograph of one small white paper boat resting on a calm indigo pond at dawn, subtle peach horizon glow, gentle circular ripples, clean composition, realistic paper texture, no people, no text, no logos",
+      "negativePrompt": "text, watermark, logo, people, duplicate boat, distorted paper",
+      "seed": 881692882,
+      "width": 1024,
+      "height": 1024,
+      "outputPrefix": "94916ace_707cec33"
+    },
+    "media_provider_id": "openai",
+    "media_model": "gpt-image-1-mini",
+    "request_params": {
+      "size": "1024x1024",
+      "quality": "medium",
+      "n": 1,
+      "paid_generation_confirmed": true,
+      "cost_basis": "Estimate only: 1 x gpt-image-1-mini at 1024x1024/medium list price. The charge recorded on your account is authoritative.",
+      "negative_prompt_folded_in": true
+    },
+    "usage": {
+      "input_tokens": 86,
+      "input_tokens_details": {
+        "image_tokens": 0,
+        "text_tokens": 86
+      },
+      "output_tokens": 1056,
+      "output_tokens_details": {
+        "image_tokens": 1056,
+        "text_tokens": 0
+      },
+      "total_tokens": 1142
+    },
+    "estimated_cost_usd": 0.011,
+    "provenance": {
+      "provider_id": "openai",
+      "model": "gpt-image-1-mini",
+      "prompt_id": "openai-fb2c786e-7418-48a6-b163-5cf103b3736e",
+      "workflow_id": null,
+      "workflow_version": "",
+      "workflow_sha256": "",
+      "workflow_snapshot_path": "",
+      "seed": 881692882,
+      "generated_at": "2026-09-02T08:47:33.825759+00:00",
+      "response_id": "openai-fb2c786e-7418-48a6-b163-5cf103b3736e",
+      "request_params": {
+        "size": "1024x1024",
+        "quality": "medium",
+        "n": 1,
+        "negative_prompt_folded_in": true
+      },
+      "usage": {
+        "input_tokens": 86,
+        "input_tokens_details": {
+          "image_tokens": 0,
+          "text_tokens": 86
+        },
+        "output_tokens": 1056,
+        "output_tokens_details": {
+          "image_tokens": 1056,
+          "text_tokens": 0
+        },
+        "total_tokens": 1142
+      },
+      "estimated_cost_usd": 0.011,
+      "cost_basis": "Estimate only: 1 x gpt-image-1-mini at 1024x1024/medium list price. The charge recorded on your account is authoritative.",
+      "downloaded_to": "C:\\Users\\jongp\\Desktop\\Thinkpad_and_PC_Sync\\ContentAutomationStudio\\backend\\data\\release_mock\\generated\\openai-fb2c786e-7418-48a6-b163-5cf103b3736e.png"
+    },
+    "seed": 881692882,
+    "comfyui_prompt_id": "openai-fb2c786e-7418-48a6-b163-5cf103b3736e",
+    "status": "Completed",
+    "attempts": 1,
+    "error_code": null,
+    "error_message": null,
+    "outputs": [
+      {
+        "file_path": "C:\\Users\\jongp\\Desktop\\Thinkpad_and_PC_Sync\\ContentAutomationStudio\\backend\\data\\release_mock\\generated\\openai-fb2c786e-7418-48a6-b163-5cf103b3736e.png",
+        "type": "image",
+        "width": 1024,
+        "height": 1024
+      }
+    ],
+    "submitted_at": "2026-09-02T08:47:33.819254",
+    "started_at": "2026-09-02T08:47:14.313134",
+    "completed_at": "2026-09-02T08:47:33.825759",
+    "created_at": "2026-09-02T08:47:13.101631"
+  }
+}

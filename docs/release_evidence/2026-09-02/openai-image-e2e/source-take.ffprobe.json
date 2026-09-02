@@ -1,0 +1,20 @@
+{
+    "programs": [
+
+    ],
+    "stream_groups": [
+
+    ],
+    "streams": [
+        {
+            "codec_name": "png",
+            "codec_type": "video",
+            "width": 1024,
+            "height": 1024
+        }
+    ],
+    "format": {
+        "format_name": "png_pipe",
+        "size": "1311910"
+    }
+}

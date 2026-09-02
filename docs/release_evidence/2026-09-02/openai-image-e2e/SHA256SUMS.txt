@@ -1,0 +1,6 @@
+16221bb62f6e2929213316cd80293d8ddafd6b975d120c431853275cbd21890f *docs/release_evidence/2026-09-02/openai-image-e2e/source-take.png
+eab71c547d2bc250877a6897c3b2eb15ace3eed86fc5b1dc9e01f31451eab365 *docs/release_evidence/2026-09-02/openai-image-e2e/review.mp4
+3585af6093eaa73d74d7d5f21a5b7c2abbb29cd2e372bc1fa0d6c2ccae1c0540 *docs/release_evidence/2026-09-02/openai-image-e2e/review.provenance.json
+06fd6efa13d7e4a5fc294cc5b7a18fd4c81dc1553b90b48b198f3078f8dbfa3f *docs/release_evidence/2026-09-02/openai-image-e2e/generation-manifest.json
+14506248a91b175e397e84271cbdbf4a4e8e89c6b18510cb0da6a3b0e18cea81 *docs/release_evidence/2026-09-02/openai-image-e2e/timeline-manifest.json
+7c20a477b12a178c5e52060da75e3210e8c8e71e5e1584c348438f7bf12ecba8 *docs/release_evidence/2026-09-02/openai-image-e2e/project-archive.json

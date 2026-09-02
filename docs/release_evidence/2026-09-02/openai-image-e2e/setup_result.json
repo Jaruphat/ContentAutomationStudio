@@ -1,0 +1,39 @@
+{
+  "project_id": "94916ace-62fe-47d6-9fd3-415b73de7434",
+  "scene_id": "0174a8ff-11f8-4422-a52b-3878c0ef576c",
+  "shot_id": "707cec33-2a0a-4fa7-9435-140d1eb3b2c9",
+  "estimate": {
+    "shot_count": 1,
+    "paid_shot_count": 1,
+    "requires_confirmation": true,
+    "estimated_cost_usd": 0.011,
+    "unpriced_paid_shots": 0,
+    "providers": [
+      {
+        "provider_id": "openai",
+        "model": "gpt-image-1-mini",
+        "shot_count": 1,
+        "paid": true,
+        "configured": true,
+        "estimated_cost_usd": 0.011,
+        "cost_basis": "Estimate only: 1 x gpt-image-1-mini at 1024x1024/medium list price. The charge recorded on your account is authoritative."
+      }
+    ],
+    "shots": [
+      {
+        "shot_id": "707cec33-2a0a-4fa7-9435-140d1eb3b2c9",
+        "generation_mode": "image",
+        "provider_id": "openai",
+        "model": "gpt-image-1-mini",
+        "workflow_id": null,
+        "estimated_cost_usd": 0.011,
+        "cost_basis": "Estimate only: 1 x gpt-image-1-mini at 1024x1024/medium list price. The charge recorded on your account is authoritative.",
+        "paid": true,
+        "blockers": []
+      }
+    ],
+    "blockers": []
+  },
+  "preflight_ready": true,
+  "preflight_issues": []
+}

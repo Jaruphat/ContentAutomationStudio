@@ -1,0 +1,47 @@
+{
+  "hard_restart_persistence": {
+    "project_id": "94916ace-62fe-47d6-9fd3-415b73de7434",
+    "job_status": "Completed",
+    "job_attempts": 1,
+    "take_status": "Approved",
+    "timeline_items": 1,
+    "timeline_duration_sec": 3.0
+  },
+  "providers": {
+    "openai": {
+      "id": "openai",
+      "configured": true,
+      "online": true,
+      "mock": false,
+      "model": "gpt-image-1-mini",
+      "error": ""
+    },
+    "comfyui": {
+      "id": "comfyui",
+      "configured": true,
+      "online": true,
+      "mock": true,
+      "model": "mock-1.0.0",
+      "error": ""
+    }
+  },
+  "media_stream": {
+    "status": 200,
+    "bytes": 1311910,
+    "content_type": "image/png"
+  },
+  "error_paths": {
+    "unknown_ai_provider": {
+      "status": 400,
+      "detail": "Unknown AI provider 'not-a-provider'. Available: mock, openai."
+    },
+    "duplicate_approval": {
+      "status": 400,
+      "detail": "Take is already approved"
+    },
+    "missing_take": {
+      "status": 404,
+      "detail": "Take not found"
+    }
+  }
+}

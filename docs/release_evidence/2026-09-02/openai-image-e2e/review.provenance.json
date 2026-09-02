@@ -1,0 +1,98 @@
+{
+  "kind": "cas.review_render.provenance",
+  "schema_version": 1,
+  "generated_at": "2026-09-02T08:48:29.249777+00:00",
+  "project": {
+    "id": "94916ace-62fe-47d6-9fd3-415b73de7434",
+    "title": "Release OpenAI single-image proof 2026-09-02",
+    "target_resolution": "1024x1024",
+    "frame_rate": 24.0,
+    "aspect_ratio": "1:1"
+  },
+  "output": {
+    "path": "C:\\Users\\jongp\\Desktop\\Thinkpad_and_PC_Sync\\ContentAutomationStudio\\backend\\data\\release_mock\\exports\\94916ace-62fe-47d6-9fd3-415b73de7434\\review.mp4",
+    "filename": "review.mp4",
+    "sha256": "eab71c547d2bc250877a6897c3b2eb15ace3eed86fc5b1dc9e01f31451eab365",
+    "size_bytes": 41460,
+    "probe": {
+      "width": 1024,
+      "height": 1024,
+      "codec": "h264",
+      "duration_sec": 3.0,
+      "frame_rate": 24.0,
+      "has_audio": false,
+      "audio_codec": ""
+    },
+    "container_tags": {
+      "format": {
+        "major_brand": "isom",
+        "minor_version": "512",
+        "compatible_brands": "isomiso2avc1mp41",
+        "encoder": "Lavf62.12.102"
+      },
+      "streams": [
+        {
+          "language": "und",
+          "handler_name": "VideoHandler"
+        }
+      ]
+    }
+  },
+  "render_settings": {
+    "width": 1024,
+    "height": 1024,
+    "frame_rate": 24.0,
+    "segment_count": 1,
+    "audio": {
+      "kept": false,
+      "sample_rate": 0,
+      "channels": 0,
+      "bitrate": ""
+    },
+    "container_metadata_stripped": true
+  },
+  "segments": [
+    {
+      "segment_index": 0,
+      "timeline_order": 0,
+      "duration_sec": 3.0,
+      "take": {
+        "id": "23559f3a-02c4-473a-b8c5-86f87520e622",
+        "source_path": "C:\\Users\\jongp\\Desktop\\Thinkpad_and_PC_Sync\\ContentAutomationStudio\\backend\\data\\release_mock\\generated\\openai-fb2c786e-7418-48a6-b163-5cf103b3736e.png",
+        "source_sha256": "16221bb62f6e2929213316cd80293d8ddafd6b975d120c431853275cbd21890f",
+        "probe": {
+          "width": 1024,
+          "height": 1024,
+          "codec": "png",
+          "duration_sec": 0.0,
+          "frame_rate": 25.0,
+          "has_audio": false,
+          "audio_codec": ""
+        },
+        "embedded_metadata_keys": []
+      },
+      "scene": {
+        "id": "0174a8ff-11f8-4422-a52b-3878c0ef576c",
+        "order": 1,
+        "title": "Dawn pond"
+      },
+      "shot": {
+        "id": "707cec33-2a0a-4fa7-9435-140d1eb3b2c9",
+        "order": 1,
+        "generation_mode": "image",
+        "image_prompt": "Minimal cinematic product-style photograph of one small white paper boat resting on a calm indigo pond at dawn, subtle peach horizon glow, gentle circular ripples, clean composition, realistic paper texture, no people, no text, no logos",
+        "video_prompt": "",
+        "negative_prompt": "text, watermark, logo, people, duplicate boat, distorted paper"
+      },
+      "job": {
+        "id": "fb2c786e-7418-48a6-b163-5cf103b3736e",
+        "seed": 881692882,
+        "comfyui_prompt_id": "openai-fb2c786e-7418-48a6-b163-5cf103b3736e",
+        "attempts": 1,
+        "workflow_snapshot_path": "",
+        "workflow_sha256": ""
+      }
+    }
+  ],
+  "note": "Container metadata is stripped from the delivered MP4 so the generator's embedded workflow graph, model filenames and prompt text are not shipped inside it. This sidecar is the provenance record."
+}
