@@ -13,6 +13,14 @@ interface Props<T extends AITaskRequest> {
   onApplied: () => void;
 }
 
+export function withReviewedDraft<T extends AITaskRequest>(
+  request: T,
+  preview: AITaskResponse | null,
+): T {
+  if (!request.apply || !preview) return request;
+  return { ...request, draft: preview.data };
+}
+
 export default function AIGenerationPanel<T extends AITaskRequest>({
   title,
   description,
@@ -50,7 +58,12 @@ export default function AIGenerationPanel<T extends AITaskRequest>({
 
   const mutation = useMutation({
     mutationFn: (apply: boolean) =>
-      run(buildRequest({ provider_id: providerId, model, guidance, apply })),
+      run(
+        withReviewedDraft(
+          buildRequest({ provider_id: providerId, model, guidance, apply }),
+          preview,
+        ),
+      ),
     onSuccess: (result) => {
       setPreview(result);
       if (result.applied) onApplied();
