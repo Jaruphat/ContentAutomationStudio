@@ -659,3 +659,135 @@ class ExportResult(BaseModel):
     format: str
     content: Any
     filename: str
+
+
+# ============================================================================
+# AI providers and story tasks
+# ============================================================================
+#
+# No schema here accepts an API key. Keys are read from the environment only,
+# so a client can report that a provider is unconfigured but can never supply
+# a credential over the wire or read one back.
+
+class AIModelInfoOut(BaseModel):
+    id: str
+    label: str
+    supports_structured_output: bool = True
+    note: str = ""
+
+
+class AIProviderInfo(BaseModel):
+    id: str
+    label: str
+    #: Whether the provider has what it needs to run. For a keyed provider this
+    #: means the environment variable is set - never that the key is valid.
+    configured: bool
+    requires_network: bool = True
+    requires_key: bool = False
+    #: Name of the environment variable holding the key, for the UI to quote in
+    #: its "not configured" message. Never the value.
+    api_key_env: str = ""
+    default_model: str = ""
+    #: True for the offline deterministic provider, so the UI can label output
+    #: that no language model produced.
+    mock: bool = False
+    models: list[AIModelInfoOut] = Field(default_factory=list)
+
+
+class AIProviderCatalogue(BaseModel):
+    #: The provider used when a request does not name one.
+    default_provider_id: str
+    providers: list[AIProviderInfo]
+
+
+class AIProviderHealthOut(BaseModel):
+    provider_id: str
+    configured: bool
+    online: bool = False
+    #: Models the vendor actually reported. Empty when it was not reachable.
+    models: list[str] = Field(default_factory=list)
+    error: str = ""
+    mock: bool = False
+
+
+class AIHealthResponse(BaseModel):
+    providers: list[AIProviderHealthOut]
+    blockers: list[str] = Field(default_factory=list)
+
+
+class AIProvenance(BaseModel):
+    """What produced a generation, carried with every result."""
+
+    provider_id: str
+    #: The model the vendor reported serving, which for an alias is the dated
+    #: build that actually ran.
+    model: str
+    mock: bool = False
+    prompt_version: str = ""
+    schema_version: str = ""
+    attempts: int = 1
+    latency_ms: int = 0
+    usage: dict[str, int] = Field(default_factory=dict)
+    response_id: str = ""
+    generated_at: str = ""
+
+
+class AITaskRequest(BaseModel):
+    """Fields common to every AI task request."""
+
+    #: Empty means "use the configured default": OpenAI when a key is set,
+    #: otherwise the deterministic mock.
+    provider_id: str = ""
+    #: Empty means the provider's default model.
+    model: str = ""
+    #: Extra direction from the user, appended to the versioned prompt.
+    guidance: str = ""
+    #: False returns the draft without writing anything.
+    apply: bool = False
+
+
+class AIStoryBibleRequest(AITaskRequest):
+    pass
+
+
+class AIStoryboardRequest(AITaskRequest):
+    scene_count: int = 3
+    min_shots: int = 9
+    max_shots: int = 15
+    #: Required to overwrite a project that already has scenes; without it such
+    #: a project is refused rather than having its shots, jobs and takes
+    #: deleted.
+    replace_existing: bool = False
+
+
+class AIPromptCompileRequest(AITaskRequest):
+    #: None or empty means every shot in the project.
+    shot_ids: Optional[list[str]] = None
+
+
+class AITaskResponse(BaseModel):
+    task: str
+    #: True when the draft was written to the database.
+    applied: bool
+    #: The validated model output, exactly as returned.
+    data: dict[str, Any]
+    provenance: AIProvenance
+    #: Counts of what was created or updated. Empty when applied is false.
+    summary: dict[str, int] = Field(default_factory=dict)
+    warnings: list[str] = Field(default_factory=list)
+    #: The model's own notes to the writer.
+    notes: str = ""
+
+
+class AIErrorResponse(BaseModel):
+    """The body returned when an AI task fails.
+
+    ``category`` is the machine-readable reason - ``not_configured``,
+    ``rate_limit``, ``timeout`` and so on - so the UI can offer the right next
+    step instead of showing a raw message. It never carries provider payloads,
+    which can echo the user's brief back.
+    """
+
+    detail: str
+    category: str = "unknown"
+    provider_id: str = ""

@@ -28,6 +28,12 @@ os.environ["CAS_DATA_DIR"] = _TEST_DATA_DIR
 # tests, driven directly) and a source of cross-test nondeterminism.
 os.environ["CAS_DISABLE_QUEUE"] = "1"
 
+# app.main reads the repository's .env at import time. A developer who has a
+# real OPENAI_API_KEY there would otherwise have the suite select the OpenAI
+# provider by default, turning mock-provider assertions into billed network
+# calls. Tests set the AI environment they need explicitly (see ai_env below).
+os.environ["CAS_DISABLE_DOTENV"] = "1"
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -70,6 +76,34 @@ def isolated_data_dir():
     yield _TEST_DATA_DIR
 
     shutil.rmtree(_TEST_DATA_DIR, ignore_errors=True)
+
+
+# ---------------------------------------------------------------------------
+# AI environment isolation
+# ---------------------------------------------------------------------------
+
+#: Every environment variable that changes which AI provider runs, or how.
+AI_ENV_VARS = (
+    "OPENAI_API_KEY",
+    "OPENAI_MODEL",
+    "OPENAI_BASE_URL",
+    "OPENAI_ORG_ID",
+    "CAS_AI_PROVIDER",
+)
+
+
+@pytest.fixture(autouse=True)
+def ai_env(monkeypatch):
+    """Clear the AI environment before every test.
+
+    Without this the suite's behaviour would depend on whether the developer
+    running it happens to have a key exported: provider selection, the health
+    endpoint's blocker list and the "mock is the default" assertions would all
+    change. A test that wants a configured provider sets the variable itself.
+    """
+    for name in AI_ENV_VARS:
+        monkeypatch.delenv(name, raising=False)
+    return monkeypatch
 
 
 # ---------------------------------------------------------------------------

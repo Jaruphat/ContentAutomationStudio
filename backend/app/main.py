@@ -15,9 +15,11 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from sqlalchemy.orm import Session
 
+from app.config import load_env_file
 from app.database import SessionLocal, init_db
 from app.models import Workflow
 from app.routers import (
+    ai,
     exports,
     generation,
     projects,
@@ -28,6 +30,7 @@ from app.routers import (
     timeline,
     workflows,
 )
+from app.services.ai import registry as ai_registry
 from app.services.comfyui_adapter import ComfyUIProvider
 from app.services.mock_provider import MockComfyUIProvider
 from app.services.queue_manager import queue_manager
@@ -41,6 +44,15 @@ logging.basicConfig(
     format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
 )
 logger = logging.getLogger("cas.main")
+
+# ---------------------------------------------------------------------------
+# Environment
+# ---------------------------------------------------------------------------
+# Read before anything else inspects os.environ: the provider factories below
+# and the AI registry both decide what to use from environment variables, and
+# a .env file has to be in place by then. Values already exported win, and only
+# variable *names* are ever logged.
+_ENV_FILE, _ENV_NAMES = load_env_file()
 
 
 # ---------------------------------------------------------------------------
@@ -81,8 +93,17 @@ async def lifespan(app: FastAPI):
       5. Stop the queue manager gracefully.
     """
     logger.info("Starting Content Automation Studio backend...")
+    if _ENV_FILE:
+        logger.info("Environment file loaded: %s", _ENV_FILE)
     init_db()
     logger.info("Database initialized")
+
+    # Names only - never a key, and never a value.
+    logger.info(
+        "AI provider default: %s", ai_registry.default_provider_id(),
+    )
+    for blocker in ai_registry.configuration_blockers():
+        logger.warning("AI blocker: %s", blocker)
 
     # Configure provider based on environment
     provider = _create_provider()
@@ -142,6 +163,7 @@ app.include_router(generation.router)
 app.include_router(review.router)
 app.include_router(timeline.router)
 app.include_router(exports.router)
+app.include_router(ai.router)
 
 
 # ---------------------------------------------------------------------------
@@ -206,10 +228,30 @@ async def health_check():
             "so real generation cannot run." + detail
         )
 
+    # Reported without a network call: this endpoint is polled by the UI, and
+    # a live vendor round-trip per poll would be both slow and metered. The
+    # dedicated /api/ai/health endpoint does the live check.
+    ai_default = ai_registry.default_provider_id()
+    ai_blockers = ai_registry.configuration_blockers()
+    blockers.extend(ai_blockers)
+
     return {
         "status": "ok",
         "service": "Content Automation Studio",
         "version": "0.1.0",
+        "ai": {
+            "default_provider_id": ai_default,
+            "mock": ai_default == "mock",
+            "providers": [
+                {
+                    "id": entry["id"],
+                    "label": entry["label"],
+                    "configured": entry["configured"],
+                    "mock": entry["mock"],
+                }
+                for entry in ai_registry.describe_catalogue()["providers"]
+            ],
+        },
         "comfyui": {
             "online": provider_health.online,
             "mock": provider_health.mock,
