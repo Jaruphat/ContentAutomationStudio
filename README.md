@@ -321,7 +321,7 @@ The frontend uses a production cockpit layout:
 
 ## Known Blockers
 
-### H3 ComfyUI Integration — blocked on API-format export only
+### H3 ComfyUI Integration — video operational; image workflow export pending
 
 ComfyUI **is** reachable and healthy: version 0.34.0 on `http://127.0.0.1:8000`,
 RTX 5080, 1800 registered node classes. The application backend runs on 8001 to
@@ -345,14 +345,16 @@ repository posts an editor graph to ComfyUI.
 **API-format exports have since arrived for the two video workflows** and are
 preserved under `workflows/source/api/`. Both are detected as API format,
 marked submittable, dependency-checked clean, and their suggested mappings
-validate. `GET /api/health` now reports `workflows.submittable: 2`.
+validate.
 
 **Video generation is verified working.** One controlled real job ran through
 the T2V workflow on 2026-09-01 and produced a genuine 864x480 h264+aac clip;
 see the Verification Status section.
 
 **Still outstanding: `image_boogu_image_0_1_edit_int8` in API format.** Until
-that arrives, image shots cannot be generated for real.
+that arrives, image shots cannot be generated through ComfyUI. The independent
+OpenAI Images path has been exercised with one paid low-cost image and is
+verified; see the Verification Status section.
 
 **Everything else checked out.** Verified against the live instance:
 
@@ -423,19 +425,20 @@ takes to a 1024×1024 h264 review render, with the live ComfyUI queue untouched.
 ## Verification Status
 
 Against the MVP Definition of Done in PRD section 20.2. "Verified" means it was
-exercised against a running server on 2026-09-01, not merely implemented.
+exercised against a running server on 2026-09-01 or 2026-09-02, not merely
+implemented.
 
 | # | Definition of Done item | Status | Evidence |
 |---|-------------------------|--------|----------|
 | 1 | Plot to editable scene/shot storyboard | Verified | e2e run creates 3 scenes and 9 shots, all editable via the API |
 | 2 | Each shot has a prompt and checkable workflow mapping | Verified | Preflight validates each mapping against the workflow JSON; snapshots show the compiled prompt injected into node 6, negative into 7, seed into 3, dimensions into 5, with unmapped inputs untouched |
-| 3 | Real image and video jobs through H3 | **Video verified; image blocked** | One controlled real generation completed on the T2V workflow: 864x480 h264 + aac, 124 frames, 5.167s, in 300.7s. Image generation is still blocked - that workflow exists only in editor format |
+| 3 | Real image and video generation paths | **Verified across providers; H3 image pending** | H3 T2V produced a real 864x480 h264+aac clip (124 frames, 5.167s). OpenAI `gpt-image-1-mini` produced one paid 1024x1024 PNG at an estimated $0.011. The ComfyUI image-edit workflow still needs an API-format export. |
 | 4 | Job status, error and retry behave correctly | Verified | Categorised errors; connection failures retry three times, OOM and missing models fail once |
 | 5 | One approved take per shot | Verified | 9 takes approved through the review API |
-| 6 | Approved takes assembled into a review video | Verified | 45.0s 1920x1080 h264 `review.mp4` from 9 approved takes, confirmed with ffprobe |
-| 7 | Project and queue state survive restart | Verified | Project, scenes and 9 approved takes intact after a hard kill and restart |
+| 6 | Approved takes assembled into a review video | Verified | Mock E2E: 45.0s 1920x1080 h264 from 9 approved takes. Paid-image E2E: approved PNG became a 3.000s, 1024x1024, 24fps h264 render. Both confirmed with ffprobe. |
+| 7 | Project and queue state survive restart | Verified | Mock project/scenes/9 approved takes survived restart; the paid-image project, completed one-attempt job, approved take, timeline and streamable PNG also survived a hard backend restart. |
 | 8 | Exports include video, storyboard, prompts and provenance | Verified | Storyboard JSON/CSV/Markdown, prompts, generation manifest with snapshot path and SHA-256, timeline manifest, project archive |
-| 9 | Automated tests of data model, mapping and queue state | Verified | 429 backend tests |
+| 9 | Automated tests of data model, mapping and queue state | Verified | 685 backend tests and 8 frontend component/regression tests |
 | 10 | One end-to-end project with no manual file edits | Verified | `python test_e2e.py` passes start to finish |
 | 11 | Restart mid-queue resumes only the stuck jobs | Verified | Server killed with 1 Running and 7 Queued; on restart the Running job was requeued, retried as attempt 2, and all 8 completed |
 | 12 | Retiming the manifest re-renders without regenerating takes | Verified | Two items retimed, re-render went 45.0s to 36.0s, approved take files byte-identical and no new jobs created |
@@ -456,6 +459,13 @@ exercised against a running server on 2026-09-01, not merely implemented.
 | Unsafe bindings withheld | `frames` (would overwrite a computed formula) reported for review, excluded from auto-apply |
 | Mock generation still working | 3 shots to 3 takes to a 1024x1024 h264 review render |
 
+Rechecked on 2026-09-02 against the live ComfyUI instance: T2V and I2V were
+both API format, submittable and mapping-valid; all 20/23 required node classes
+and all five model files per workflow were present. No generation was submitted
+during this recheck. Both source records still warn that `output_mapping` is
+empty, so output retrieval must be configured before using those records for a
+new run.
+
 ### First real generation (2026-09-01)
 
 One authorised job on `video_minimax_h3_t2v.api.json`. Full record in
@@ -470,14 +480,31 @@ One authorised job on `video_minimax_h3_t2v.api.json`. Full record in
 | Derived values | 864x480 = 0.4 MP @ 16:9 rounded to 32; 124 frames = the workflow's own duration expression |
 | Provenance | snapshot written, workflow sha256 recorded, seed 42 reproducible |
 | Defect found | takes recorded `0x0 / 0.0s / codec=mp4` - the provider never probed downloads. Fixed and regression-tested |
-| Known gap | the review render drops audio (`-an`); source take has aac, render does not |
+| Follow-up defect | the original review render dropped source audio and exposed workflow metadata; both were fixed, with provenance retained in a sidecar |
+
+### Paid OpenAI Images E2E (2026-09-02)
+
+Exactly one confirmed paid request used `gpt-image-1-mini`; the estimate was
+$0.011. It completed in one attempt and produced a nonempty 1,311,910-byte,
+1024x1024 PNG. The take was visually inspected, approved with rating 5, placed
+on a one-item timeline and rendered locally with FFmpeg. `ffprobe` confirmed a
+3.000-second, 1024x1024, 24fps h264 output with 72 frames. A hard backend
+restart preserved the project, job, approval, timeline and media stream.
+
+Evidence, checksums and the safe provenance sidecar are under
+`docs/release_evidence/2026-09-02/openai-image-e2e/`. The rendered MP4 contains
+no embedded workflow or provenance metadata keys. Representative error checks
+also passed: unconfirmed paid generation returned 409 without creating a job,
+unknown provider returned 400, duplicate approval returned 400 and a missing
+take returned 404.
 
 ### Quality gates
 
 | Gate | Command | Result |
 |------|---------|--------|
-| Backend tests | `python -m pytest tests/ -q` | 429 passed |
+| Backend tests | `python -m pytest tests/ -q` | 685 passed (2026-09-02) |
 | Backend lint | `python -m ruff check app/ tests/` | clean |
+| Frontend tests | `npm test -- --run` | 8 passed (2026-09-02) |
 | Frontend lint | `npm run lint` | clean |
 | Frontend typecheck | `npx tsc -b` | clean |
 | Frontend build | `npm run build` | succeeds |
