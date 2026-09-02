@@ -10,12 +10,22 @@ import {
 export type Theme = "light" | "dark";
 export type ThemePreference = "system" | Theme;
 
-const STORAGE_KEY = "cas.theme";
+/**
+ * This module is the source of truth for how the theme is stored and applied.
+ * The inline bootstrap script in index.html duplicates both constants so the
+ * class is set before the first paint; keep the two copies in step.
+ */
+export const THEME_STORAGE_KEY = "cas.theme";
+export const THEME_CLASS: Record<Theme, string> = {
+  light: "theme-light",
+  dark: "theme-dark",
+};
+
 const DARK_QUERY = "(prefers-color-scheme: dark)";
 
 function storedPreference(): ThemePreference {
   try {
-    const value = window.localStorage.getItem(STORAGE_KEY);
+    const value = window.localStorage.getItem(THEME_STORAGE_KEY);
     return value === "light" || value === "dark" || value === "system"
       ? value
       : "system";
@@ -34,12 +44,15 @@ function resolveTheme(preference: ThemePreference): Theme {
 
 export function applyTheme(theme: Theme): void {
   const root = document.documentElement;
-  root.classList.toggle("theme-light", theme === "light");
-  root.classList.toggle("theme-dark", theme === "dark");
+  root.classList.toggle(THEME_CLASS.light, theme === "light");
+  root.classList.toggle(THEME_CLASS.dark, theme === "dark");
   root.style.colorScheme = theme;
 }
 
-/** Called before React renders, preventing a wrong-theme first paint. */
+/**
+ * Re-applies the theme index.html already set. Kept as a safety net for any
+ * entry point that does not carry the inline bootstrap (tests, embedding).
+ */
 export function initTheme(): Theme {
   const theme = resolveTheme(storedPreference());
   applyTheme(theme);
@@ -77,7 +90,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const setPreference = useCallback((next: ThemePreference) => {
     setPreferenceState(next);
     try {
-      window.localStorage.setItem(STORAGE_KEY, next);
+      window.localStorage.setItem(THEME_STORAGE_KEY, next);
     } catch {
       // Applying the theme for this session is still useful when storage is blocked.
     }

@@ -32,6 +32,17 @@ const initialState: AppState = {
   queuePaused: false,
 };
 
+/**
+ * Below 1024px the inspector is an overlay drawer, so starting it open would
+ * cover the centre panel on the first paint. AppLayout also reacts to resizes;
+ * this only fixes the initial value.
+ */
+function createInitialState(): AppState {
+  const docked =
+    typeof window === "undefined" ? true : window.innerWidth >= 1024;
+  return { ...initialState, inspectorOpen: docked };
+}
+
 // ── Actions ──────────────────────────────────────────────────────────────
 
 export type AppAction =
@@ -81,7 +92,7 @@ const StateCtx = createContext<AppState>(initialState);
 const DispatchCtx = createContext<Dispatch<AppAction>>(() => {});
 
 export function ProjectStoreProvider({ children }: { children: ReactNode }) {
-  const [state, dispatch] = useReducer(reducer, initialState);
+  const [state, dispatch] = useReducer(reducer, undefined, createInitialState);
 
   return React.createElement(
     StateCtx.Provider,

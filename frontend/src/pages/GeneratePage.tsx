@@ -1,9 +1,17 @@
 /* ──────────────────────────────────────────────────────────────────────────
-   GeneratePage -- Preflight validation, workflow selection, generation
-   queue management, and job status monitoring.
+   GeneratePage -- readiness, what a run will cost, and the job queue.
+
+   The page follows the decision a user actually makes: is the project ready,
+   what will pressing Generate run and charge, and then what happened. Workflow
+   node mappings answer none of those questions -- they are setup diagnostics
+   for whoever is wiring ComfyUI up -- so they live behind a disclosure instead
+   of dominating the screen.
+
+   The price shown before a run and the price the queue then incurs come from
+   the same backend planner, so the two cannot drift apart.
    ────────────────────────────────────────────────────────────────────────── */
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Zap,
@@ -18,91 +26,208 @@ import {
   Clock,
   AlertCircle,
   AlertTriangle,
+  Wrench,
 } from "lucide-react";
-import api from "../api/client";
+import api, { toAIError } from "../api/client";
 import { useAppState, useAppDispatch } from "../store/useProjectStore";
 import StatusBadge from "../components/StatusBadge";
-import type { PreflightResult, GenerationJob, Workflow } from "../types";
+import CostConfirmDialog from "../components/CostConfirmDialog";
+import type {
+  GenerationEstimate,
+  GenerationJob,
+  MediaHealthResponse,
+  MediaProviderCatalogue,
+  MediaProviderId,
+  PreflightResult,
+  Workflow,
+} from "../types";
 
-// ── Preflight panel ──────────────────────────────────────────────────────
+function formatUsd(amount: number): string {
+  return amount.toLocaleString(undefined, {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 4,
+  });
+}
 
-function PreflightPanel({
-  result,
-  onRun,
-  running,
+/** The deterministic mock derives its prompt id from the job id. */
+function isMockJob(job: GenerationJob): boolean {
+  return (job.comfyui_prompt_id ?? "").startsWith("mock-");
+}
+
+type Tone = "ok" | "warn" | "bad" | "muted";
+
+const TONE_CLASS: Record<Tone, string> = {
+  ok: "border-green-800/60 bg-green-900/30 text-green-300",
+  warn: "border-amber-800/60 bg-amber-900/30 text-amber-300",
+  bad: "border-red-800/60 bg-red-900/30 text-red-300",
+  muted: "border-zinc-700 bg-zinc-800 text-zinc-300",
+};
+
+function Chip({ tone, children }: { tone: Tone; children: React.ReactNode }) {
+  return (
+    <span
+      className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium ${TONE_CLASS[tone]}`}
+    >
+      {children}
+    </span>
+  );
+}
+
+// ── Top summary ──────────────────────────────────────────────────────────
+
+/**
+ * Readiness, blockers, warnings and provider state in one glance.
+ *
+ * Repeated shot issues are grouped by their text: nine shots missing a prompt
+ * is one thing to fix, not nine.
+ */
+function ReadinessSummary({
+  preflight,
+  loading,
+  error,
+  onRerun,
+  catalogue,
+  mediaHealth,
+  unrunnableWorkflows,
 }: {
-  result: PreflightResult | null;
-  onRun: () => void;
-  running: boolean;
+  preflight: PreflightResult | undefined;
+  loading: boolean;
+  error: string | null;
+  onRerun: () => void;
+  catalogue: MediaProviderCatalogue | undefined;
+  mediaHealth: MediaHealthResponse | undefined;
+  unrunnableWorkflows: Workflow[];
 }) {
+  const blockerGroups = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const issue of preflight?.issues ?? []) {
+      for (const text of issue.issues) {
+        counts.set(text, (counts.get(text) ?? 0) + 1);
+      }
+    }
+    return [...counts.entries()].sort((a, b) => b[1] - a[1]);
+  }, [preflight]);
+
+  const blockedShots = preflight?.issues.length ?? 0;
+
   return (
     <div className="rounded-lg border border-zinc-800 bg-zinc-900/60 p-4">
-      <div className="flex items-center justify-between mb-3">
+      <div className="mb-3 flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <Shield size={16} className="text-zinc-400" />
           <h2 className="text-sm font-semibold text-zinc-200">
-            Preflight Validation
+            Readiness
           </h2>
         </div>
         <button
-          onClick={onRun}
-          disabled={running}
-          className="flex items-center gap-1.5 rounded-md border border-zinc-700 px-3 py-1 text-xs font-medium text-zinc-300 hover:bg-zinc-800 disabled:opacity-50"
+          onClick={onRerun}
+          disabled={loading}
+          className="flex h-8 items-center gap-1.5 rounded-md border border-zinc-700 px-3 text-xs font-medium text-zinc-300 hover:bg-zinc-800 disabled:opacity-50"
         >
-          {running ? (
+          {loading ? (
             <Loader2 size={12} className="animate-spin" />
           ) : (
             <Shield size={12} />
           )}
-          Run Preflight
+          Run preflight
         </button>
       </div>
 
-      {!result && (
-        <p className="text-xs text-zinc-500 italic">
-          Run preflight validation to check if the project is ready for generation.
+      {error && (
+        <div className="flex items-start gap-2 rounded-md border border-red-800 bg-red-900/30 px-3 py-2 text-sm text-red-300">
+          <AlertCircle size={14} className="mt-0.5 shrink-0" />
+          <span>{error}</span>
+        </div>
+      )}
+
+      {!preflight && !error && (
+        <p className="text-sm text-zinc-500">
+          {loading
+            ? "Checking every shot, workflow and provider..."
+            : "Run preflight to check whether this project can generate."}
         </p>
       )}
 
-      {result && (
-        <div className="space-y-2">
+      {preflight && (
+        <div className="space-y-3">
           <div
             className={`flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium ${
-              result.ready
+              preflight.ready
                 ? "bg-green-900/30 text-green-300"
                 : "bg-red-900/30 text-red-300"
             }`}
           >
-            {result.ready ? (
+            {preflight.ready ? (
               <CheckCircle2 size={14} />
             ) : (
               <XCircle size={14} />
             )}
-            {result.ready
-              ? `All ${result.total_shots} shot(s) ready to generate`
-              : `${result.ready_shots} of ${result.total_shots} shot(s) ready`}
+            {preflight.ready
+              ? `All ${preflight.total_shots} shot(s) ready to generate`
+              : `${preflight.ready_shots} of ${preflight.total_shots} shot(s) ready`}
           </div>
 
-          {/* Provider status and non-blocking notes */}
-          <div className="flex flex-wrap gap-3 text-xs text-zinc-500">
-            <span>
-              ComfyUI:{" "}
-              <span
-                className={
-                  result.comfyui_online ? "text-green-400" : "text-red-400"
-                }
-              >
-                {result.comfyui_online ? "online" : "offline"}
-              </span>
-              {result.comfyui_mock && (
-                <span className="ml-1 text-amber-400">(mock)</span>
-              )}
-            </span>
+          {/* Counters: the three numbers that decide whether to press Generate */}
+          <div className="flex flex-wrap gap-2">
+            <Chip tone={blockedShots > 0 ? "bad" : "ok"}>
+              {blockedShots} blocking issue{blockedShots === 1 ? "" : "s"}
+            </Chip>
+            <Chip tone={preflight.warnings.length > 0 ? "warn" : "muted"}>
+              {preflight.warnings.length} warning
+              {preflight.warnings.length === 1 ? "" : "s"}
+            </Chip>
+            {unrunnableWorkflows.length > 0 && (
+              <Chip tone="warn">
+                {unrunnableWorkflows.length} workflow
+                {unrunnableWorkflows.length === 1 ? "" : "s"} not API-format
+              </Chip>
+            )}
           </div>
 
-          {result.warnings.map((warning, i) => (
+          {/* Providers and whether any of them is a stand-in */}
+          <div className="flex flex-wrap gap-2">
+            {catalogue?.providers.map((provider) => {
+              const live = mediaHealth?.providers.find(
+                (p) => p.id === provider.id,
+              );
+              const role =
+                provider.id === catalogue.video_provider_id
+                  ? provider.id === catalogue.default_image_provider_id
+                    ? "image + video"
+                    : "video"
+                  : "image";
+              const tone: Tone = !provider.configured
+                ? "muted"
+                : live?.mock
+                  ? "warn"
+                  : live?.online
+                    ? "ok"
+                    : "bad";
+              return (
+                <Chip key={provider.id} tone={tone}>
+                  {provider.label} ({role}):{" "}
+                  {!provider.configured
+                    ? `set ${provider.api_key_env} to enable`
+                    : live?.mock
+                      ? "deterministic mock, not a real render"
+                      : live?.online
+                        ? "online"
+                        : "offline"}
+                </Chip>
+              );
+            })}
+            {preflight.comfyui_mock && !mediaHealth && (
+              <Chip tone="warn">
+                ComfyUI is mocked: output is deterministic placeholder media
+              </Chip>
+            )}
+          </div>
+
+          {preflight.warnings.map((warning) => (
             <div
-              key={i}
+              key={warning}
               className="flex items-start gap-2 rounded-md border border-amber-800/50 bg-amber-900/20 px-3 py-2 text-xs text-amber-300"
             >
               <AlertTriangle size={12} className="mt-0.5 shrink-0" />
@@ -110,67 +235,227 @@ function PreflightPanel({
             </div>
           ))}
 
-          {/* Per-workflow mapping validation */}
-          {result.workflow_checks.length > 0 && (
+          {/* One line per distinct problem, with how many shots have it. */}
+          {blockerGroups.length > 0 && (
             <div className="space-y-1">
-              <h4 className="text-[10px] font-medium uppercase tracking-wider text-zinc-500">
-                Workflow mapping
-              </h4>
-              {result.workflow_checks.map((check) => (
+              <h3 className="text-[11px] font-medium uppercase tracking-wider text-zinc-500">
+                Fix before generating
+              </h3>
+              {blockerGroups.map(([text, count]) => (
                 <div
-                  key={check.workflow_id}
-                  className="flex items-start gap-2 rounded-md bg-zinc-800/50 px-3 py-1.5 text-xs"
-                >
-                  {check.valid ? (
-                    <CheckCircle2 size={12} className="mt-0.5 shrink-0 text-green-500" />
-                  ) : (
-                    <XCircle size={12} className="mt-0.5 shrink-0 text-red-500" />
-                  )}
-                  <div className="min-w-0">
-                    <span className="font-medium text-zinc-300">
-                      {check.name || check.workflow_id.slice(0, 8)}
-                    </span>
-                    {check.errors.map((err, i) => (
-                      <p key={i} className="mt-0.5 text-red-400">{err}</p>
-                    ))}
-                    {check.warnings.map((warn, i) => (
-                      <p key={i} className="mt-0.5 text-amber-400">{warn}</p>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Shots that cannot be generated yet */}
-          {result.issues.length > 0 && (
-            <div className="space-y-1">
-              <h4 className="text-[10px] font-medium uppercase tracking-wider text-zinc-500">
-                Blocked shots
-              </h4>
-              {result.issues.map((issue) => (
-                <div
-                  key={issue.shot_id}
-                  className="flex items-start gap-2 rounded-md px-3 py-1.5 text-xs"
+                  key={text}
+                  className="flex items-start gap-2 rounded-md bg-zinc-800/50 px-3 py-1.5 text-xs text-zinc-300"
                 >
                   <XCircle size={12} className="mt-0.5 shrink-0 text-red-500" />
-                  <div className="min-w-0">
-                    <span className="font-medium text-zinc-300">
-                      Shot {issue.shot_order}
-                    </span>
-                    <span className="ml-1 font-mono text-zinc-500">
-                      {issue.shot_id.slice(0, 8)}
-                    </span>
-                    {issue.issues.map((text, i) => (
-                      <p key={i} className="mt-0.5 text-zinc-400">{text}</p>
-                    ))}
-                  </div>
+                  <span className="flex-1">{text}</span>
+                  <span className="shrink-0 rounded bg-zinc-700 px-1.5 py-0.5 text-[11px] text-zinc-200">
+                    {count} shot{count === 1 ? "" : "s"}
+                  </span>
                 </div>
               ))}
             </div>
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+// ── Cost / run panel ─────────────────────────────────────────────────────
+
+function RunPanel({
+  estimate,
+  loading,
+  error,
+  providerLabel,
+  onGenerate,
+  generating,
+  generateError,
+  queuePaused,
+  onPause,
+  onResume,
+  queueBusy,
+}: {
+  estimate: GenerationEstimate | undefined;
+  loading: boolean;
+  error: string | null;
+  providerLabel: (id: MediaProviderId) => string;
+  onGenerate: () => void;
+  generating: boolean;
+  generateError: string | null;
+  queuePaused: boolean;
+  onPause: () => void;
+  onResume: () => void;
+  queueBusy: boolean;
+}) {
+  const nothingToRun = !!estimate && estimate.shot_count === 0;
+  const paid = !!estimate?.requires_confirmation;
+
+  return (
+    <div className="rounded-lg border border-zinc-800 bg-zinc-900/60 p-4">
+      <div className="mb-3 flex items-center gap-2">
+        <Zap size={16} className="text-zinc-400" />
+        <h2 className="text-sm font-semibold text-zinc-200">
+          This run
+        </h2>
+      </div>
+
+      {loading && (
+        <div className="flex items-center gap-2 text-sm text-zinc-500">
+          <Loader2 size={14} className="animate-spin" />
+          Working out what Generate would run...
+        </div>
+      )}
+
+      {error && (
+        <div className="flex items-start gap-2 rounded-md border border-red-800 bg-red-900/30 px-3 py-2 text-sm text-red-300">
+          <AlertCircle size={14} className="mt-0.5 shrink-0" />
+          <span>{error}</span>
+        </div>
+      )}
+
+      {estimate && (
+        <div className="space-y-3">
+          {nothingToRun ? (
+            <p className="text-sm text-zinc-500">
+              No shots are ready to generate. Clear the blocking issues above
+              first.
+            </p>
+          ) : (
+            <>
+              {/* Per-provider breakdown: who runs what, and for how much. */}
+              <div className="overflow-hidden rounded-md border border-zinc-800">
+                <table className="w-full text-left">
+                  <thead>
+                    <tr className="border-b border-zinc-800 text-[11px] uppercase tracking-wider text-zinc-500">
+                      <th className="px-3 py-2">Provider</th>
+                      <th className="px-3 py-2">Model</th>
+                      <th className="px-3 py-2">Shots</th>
+                      <th className="px-3 py-2">Estimated cost</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {estimate.providers.map((entry) => (
+                      <tr
+                        key={entry.provider_id}
+                        className="border-t border-zinc-800 text-xs"
+                      >
+                        <td className="px-3 py-2 text-zinc-200">
+                          {providerLabel(entry.provider_id)}
+                          {!entry.configured && (
+                            <span className="ml-1.5 text-red-400">
+                              not configured here
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2 font-mono text-zinc-400">
+                          {entry.model}
+                        </td>
+                        <td className="px-3 py-2 text-zinc-300">
+                          {entry.shot_count}
+                        </td>
+                        <td className="px-3 py-2 text-zinc-300">
+                          {!entry.paid
+                            ? "No API charge (local)"
+                            : entry.estimated_cost_usd !== null
+                              ? formatUsd(entry.estimated_cost_usd)
+                              : "No published rate"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* The cost basis is only shown where there is a cost. */}
+              {paid ? (
+                <div className="rounded-md border border-amber-800/60 bg-amber-900/20 px-3 py-2">
+                  <p className="text-sm font-medium text-amber-200">
+                    {estimate.estimated_cost_usd !== null
+                      ? `Estimated total ${formatUsd(estimate.estimated_cost_usd)} for ${estimate.paid_shot_count} paid shot(s)`
+                      : `${estimate.paid_shot_count} paid shot(s); no published rate to total`}
+                  </p>
+                  {estimate.providers
+                    .filter((p) => p.paid && p.cost_basis)
+                    .map((p) => (
+                      <p
+                        key={p.provider_id}
+                        className="mt-1 text-xs text-amber-100/80"
+                      >
+                        {p.cost_basis}
+                      </p>
+                    ))}
+                  {estimate.unpriced_paid_shots > 0 && (
+                    <p className="mt-1 text-xs text-amber-100/80">
+                      {estimate.unpriced_paid_shots} paid shot(s) have no
+                      published rate, so the total above is not the whole
+                      charge.
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <p className="text-sm text-zinc-400">
+                  {estimate.shot_count} shot(s) run locally. No vendor charge,
+                  so no confirmation is required.
+                </p>
+              )}
+
+              {estimate.blockers.map((blocker) => (
+                <div
+                  key={blocker}
+                  className="flex items-start gap-2 rounded-md border border-red-800/60 bg-red-900/20 px-3 py-2 text-xs text-red-300"
+                >
+                  <AlertCircle size={12} className="mt-0.5 shrink-0" />
+                  <span>{blocker}</span>
+                </div>
+              ))}
+            </>
+          )}
+        </div>
+      )}
+
+      {generateError && (
+        <div className="mt-3 flex items-start gap-2 rounded-md border border-red-800 bg-red-900/30 px-3 py-2 text-sm text-red-300">
+          <AlertCircle size={14} className="mt-0.5 shrink-0" />
+          <span>{generateError}</span>
+        </div>
+      )}
+
+      {/* Controls */}
+      <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-zinc-800 pt-3">
+        {queuePaused ? (
+          <button
+            onClick={onResume}
+            disabled={queueBusy}
+            className="flex h-9 items-center gap-1.5 rounded-md bg-green-700 px-3.5 text-xs font-medium text-green-100 hover:bg-green-600 disabled:opacity-50"
+          >
+            <Play size={13} /> Resume queue
+          </button>
+        ) : (
+          <button
+            onClick={onPause}
+            disabled={queueBusy}
+            className="flex h-9 items-center gap-1.5 rounded-md border border-yellow-700 px-3.5 text-xs font-medium text-yellow-300 hover:bg-yellow-900/30 disabled:opacity-50"
+          >
+            <Pause size={13} /> Pause queue
+          </button>
+        )}
+
+        <div className="flex-1" />
+
+        <button
+          onClick={onGenerate}
+          disabled={generating || loading || !estimate || nothingToRun}
+          className="flex h-9 items-center gap-1.5 rounded-md bg-indigo-600 px-4 text-sm font-medium text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {generating ? (
+            <Loader2 size={14} className="animate-spin" />
+          ) : (
+            <Zap size={14} />
+          )}
+          {paid ? "Generate (review cost)" : "Generate"}
+        </button>
+      </div>
     </div>
   );
 }
@@ -190,12 +475,10 @@ function WorkflowFormatPanel({ workflow }: { workflow: Workflow }) {
     queryFn: () => api.workflows.analysis(workflow.id),
   });
 
-  if (workflow.source_format === "api") return null;
-
   const analysis = analysisQ.data;
 
   return (
-    <div className="rounded-lg border border-amber-800/60 bg-amber-900/15 p-4 space-y-3">
+    <div className="space-y-3 rounded-lg border border-amber-800/60 bg-amber-900/15 p-4">
       <div className="flex items-center gap-2">
         <AlertTriangle size={14} className="text-amber-400" />
         <h3 className="text-sm font-semibold text-amber-200">
@@ -205,14 +488,20 @@ function WorkflowFormatPanel({ workflow }: { workflow: Workflow }) {
 
       <p className="text-xs text-amber-100/80">
         ComfyUI only executes API-format JSON. Open this workflow in ComfyUI and
-        choose <span className="font-medium">Workflow → Export (API)</span>, then
-        import that file here and map its nodes.
+        choose <span className="font-medium">Workflow &rarr; Export (API)</span>,
+        then import that file here and map its nodes.
       </p>
 
       {analysisQ.isLoading && (
         <div className="flex items-center gap-2 text-xs text-zinc-400">
           <Loader2 size={12} className="animate-spin" /> Analysing workflow...
         </div>
+      )}
+
+      {analysisQ.isError && (
+        <p className="text-xs text-red-300">
+          {toAIError(analysisQ.error).detail}
+        </p>
       )}
 
       {analysis && (
@@ -246,7 +535,7 @@ function WorkflowFormatPanel({ workflow }: { workflow: Workflow }) {
           {/* What the mapping will look like after export */}
           {analysis.mapping_candidates.length > 0 && (
             <div className="space-y-1">
-              <h4 className="text-[10px] font-medium uppercase tracking-wider text-zinc-500">
+              <h4 className="text-[11px] font-medium uppercase tracking-wider text-zinc-500">
                 Candidate mappings (confirm after API export)
               </h4>
               {analysis.mapping_candidates.map((c) => (
@@ -254,15 +543,15 @@ function WorkflowFormatPanel({ workflow }: { workflow: Workflow }) {
                   key={c.logical_field}
                   className="flex items-center gap-2 rounded-md bg-zinc-800/50 px-3 py-1 text-xs"
                 >
-                  <span className="font-mono text-indigo-300 min-w-[120px]">
+                  <span className="min-w-[120px] font-mono text-indigo-300">
                     {c.logical_field}
                   </span>
-                  <span className="text-zinc-500">→</span>
-                  <span className="text-zinc-300 truncate">
+                  <span className="text-zinc-500">&rarr;</span>
+                  <span className="truncate text-zinc-300">
                     {c.node_class}.{c.input_name}
                   </span>
                   {!c.exposed && (
-                    <span className="ml-auto shrink-0 rounded bg-zinc-700 px-1.5 py-0.5 text-[10px] text-zinc-300">
+                    <span className="ml-auto shrink-0 rounded bg-zinc-700 px-1.5 py-0.5 text-[11px] text-zinc-300">
                       inside subgraph
                     </span>
                   )}
@@ -278,8 +567,8 @@ function WorkflowFormatPanel({ workflow }: { workflow: Workflow }) {
             </div>
           )}
 
-          {analysis.warnings.map((w, i) => (
-            <p key={i} className="text-xs text-amber-300/80">
+          {analysis.warnings.map((w) => (
+            <p key={w} className="text-xs text-amber-300/80">
               {w}
             </p>
           ))}
@@ -294,22 +583,22 @@ function WorkflowFormatPanel({ workflow }: { workflow: Workflow }) {
 function JobRow({
   job,
   projectId,
+  providerLabel,
 }: {
   job: GenerationJob;
   projectId: string;
+  providerLabel: (id: MediaProviderId) => string;
 }) {
   const qc = useQueryClient();
 
   const cancelMut = useMutation({
     mutationFn: () => api.generation.cancelJob(job.id),
-    onSuccess: () =>
-      qc.invalidateQueries({ queryKey: ["jobs", projectId] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["jobs", projectId] }),
   });
 
   const retryMut = useMutation({
     mutationFn: () => api.generation.retryJob(job.id),
-    onSuccess: () =>
-      qc.invalidateQueries({ queryKey: ["jobs", projectId] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["jobs", projectId] }),
   });
 
   const statusIcon = () => {
@@ -329,13 +618,29 @@ function JobRow({
     }
   };
 
+  const actionError = cancelMut.isError
+    ? toAIError(cancelMut.error).detail
+    : retryMut.isError
+      ? toAIError(retryMut.error).detail
+      : null;
+
   return (
     <tr className="border-t border-zinc-800 hover:bg-zinc-800/30">
-      <td className="px-3 py-2 text-xs text-zinc-500 font-mono">
-        {job.id.slice(0, 8)}...
+      <td className="px-3 py-2 font-mono text-xs text-zinc-500">
+        {job.shot_id.slice(0, 8)}
       </td>
-      <td className="px-3 py-2 text-xs text-zinc-500 font-mono">
-        {job.shot_id.slice(0, 8)}...
+      <td className="px-3 py-2 text-xs text-zinc-300">
+        <div className="flex flex-wrap items-center gap-1">
+          {providerLabel(job.media_provider_id)}
+          {isMockJob(job) && (
+            <span className="rounded bg-amber-900 px-1.5 py-0.5 text-[11px] font-medium text-amber-300">
+              mock
+            </span>
+          )}
+        </div>
+      </td>
+      <td className="px-3 py-2 font-mono text-xs text-zinc-400">
+        {job.media_model || "--"}
       </td>
       <td className="px-3 py-2">
         <div className="flex items-center gap-1.5">
@@ -344,18 +649,24 @@ function JobRow({
         </div>
       </td>
       <td className="px-3 py-2 text-xs text-zinc-400">{job.attempts}</td>
+      <td className="px-3 py-2 text-xs text-zinc-300">
+        {job.estimated_cost_usd !== null
+          ? formatUsd(job.estimated_cost_usd)
+          : "--"}
+      </td>
       <td className="px-3 py-2 text-xs text-zinc-500">
         {job.seed !== null ? job.seed : "--"}
       </td>
       <td className="px-3 py-2 text-xs text-zinc-500">
-        {job.created_at
-          ? new Date(job.created_at).toLocaleTimeString()
-          : "--"}
+        {job.created_at ? new Date(job.created_at).toLocaleTimeString() : "--"}
       </td>
       <td className="px-3 py-2">
-        {job.error_message && (
-          <span className="text-xs text-red-400 truncate max-w-[150px] inline-block">
-            {job.error_message}
+        {(job.error_message || actionError) && (
+          <span
+            className="inline-block max-w-[200px] truncate text-xs text-red-400"
+            title={actionError ?? job.error_message ?? ""}
+          >
+            {actionError ?? job.error_message}
           </span>
         )}
       </td>
@@ -365,20 +676,20 @@ function JobRow({
             <button
               onClick={() => cancelMut.mutate()}
               disabled={cancelMut.isPending}
-              className="rounded p-1 text-zinc-500 hover:bg-red-900/50 hover:text-red-400"
+              className="rounded p-1.5 text-zinc-500 hover:bg-red-900/50 hover:text-red-400"
               title="Cancel"
             >
-              <Ban size={13} />
+              <Ban size={14} />
             </button>
           )}
           {(job.status === "Failed" || job.status === "Cancelled") && (
             <button
               onClick={() => retryMut.mutate()}
               disabled={retryMut.isPending}
-              className="rounded p-1 text-zinc-500 hover:bg-blue-900/50 hover:text-blue-400"
+              className="rounded p-1.5 text-zinc-500 hover:bg-blue-900/50 hover:text-blue-400"
               title="Retry"
             >
-              <RefreshCw size={13} />
+              <RefreshCw size={14} />
             </button>
           )}
         </div>
@@ -395,13 +706,41 @@ export default function GeneratePage() {
   const { currentProjectId, queuePaused } = useAppState();
   const dispatch = useAppDispatch();
   const qc = useQueryClient();
-  const [preflight, setPreflight] = useState<PreflightResult | null>(null);
-  const [selectedWorkflowId, setSelectedWorkflowId] = useState<string>("");
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  // Analysing a workflow is a real backend cost, so the diagnostics queries
+  // only mount once the disclosure has actually been opened.
+  const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
 
   // ── Queries ────────────────────────────────────────────────────────────
   const workflowsQ = useQuery({
     queryKey: ["workflows"],
     queryFn: api.workflows.list,
+  });
+
+  const providersQ = useQuery({
+    queryKey: ["media-providers"],
+    queryFn: api.media.providers,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const mediaHealthQ = useQuery({
+    queryKey: ["media-health"],
+    queryFn: api.media.health,
+    refetchInterval: 30_000,
+  });
+
+  const preflightQ = useQuery({
+    queryKey: ["preflight", currentProjectId],
+    queryFn: () => api.generation.preflight(currentProjectId!),
+    enabled: !!currentProjectId,
+  });
+
+  // Safe to fetch on load: the estimate endpoint creates nothing and calls no
+  // vendor API, so the cost is on screen before Generate is ever pressed.
+  const estimateQ = useQuery({
+    queryKey: ["generation-estimate", currentProjectId],
+    queryFn: () => api.generation.estimate(currentProjectId!),
+    enabled: !!currentProjectId,
   });
 
   const jobsQ = useQuery({
@@ -412,36 +751,38 @@ export default function GeneratePage() {
   });
 
   // ── Mutations ──────────────────────────────────────────────────────────
-  const preflightMut = useMutation({
-    mutationFn: () => api.generation.preflight(currentProjectId!),
-    onSuccess: (data) => setPreflight(data),
-  });
-
   const generateMut = useMutation({
-    mutationFn: () => api.generation.start(currentProjectId!),
+    mutationFn: (confirmPaid: boolean) =>
+      api.generation.start(currentProjectId!, undefined, confirmPaid),
     onSuccess: () => {
+      setConfirmOpen(false);
       qc.invalidateQueries({ queryKey: ["jobs", currentProjectId] });
+      qc.invalidateQueries({ queryKey: ["preflight", currentProjectId] });
+      qc.invalidateQueries({ queryKey: ["generation-estimate", currentProjectId] });
     },
   });
 
   const pauseMut = useMutation({
     mutationFn: () => api.generation.pauseQueue(currentProjectId!),
-    onSuccess: () =>
-      dispatch({ type: "SET_QUEUE_PAUSED", paused: true }),
+    onSuccess: () => dispatch({ type: "SET_QUEUE_PAUSED", paused: true }),
   });
 
   const resumeMut = useMutation({
     mutationFn: () => api.generation.resumeQueue(currentProjectId!),
-    onSuccess: () =>
-      dispatch({ type: "SET_QUEUE_PAUSED", paused: false }),
+    onSuccess: () => dispatch({ type: "SET_QUEUE_PAUSED", paused: false }),
   });
+
+  const providerLabel = (id: MediaProviderId) =>
+    providersQ.data?.providers.find((p) => p.id === id)?.label ?? id;
 
   // ── No project ─────────────────────────────────────────────────────────
   if (!currentProjectId) {
     return (
-      <div className="flex h-full flex-col items-center justify-center text-center px-8">
+      <div className="flex h-full flex-col items-center justify-center px-8 text-center">
         <Zap size={32} className="mb-3 text-zinc-600" />
-        <h2 className="text-lg font-semibold text-zinc-300">No Project Selected</h2>
+        <h2 className="text-lg font-semibold text-zinc-300">
+          No Project Selected
+        </h2>
         <p className="mt-1 text-sm text-zinc-500">
           Go to the Story page and create or select a project first.
         </p>
@@ -449,109 +790,70 @@ export default function GeneratePage() {
     );
   }
 
-  const queuedCount = jobsQ.data?.filter((j) => j.status === "Queued").length ?? 0;
-  const runningCount = jobsQ.data?.filter((j) => j.status === "Running").length ?? 0;
-  const completedCount = jobsQ.data?.filter((j) => j.status === "Completed").length ?? 0;
-  const failedCount = jobsQ.data?.filter((j) => j.status === "Failed").length ?? 0;
+  const estimate = estimateQ.data;
+  const jobs = jobsQ.data;
+  const unrunnableWorkflows =
+    workflowsQ.data?.filter((w) => w.source_format !== "api") ?? [];
+
+  const queuedCount = jobs?.filter((j) => j.status === "Queued").length ?? 0;
+  const runningCount = jobs?.filter((j) => j.status === "Running").length ?? 0;
+  const completedCount =
+    jobs?.filter((j) => j.status === "Completed").length ?? 0;
+  const failedCount = jobs?.filter((j) => j.status === "Failed").length ?? 0;
+
+  const onGenerate = () => {
+    if (!estimate) return;
+    generateMut.reset();
+    if (estimate.requires_confirmation) {
+      // A metered provider is involved: the amount has to be acknowledged
+      // before the request is allowed to carry confirm_paid_generation.
+      setConfirmOpen(true);
+      return;
+    }
+    generateMut.mutate(false);
+  };
+
+  const generateError = generateMut.isError
+    ? toAIError(generateMut.error).detail
+    : null;
 
   return (
-    <div className="mx-auto max-w-5xl px-6 py-6 space-y-6">
+    <div className="mx-auto max-w-6xl space-y-6 px-6 py-6">
       {/* Header */}
       <div className="flex items-center gap-3">
         <Zap size={20} className="text-indigo-400" />
         <h1 className="text-lg font-semibold text-zinc-100">Generate</h1>
       </div>
 
-      {/* Preflight */}
-      <PreflightPanel
-        result={preflight}
-        onRun={() => preflightMut.mutate()}
-        running={preflightMut.isPending}
+      <ReadinessSummary
+        preflight={preflightQ.data}
+        loading={preflightQ.isFetching}
+        error={preflightQ.isError ? toAIError(preflightQ.error).detail : null}
+        onRerun={() => preflightQ.refetch()}
+        catalogue={providersQ.data}
+        mediaHealth={mediaHealthQ.data}
+        unrunnableWorkflows={unrunnableWorkflows}
       />
 
-      {/* Any registered workflow ComfyUI cannot execute */}
-      {workflowsQ.data
-        ?.filter((w) => w.source_format !== "api")
-        .map((w) => (
-          <WorkflowFormatPanel key={w.id} workflow={w} />
-        ))}
-
-      {/* Controls */}
-      <div className="flex flex-wrap items-center gap-4 rounded-lg border border-zinc-800 bg-zinc-900/60 px-4 py-3">
-        {/* Workflow selector */}
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-medium text-zinc-400">Workflow:</span>
-          <select
-            value={selectedWorkflowId}
-            onChange={(e) => setSelectedWorkflowId(e.target.value)}
-            className="rounded-md px-2 py-1 text-xs min-w-[180px]"
-          >
-            <option value="">-- Default --</option>
-            {workflowsQ.data?.map((w) => (
-              <option key={w.id} value={w.id}>
-                {w.name} ({w.purpose})
-                {w.source_format !== "api" ? " -- not runnable" : ""}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div className="flex-1" />
-
-        {/* Queue controls */}
-        {queuePaused ? (
-          <button
-            onClick={() => resumeMut.mutate()}
-            disabled={resumeMut.isPending}
-            className="flex items-center gap-1.5 rounded-md bg-green-700 px-3 py-1.5 text-xs font-medium text-green-100 hover:bg-green-600 disabled:opacity-50"
-          >
-            <Play size={12} /> Resume Queue
-          </button>
-        ) : (
-          <button
-            onClick={() => pauseMut.mutate()}
-            disabled={pauseMut.isPending}
-            className="flex items-center gap-1.5 rounded-md border border-yellow-700 px-3 py-1.5 text-xs font-medium text-yellow-300 hover:bg-yellow-900/30 disabled:opacity-50"
-          >
-            <Pause size={12} /> Pause Queue
-          </button>
-        )}
-
-        {/* Generate button */}
-        <button
-          onClick={() => {
-            if (
-              window.confirm(
-                "Start generation for all Ready shots in this project?",
-              )
-            ) {
-              generateMut.mutate();
-            }
-          }}
-          disabled={generateMut.isPending}
-          className="flex items-center gap-1.5 rounded-md bg-indigo-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
-        >
-          {generateMut.isPending ? (
-            <Loader2 size={14} className="animate-spin" />
-          ) : (
-            <Zap size={14} />
-          )}
-          Generate
-        </button>
-      </div>
-
-      {generateMut.isError && (
-        <div className="flex items-center gap-2 rounded-md border border-red-800 bg-red-900/30 px-4 py-2 text-sm text-red-300">
-          <AlertCircle size={14} />
-          {(generateMut.error as Error).message || "Generation failed to start."}
-        </div>
-      )}
+      <RunPanel
+        estimate={estimate}
+        loading={estimateQ.isLoading}
+        error={estimateQ.isError ? toAIError(estimateQ.error).detail : null}
+        providerLabel={providerLabel}
+        onGenerate={onGenerate}
+        generating={generateMut.isPending && !confirmOpen}
+        generateError={confirmOpen ? null : generateError}
+        queuePaused={queuePaused}
+        onPause={() => pauseMut.mutate()}
+        onResume={() => resumeMut.mutate()}
+        queueBusy={pauseMut.isPending || resumeMut.isPending}
+      />
 
       {/* Stats bar */}
-      {jobsQ.data && jobsQ.data.length > 0 && (
+      {jobs && jobs.length > 0 && (
         <div className="flex gap-4 text-xs">
           <span className="text-zinc-500">
-            Total: <span className="text-zinc-300">{jobsQ.data.length}</span>
+            Total: <span className="text-zinc-300">{jobs.length}</span>
           </span>
           <span className="text-blue-400">Queued: {queuedCount}</span>
           <span className="text-yellow-400">Running: {runningCount}</span>
@@ -561,35 +863,45 @@ export default function GeneratePage() {
       )}
 
       {/* Jobs table */}
-      <div className="rounded-lg border border-zinc-800 bg-zinc-900/60 overflow-hidden">
+      <div className="overflow-hidden rounded-lg border border-zinc-800 bg-zinc-900/60">
         <div className="border-b border-zinc-800 px-4 py-2.5">
           <h2 className="text-sm font-semibold text-zinc-200">Job Queue</h2>
         </div>
 
         {jobsQ.isLoading && (
-          <div className="flex items-center gap-2 px-4 py-8 text-sm text-zinc-500 justify-center">
+          <div className="flex items-center justify-center gap-2 px-4 py-8 text-sm text-zinc-500">
             <Loader2 size={14} className="animate-spin" /> Loading jobs...
           </div>
         )}
 
-        {jobsQ.data && jobsQ.data.length === 0 && (
+        {jobsQ.isError && (
+          <div className="flex items-start gap-2 px-4 py-6 text-sm text-red-300">
+            <AlertCircle size={14} className="mt-0.5 shrink-0" />
+            {toAIError(jobsQ.error).detail}
+          </div>
+        )}
+
+        {jobs && jobs.length === 0 && (
           <div className="flex flex-col items-center py-12 text-center">
             <Clock size={24} className="mb-2 text-zinc-600" />
             <p className="text-sm text-zinc-500">
-              No generation jobs yet. Run preflight and click Generate to start.
+              No generation jobs yet. Clear preflight and press Generate to
+              start.
             </p>
           </div>
         )}
 
-        {jobsQ.data && jobsQ.data.length > 0 && (
+        {jobs && jobs.length > 0 && (
           <div className="overflow-x-auto">
             <table className="w-full text-left">
               <thead>
-                <tr className="text-[10px] uppercase tracking-wider text-zinc-500 border-b border-zinc-800">
-                  <th className="px-3 py-2">Job ID</th>
+                <tr className="border-b border-zinc-800 text-[11px] uppercase tracking-wider text-zinc-500">
                   <th className="px-3 py-2">Shot</th>
+                  <th className="px-3 py-2">Provider</th>
+                  <th className="px-3 py-2">Model</th>
                   <th className="px-3 py-2">Status</th>
                   <th className="px-3 py-2">Attempts</th>
+                  <th className="px-3 py-2">Est. cost</th>
                   <th className="px-3 py-2">Seed</th>
                   <th className="px-3 py-2">Created</th>
                   <th className="px-3 py-2">Error</th>
@@ -597,14 +909,213 @@ export default function GeneratePage() {
                 </tr>
               </thead>
               <tbody>
-                {jobsQ.data.map((job) => (
-                  <JobRow key={job.id} job={job} projectId={currentProjectId} />
+                {jobs.map((job) => (
+                  <JobRow
+                    key={job.id}
+                    job={job}
+                    projectId={currentProjectId}
+                    providerLabel={providerLabel}
+                  />
                 ))}
               </tbody>
             </table>
           </div>
         )}
       </div>
+
+      {/* Advanced diagnostics: everything needed to fix a workflow, and
+          nothing needed to decide whether to generate. */}
+      <details
+        className="rounded-lg border border-zinc-800 bg-zinc-900/40"
+        onToggle={(e) => setDiagnosticsOpen(e.currentTarget.open)}
+      >
+        <summary className="flex cursor-pointer items-center gap-2 px-4 py-3 text-sm font-medium text-zinc-300">
+          <Wrench size={14} className="text-zinc-500" />
+          Advanced diagnostics
+          <span className="text-xs font-normal text-zinc-500">
+            workflow formats, node mappings, per-shot preflight detail
+          </span>
+        </summary>
+
+        {diagnosticsOpen && (
+          <div className="space-y-4 border-t border-zinc-800 px-4 py-4">
+            {/* Registered workflows ComfyUI cannot execute */}
+            {unrunnableWorkflows.map((w) => (
+              <WorkflowFormatPanel key={w.id} workflow={w} />
+            ))}
+
+            {/* Mapping validation per workflow */}
+            {preflightQ.data && preflightQ.data.workflow_checks.length > 0 && (
+              <div className="space-y-1">
+                <h3 className="text-[11px] font-medium uppercase tracking-wider text-zinc-500">
+                  Workflow mapping
+                </h3>
+                {preflightQ.data.workflow_checks.map((check) => (
+                  <div
+                    key={check.workflow_id}
+                    className="flex items-start gap-2 rounded-md bg-zinc-800/50 px-3 py-1.5 text-xs"
+                  >
+                    {check.valid ? (
+                      <CheckCircle2
+                        size={12}
+                        className="mt-0.5 shrink-0 text-green-500"
+                      />
+                    ) : (
+                      <XCircle
+                        size={12}
+                        className="mt-0.5 shrink-0 text-red-500"
+                      />
+                    )}
+                    <div className="min-w-0">
+                      <span className="font-medium text-zinc-300">
+                        {check.name || check.workflow_id.slice(0, 8)}
+                      </span>
+                      <span className="ml-1.5 text-zinc-500">
+                        {check.source_format}-format
+                      </span>
+                      {check.errors.map((err) => (
+                        <p key={err} className="mt-0.5 text-red-400">
+                          {err}
+                        </p>
+                      ))}
+                      {check.warnings.map((warn) => (
+                        <p key={warn} className="mt-0.5 text-amber-400">
+                          {warn}
+                        </p>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Per-shot preflight detail behind the grouped summary above */}
+            {preflightQ.data && preflightQ.data.issues.length > 0 && (
+              <div className="space-y-1">
+                <h3 className="text-[11px] font-medium uppercase tracking-wider text-zinc-500">
+                  Blocked shots
+                </h3>
+                {preflightQ.data.issues.map((issue) => (
+                  <div
+                    key={issue.shot_id}
+                    className="flex items-start gap-2 rounded-md px-3 py-1.5 text-xs"
+                  >
+                    <XCircle size={12} className="mt-0.5 shrink-0 text-red-500" />
+                    <div className="min-w-0">
+                      <span className="font-medium text-zinc-300">
+                        Shot {issue.shot_order}
+                      </span>
+                      <span className="ml-1 font-mono text-zinc-500">
+                        {issue.shot_id.slice(0, 8)}
+                      </span>
+                      {issue.issues.map((text) => (
+                        <p key={text} className="mt-0.5 text-zinc-400">
+                          {text}
+                        </p>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Per-shot plan: exactly what each shot would submit */}
+            {estimate && estimate.shots.length > 0 && (
+              <div className="space-y-1">
+                <h3 className="text-[11px] font-medium uppercase tracking-wider text-zinc-500">
+                  Planned per shot
+                </h3>
+                {estimate.shots.map((plan) => (
+                  <div
+                    key={plan.shot_id}
+                    className="flex flex-wrap items-center gap-2 rounded-md bg-zinc-800/50 px-3 py-1.5 text-xs"
+                  >
+                    <span className="font-mono text-zinc-400">
+                      {plan.shot_id.slice(0, 8)}
+                    </span>
+                    <span className="text-zinc-300">
+                      {providerLabel(plan.provider_id)}
+                    </span>
+                    <span className="font-mono text-zinc-500">{plan.model}</span>
+                    <span className="text-zinc-500">{plan.generation_mode}</span>
+                    <span className="ml-auto text-zinc-300">
+                      {plan.paid
+                        ? plan.estimated_cost_usd !== null
+                          ? formatUsd(plan.estimated_cost_usd)
+                          : "no published rate"
+                        : "local"}
+                    </span>
+                    {plan.blockers.map((b) => (
+                      <p key={b} className="w-full text-red-400">
+                        {b}
+                      </p>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {unrunnableWorkflows.length === 0 &&
+              !preflightQ.data?.issues.length && (
+                <p className="text-xs text-zinc-500">
+                  Nothing to report: every registered workflow is API-format and
+                  no shot is blocked.
+                </p>
+              )}
+          </div>
+        )}
+      </details>
+
+      {/* Paid-run gate. Only reachable when the estimate says a metered
+          provider is involved. */}
+      <CostConfirmDialog
+        open={confirmOpen}
+        title="This run uses a metered provider"
+        lines={
+          estimate
+            ? [
+                { label: "Shots in this run", value: String(estimate.shot_count) },
+                { label: "Paid shots", value: String(estimate.paid_shot_count) },
+                ...estimate.providers.map((p) => ({
+                  label: `${providerLabel(p.provider_id)} (${p.model})`,
+                  value: p.paid
+                    ? p.estimated_cost_usd !== null
+                      ? `${p.shot_count} shot(s), ${formatUsd(p.estimated_cost_usd)}`
+                      : `${p.shot_count} shot(s), no published rate`
+                    : `${p.shot_count} shot(s), no API charge`,
+                })),
+              ]
+            : []
+        }
+        amountText={
+          estimate?.estimated_cost_usd !== null &&
+          estimate?.estimated_cost_usd !== undefined
+            ? formatUsd(estimate.estimated_cost_usd)
+            : "No published rate for the selected model"
+        }
+        costBasis={
+          estimate?.providers.find((p) => p.paid && p.cost_basis)?.cost_basis
+        }
+        notes={[
+          ...(estimate && estimate.unpriced_paid_shots > 0
+            ? [
+                `${estimate.unpriced_paid_shots} paid shot(s) have no published rate, so the real charge may exceed the amount above.`,
+              ]
+            : []),
+          ...(estimate?.blockers ?? []),
+        ]}
+        confirmLabel="Generate now"
+        acknowledgement={
+          estimate?.estimated_cost_usd !== null &&
+          estimate?.estimated_cost_usd !== undefined
+            ? `I understand this starts ${estimate.paid_shot_count} paid generation(s) costing about ${formatUsd(estimate.estimated_cost_usd)}, billed to the account configured on this machine.`
+            : "I understand this starts paid generations billed to the account configured on this machine, at a rate this build cannot quote."
+        }
+        busy={generateMut.isPending}
+        error={generateError}
+        onCancel={() => setConfirmOpen(false)}
+        onConfirm={() => generateMut.mutate(true)}
+      />
     </div>
   );
 }

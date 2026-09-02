@@ -11,8 +11,13 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models import GenerationJob, Project, Scene, Shot, Take
-from app.schemas import GenerationJobResponse, TakeResponse, TakeReviewRequest
-from app.services import job_payload
+from app.schemas import (
+    GenerationJobResponse,
+    RegenerateRequest,
+    TakeResponse,
+    TakeReviewRequest,
+)
+from app.services import generation_planning, job_payload, media_providers
 
 router = APIRouter(tags=["review"])
 
@@ -157,16 +162,64 @@ def reject_take(
     "/api/shots/{shot_id}/regenerate",
     response_model=GenerationJobResponse,
 )
-def regenerate_shot(shot_id: str, db: Session = Depends(get_db)):
+def regenerate_shot(
+    shot_id: str,
+    payload: RegenerateRequest | None = None,
+    db: Session = Depends(get_db),
+):
     """
     Create a new generation job for a shot. This is used when all takes
     are rejected and the user wants new results.
+
+    Routing and the paid-generation gate are the same as a project-wide
+    Generate: regenerating a shot that is routed to a metered provider costs
+    money too, so it needs the same explicit confirmation.
     """
     shot = db.query(Shot).filter(Shot.id == shot_id).first()
     if not shot:
         raise HTTPException(status_code=404, detail="Shot not found")
 
-    # Find the most recent job for this shot to reuse workflow/parameters
+    scene = db.query(Scene).filter(Scene.id == shot.scene_id).first()
+    project = (
+        db.query(Project).filter(Project.id == scene.project_id).first()
+        if scene
+        else None
+    )
+    if project is None:
+        raise HTTPException(
+            status_code=404, detail="Shot is not attached to a project"
+        )
+
+    plan = generation_planning.plan_shot(db, project, shot)
+    confirmed = bool(payload and payload.confirm_paid_generation)
+    if plan.paid and not confirmed:
+        amount = (
+            f"about ${plan.estimated_cost_usd:.2f}"
+            if plan.estimated_cost_usd is not None
+            else "an unpriced amount"
+        )
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"This shot regenerates through {plan.provider_id}, which is "
+                f"metered, and would cost {amount}. Re-send with "
+                f"confirm_paid_generation set to true to authorise it."
+            ),
+        )
+    if plan.paid and not media_providers.is_configured(plan.provider_id):
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"{plan.provider_id} is selected for this shot but "
+                f"{media_providers.API_KEY_ENV[plan.provider_id]} is not set on "
+                f"this machine. Add it to your local .env and restart the "
+                f"backend, or switch the shot back to local ComfyUI."
+            ),
+        )
+
+    # Reuse the previous job's compiled parameters so a regeneration differs
+    # only by seed, but take routing from the current plan: the shot's provider
+    # may have been changed since that job ran.
     last_job = (
         db.query(GenerationJob)
         .filter(GenerationJob.shot_id == shot_id)
@@ -174,25 +227,33 @@ def regenerate_shot(shot_id: str, db: Session = Depends(get_db)):
         .first()
     )
 
-    workflow_id = shot.workflow_preset_id
-    workflow_version = ""
-    parameter_map = {}
-
-    if last_job:
-        workflow_id = last_job.workflow_id or workflow_id
-        workflow_version = last_job.workflow_version
-        parameter_map = dict(last_job.parameter_map) if last_job.parameter_map else {}
+    parameter_map = (
+        dict(last_job.parameter_map)
+        if last_job and last_job.parameter_map
+        else {}
+    )
 
     # Generate new seed for regeneration
     seed = random.randint(0, 2**31 - 1)
     parameter_map[job_payload.SEED] = seed
 
+    request_params = dict(plan.request_params)
+    if plan.paid:
+        request_params["paid_generation_confirmed"] = True
+        request_params["cost_basis"] = plan.cost_basis
+
     job = GenerationJob(
         id=str(uuid.uuid4()),
         shot_id=shot_id,
-        workflow_id=workflow_id,
-        workflow_version=workflow_version,
+        workflow_id=plan.workflow_id,
+        workflow_version=plan.workflow_version,
         parameter_map=parameter_map,
+        media_provider_id=plan.provider_id,
+        media_model=plan.model,
+        request_params=request_params,
+        usage={},
+        estimated_cost_usd=plan.estimated_cost_usd,
+        provenance={},
         seed=seed,
         status="Queued",
         attempts=0,

@@ -1,9 +1,18 @@
 /* ──────────────────────────────────────────────────────────────────────────
-   Inspector -- collapsible right-side detail panel.
+   Inspector -- right-side detail panel.
    Shows contextual information depending on what is currently selected:
    a Shot, a Scene, or a Take.
+
+   Two shapes, chosen by AppLayout:
+   * "docked"  the resident right panel. Its empty state is deliberately
+     narrow so an unused inspector does not hold a fifth of the screen.
+   * "drawer"  an overlay sheet for viewports under 1024px, closed by Escape
+     or by the scrim. Focus moves into the panel on open and returns to the
+     button that opened it; the drawer does not trap focus, so Tab can still
+     leave it rather than stranding a keyboard user.
    ────────────────────────────────────────────────────────────────────────── */
 
+import { useEffect, useRef } from "react";
 import {
   PanelRightClose,
   PanelRightOpen,
@@ -13,9 +22,11 @@ import {
   ThumbsUp,
   ThumbsDown,
   RefreshCw,
+  X,
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import StatusBadge from "./StatusBadge";
+import TakePreview from "./TakePreview";
 import { useAppState, useAppDispatch } from "../store/useProjectStore";
 import api from "../api/client";
 import type { Shot, Scene, Take } from "../types";
@@ -25,10 +36,14 @@ import type { Shot, Scene, Take } from "../types";
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="mb-3">
-      <dt className="text-[11px] font-medium uppercase tracking-wider text-zinc-500">
+      {/* zinc-400 rather than 500/600: on the zinc-950 panel the darker steps
+          fall under 4.5:1 in the dark theme. */}
+      <dt className="text-[11px] font-medium uppercase tracking-wider text-zinc-400">
         {label}
       </dt>
-      <dd className="mt-0.5 text-sm text-zinc-200 break-words">{children || <span className="text-zinc-600 italic">--</span>}</dd>
+      <dd className="mt-0.5 text-sm text-zinc-200 break-words">
+        {children || <span className="text-zinc-400 italic">--</span>}
+      </dd>
     </div>
   );
 }
@@ -122,14 +137,7 @@ function TakePanel({ take }: { take: Take }) {
         <StatusBadge status={take.review_status} />
       </div>
 
-      {/* Thumbnail placeholder */}
-      <div className="mb-3 flex h-36 items-center justify-center rounded-lg border border-zinc-700 bg-zinc-800 text-xs text-zinc-500">
-        {take.thumbnail_path ? (
-          <span className="truncate px-2">{take.thumbnail_path}</span>
-        ) : (
-          "No preview available"
-        )}
-      </div>
+      <TakePreview take={take} className="mb-3" />
 
       <Field label="File">{take.file_path || "N/A"}</Field>
       <Field label="Resolution">
@@ -145,16 +153,16 @@ function TakePanel({ take }: { take: Take }) {
           <button
             onClick={() => approveMut.mutate()}
             disabled={approveMut.isPending}
-            className="flex flex-1 items-center justify-center gap-1.5 rounded-md bg-green-700 px-3 py-1.5 text-xs font-medium text-green-100 hover:bg-green-600 disabled:opacity-50"
+            className="flex h-9 flex-1 items-center justify-center gap-1.5 rounded-md bg-green-700 px-3 text-xs font-medium text-green-50 hover:bg-green-600 disabled:opacity-50"
           >
-            <ThumbsUp size={13} /> Approve
+            <ThumbsUp size={14} /> Approve
           </button>
           <button
             onClick={() => rejectMut.mutate()}
             disabled={rejectMut.isPending}
-            className="flex flex-1 items-center justify-center gap-1.5 rounded-md bg-red-800 px-3 py-1.5 text-xs font-medium text-red-200 hover:bg-red-700 disabled:opacity-50"
+            className="flex h-9 flex-1 items-center justify-center gap-1.5 rounded-md bg-red-800 px-3 text-xs font-medium text-red-50 hover:bg-red-700 disabled:opacity-50"
           >
-            <ThumbsDown size={13} /> Reject
+            <ThumbsDown size={14} /> Reject
           </button>
         </div>
       )}
@@ -162,9 +170,9 @@ function TakePanel({ take }: { take: Take }) {
       <button
         onClick={() => regenMut.mutate()}
         disabled={regenMut.isPending}
-        className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-md border border-zinc-700 px-3 py-1.5 text-xs font-medium text-zinc-300 hover:bg-zinc-800 disabled:opacity-50"
+        className="mt-2 flex h-9 w-full items-center justify-center gap-1.5 rounded-md border border-zinc-700 px-3 text-xs font-medium text-zinc-200 hover:bg-zinc-800 disabled:opacity-50"
       >
-        <RefreshCw size={13} /> Regenerate
+        <RefreshCw size={14} /> Regenerate
       </button>
     </dl>
   );
@@ -174,12 +182,12 @@ function TakePanel({ take }: { take: Take }) {
 
 function EmptyInspector() {
   return (
-    <div className="flex h-full flex-col items-center justify-center px-4 text-center">
+    <div className="flex h-full flex-col items-center justify-center px-3 text-center">
       <div className="mb-2 rounded-lg bg-zinc-800 p-3">
-        <Layers size={20} className="text-zinc-500" />
+        <Layers size={20} className="text-zinc-400" />
       </div>
-      <p className="text-sm text-zinc-500">
-        Select a scene, shot, or take to inspect its details here.
+      <p className="text-xs text-zinc-400">
+        Select a scene, shot, or take to inspect it.
       </p>
     </div>
   );
@@ -187,10 +195,15 @@ function EmptyInspector() {
 
 // ── Main Inspector component ─────────────────────────────────────────────
 
-export default function Inspector() {
+export default function Inspector({
+  variant = "docked",
+}: {
+  variant?: "docked" | "drawer";
+}) {
   const { inspectorOpen, currentProjectId, selectedShotId, selectedSceneId, selectedTakeId } =
     useAppState();
   const dispatch = useAppDispatch();
+  const panelRef = useRef<HTMLElement>(null);
 
   // Fetch selected entities when IDs are present.
   // We call the shots endpoint with scene context. Because we may not always know
@@ -217,45 +230,121 @@ export default function Inspector() {
     enabled: !!currentProjectId && !!selectedSceneId && !!selectedShotId,
   });
 
-  const toggleBtn = (
-    <button
-      onClick={() => dispatch({ type: "TOGGLE_INSPECTOR" })}
-      className="absolute top-3 right-3 z-10 rounded-md p-1 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300"
-      title={inspectorOpen ? "Collapse inspector" : "Expand inspector"}
-    >
-      {inspectorOpen ? <PanelRightClose size={16} /> : <PanelRightOpen size={16} />}
-    </button>
+  const isDrawer = variant === "drawer";
+  const close = () => dispatch({ type: "SET_INSPECTOR", open: false });
+
+  // Escape closes the drawer. Only bound while it is open, so the key stays
+  // free for the pages underneath the rest of the time.
+  useEffect(() => {
+    if (!isDrawer || !inspectorOpen) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") dispatch({ type: "SET_INSPECTOR", open: false });
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [isDrawer, inspectorOpen, dispatch]);
+
+  // Move focus into the sheet on open, and hand it back to the toggle on
+  // close -- but only if focus is still inside the sheet, so a resize that
+  // swaps the variant does not yank focus away from wherever the user is.
+  useEffect(() => {
+    if (!isDrawer || !inspectorOpen) return;
+    const panel = panelRef.current;
+    panel?.focus();
+    return () => {
+      if (!panel?.contains(document.activeElement)) return;
+      document.querySelector<HTMLElement>("[data-inspector-toggle]")?.focus();
+    };
+  }, [isDrawer, inspectorOpen]);
+
+  // Determine what to show -- priority: take > shot > scene > empty
+  let content: React.ReactNode = <EmptyInspector />;
+  let hasSelection = false;
+
+  if (selectedTakeId && selectedTake) {
+    content = <TakePanel take={selectedTake} />;
+    hasSelection = true;
+  } else if (selectedShotId && selectedShot) {
+    content = <ShotPanel shot={selectedShot} />;
+    hasSelection = true;
+  } else if (selectedSceneId && selectedScene) {
+    content = <ScenePanel scene={selectedScene} />;
+    hasSelection = true;
+  }
+
+  const header = (
+    <div className="flex h-11 shrink-0 items-center border-b border-zinc-800 px-3">
+      <h2 className="flex-1 text-xs font-semibold uppercase tracking-wider text-zinc-300">
+        Inspector
+      </h2>
+      <button
+        type="button"
+        onClick={close}
+        title="Close inspector"
+        className="flex h-8 w-8 items-center justify-center rounded-md text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
+      >
+        {isDrawer ? <X size={16} /> : <PanelRightClose size={16} />}
+        <span className="sr-only">Close inspector</span>
+      </button>
+    </div>
   );
+
+  if (isDrawer) {
+    if (!inspectorOpen) return null;
+
+    return (
+      <div className="fixed inset-0 z-40 flex">
+        {/* A literal black scrim: the light theme mirrors the zinc ramp, so a
+            zinc-950 overlay would be white there and read as a flash. */}
+        <div
+          role="presentation"
+          onClick={close}
+          className="flex-1 bg-black/50 backdrop-blur-[1px]"
+        />
+        <aside
+          ref={panelRef}
+          tabIndex={-1}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Inspector"
+          className="flex h-full w-[min(360px,88vw)] flex-col bg-zinc-950 shadow-2xl outline-none panel-border-l"
+        >
+          {header}
+          <div className="flex-1 overflow-y-auto px-3 py-3">{content}</div>
+        </aside>
+      </div>
+    );
+  }
 
   if (!inspectorOpen) {
     return (
-      <aside className="relative flex w-10 flex-col items-center bg-zinc-950 pt-12 panel-border-l transition-panel">
-        {toggleBtn}
+      <aside className="flex w-11 shrink-0 flex-col items-center bg-zinc-950 pt-3 panel-border-l transition-panel">
+        <button
+          type="button"
+          data-inspector-toggle
+          onClick={() => dispatch({ type: "TOGGLE_INSPECTOR" })}
+          aria-expanded={false}
+          title="Expand inspector"
+          className="flex h-9 w-9 items-center justify-center rounded-md text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
+        >
+          <PanelRightOpen size={16} />
+          <span className="sr-only">Expand inspector</span>
+        </button>
       </aside>
     );
   }
 
-  // Determine what to show -- priority: take > shot > scene > empty
-  let content: React.ReactNode = <EmptyInspector />;
-
-  if (selectedTakeId && selectedTake) {
-    content = (
-      <TakePanel take={selectedTake} />
-    );
-  } else if (selectedShotId && selectedShot) {
-    content = <ShotPanel shot={selectedShot} />;
-  } else if (selectedSceneId && selectedScene) {
-    content = <ScenePanel scene={selectedScene} />;
-  }
-
   return (
-    <aside className="relative flex w-[350px] shrink-0 flex-col overflow-hidden bg-zinc-950 panel-border-l transition-panel">
-      {toggleBtn}
-      <div className="border-b border-zinc-800 px-4 py-3">
-        <h2 className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
-          Inspector
-        </h2>
-      </div>
+    // The empty inspector shrinks to 208px: wide enough to explain itself,
+    // narrow enough that an unused panel is not holding a fifth of a 1440px
+    // screen (UI audit P1 #5).
+    <aside
+      aria-label="Inspector"
+      className={`flex shrink-0 flex-col overflow-hidden bg-zinc-950 panel-border-l transition-panel ${
+        hasSelection ? "w-[350px]" : "w-[208px]"
+      }`}
+    >
+      {header}
       <div className="flex-1 overflow-y-auto px-4 py-3">{content}</div>
     </aside>
   );

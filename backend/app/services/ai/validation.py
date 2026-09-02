@@ -91,6 +91,24 @@ def _describe(error: ValidationError) -> str:
     return f"{where}: {error.message}"
 
 
+def validate_object(data: dict[str, Any], schema: dict[str, Any]) -> dict[str, Any]:
+    """Check an already-parsed object against ``schema``.
+
+    Used both for a fresh provider response and for a draft a client sends
+    back to be applied: a draft that arrived over the wire gets exactly the
+    same check as one that just came from the model, so nothing reaches the
+    database on the strength of having been seen before.
+    """
+    validator = Draft202012Validator(schema)
+    errors = sorted(validator.iter_errors(data), key=lambda e: list(e.absolute_path))
+    if errors:
+        detail = _describe(errors[0])
+        if len(errors) > 1:
+            detail += f" (and {len(errors) - 1} other schema problem(s))"
+        raise SchemaViolation("schema_violation", detail)
+    return data
+
+
 def validate_against_schema(
     text: str, schema: dict[str, Any]
 ) -> dict[str, Any]:
@@ -101,14 +119,4 @@ def validate_against_schema(
     first failure in document order, so the retry feedback names one concrete
     fault rather than a wall of them.
     """
-    data = parse_json_object(text)
-
-    validator = Draft202012Validator(schema)
-    errors = sorted(validator.iter_errors(data), key=lambda e: list(e.absolute_path))
-    if errors:
-        detail = _describe(errors[0])
-        if len(errors) > 1:
-            detail += f" (and {len(errors) - 1} other schema problem(s))"
-        raise SchemaViolation("schema_violation", detail)
-
-    return data
+    return validate_object(parse_json_object(text), schema)

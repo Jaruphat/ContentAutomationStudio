@@ -20,8 +20,8 @@ from sqlalchemy.orm import Session
 
 from app.database import SessionLocal
 from app.models import GenerationJob, Project, Scene, Shot, Take
-from app.services import error_classifier
-from app.services.comfyui_adapter import ComfyUIProvider, JobStatusEnum
+from app.services import error_classifier, media_providers
+from app.services.comfyui_adapter import ComfyUIProvider, JobStatusEnum, MediaProvider
 from app.services.job_payload import WorkflowValidationError, build_payload
 from app.services.mock_provider import MockComfyUIProvider
 
@@ -173,6 +173,26 @@ class QueueManager:
             shot.status = "Generating"
             db.commit()
 
+        # Which vendor runs this job is a property of the job, not of the
+        # queue: an OpenAI still and a ComfyUI video can sit side by side in
+        # the same queue and both end up as ordinary takes.
+        try:
+            provider = self._provider_for_job(job)
+        except media_providers.UnknownMediaProviderError as exc:
+            self._fail_permanently(db, job, shot, "UnknownMediaProvider", str(exc))
+            return
+
+        provider_id = job.media_provider_id or media_providers.COMFYUI
+        if not media_providers.is_configured(provider_id):
+            self._fail_permanently(
+                db, job, shot, "ProviderNotConfigured",
+                f"Media provider '{provider_id}' is not configured on this "
+                f"machine. Set "
+                f"{media_providers.API_KEY_ENV.get(provider_id, 'its credentials')} "
+                f"in your local .env and restart the backend.",
+            )
+            return
+
         try:
             # Resolve the registered workflow JSON and inject this job's
             # logical parameter values through the workflow's node mapping.
@@ -181,7 +201,7 @@ class QueueManager:
                 built = build_payload(
                     db,
                     job,
-                    require_workflow=self._provider.requires_workflow_payload,
+                    require_workflow=provider.requires_workflow_payload,
                 )
             except WorkflowValidationError as exc:
                 self._fail_permanently(
@@ -193,7 +213,7 @@ class QueueManager:
             job.workflow_sha256 = built.workflow_sha256
             db.commit()
 
-            prompt_id = await self._provider.submit_job(
+            prompt_id = await provider.submit_job(
                 built.payload, job.id, context=self._job_context(db, job, shot)
             )
             job.comfyui_prompt_id = prompt_id
@@ -206,10 +226,11 @@ class QueueManager:
                     logger.info("Job %s cancelled while running; stopping poll", job.id)
                     return
 
-                status = await self._provider.get_job_status(prompt_id)
+                status = await provider.get_job_status(prompt_id)
 
                 if status.status == JobStatusEnum.COMPLETED:
-                    outputs = await self._provider.get_job_outputs(prompt_id)
+                    outputs = await provider.get_job_outputs(prompt_id)
+                    provenance = self._record_provenance(job, provider, prompt_id)
                     job.status = "Completed"
                     job.completed_at = datetime.now(timezone.utc)
                     job.outputs = [
@@ -223,7 +244,10 @@ class QueueManager:
                     ]
                     db.commit()
 
-                    # Create Take records for each output
+                    # Create Take records for each output. Each one carries the
+                    # provider, model, request parameters, usage, cost and seed
+                    # that produced it, so a take's origin stays auditable long
+                    # after the job row's context is forgotten.
                     for o in outputs:
                         take = Take(
                             id=str(uuid.uuid4()),
@@ -236,6 +260,13 @@ class QueueManager:
                             height=o.height,
                             frame_rate=o.frame_rate,
                             codec=o.codec,
+                            media_provider_id=job.media_provider_id
+                            or media_providers.COMFYUI,
+                            media_model=job.media_model or "workflow",
+                            request_params=dict(job.request_params or {}),
+                            usage=dict(job.usage or {}),
+                            estimated_cost_usd=job.estimated_cost_usd,
+                            provenance=dict(provenance),
                             review_status="Pending",
                         )
                         db.add(take)
@@ -319,17 +350,79 @@ class QueueManager:
             shot.status = "Failed"
         db.commit()
 
+    def _provider_for_job(self, job: GenerationJob) -> MediaProvider:
+        """The adapter that runs this job.
+
+        ComfyUI work uses whichever adapter *this* manager was configured with,
+        mock or real, so the queue keeps a single source of truth for local
+        generation. Anything else is looked up in the media provider registry.
+
+        Jobs written before per-shot provider selection existed have no
+        ``media_provider_id``, so they resolve to ComfyUI - the behaviour they
+        were queued with.
+        """
+        provider_id = job.media_provider_id or media_providers.COMFYUI
+        if provider_id == media_providers.COMFYUI:
+            return self._provider
+        return media_providers.get_provider(provider_id)
+
+    def _record_provenance(
+        self, job: GenerationJob, provider: MediaProvider, prompt_id: str
+    ) -> dict[str, Any]:
+        """Fold whatever the provider knows about the run into the job row.
+
+        A provider that reports nothing leaves the job's own record - provider
+        id, model, request parameters, seed - as the whole story, which is the
+        ComfyUI case.
+        """
+        try:
+            reported = provider.get_provenance(prompt_id) or {}
+        except Exception:  # pragma: no cover - a provider bug must not lose a take
+            logger.exception("Provider provenance failed for job %s", job.id)
+            reported = {}
+
+        provenance: dict[str, Any] = {
+            "provider_id": job.media_provider_id or media_providers.COMFYUI,
+            "model": job.media_model or "workflow",
+            "prompt_id": prompt_id,
+            "workflow_id": job.workflow_id,
+            "workflow_version": job.workflow_version or "",
+            "workflow_sha256": job.workflow_sha256 or "",
+            "workflow_snapshot_path": job.workflow_snapshot_path or "",
+            "seed": job.seed,
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+        }
+        provenance.update(reported)
+
+        if reported.get("request_params"):
+            merged = dict(job.request_params or {})
+            merged.update(reported["request_params"])
+            job.request_params = merged
+        if reported.get("usage"):
+            job.usage = dict(reported["usage"])
+        if reported.get("estimated_cost_usd") is not None:
+            job.estimated_cost_usd = reported["estimated_cost_usd"]
+        job.provenance = provenance
+        return provenance
+
     def _job_context(
         self, db: Session, job: GenerationJob, shot: Shot | None
     ) -> dict[str, Any]:
         """Advisory metadata describing the media this job should produce."""
         params = job.parameter_map or {}
+        request_params = job.request_params or {}
         context: dict[str, Any] = {
             "generation_mode": shot.generation_mode if shot else "image",
             "width": params.get("width"),
             "height": params.get("height"),
             "frames": params.get("frames"),
             "duration_sec": shot.planned_duration_sec if shot else 0.0,
+            # What the job was authorised with, so the run cannot quietly
+            # differ from the cost that was confirmed.
+            "provider_id": job.media_provider_id or media_providers.COMFYUI,
+            "model": job.media_model or "workflow",
+            "size": request_params.get("size"),
+            "quality": request_params.get("quality"),
         }
         if shot:
             scene = db.query(Scene).filter(Scene.id == shot.scene_id).first()

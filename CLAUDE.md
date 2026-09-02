@@ -30,6 +30,8 @@ A runnable vertical slice:
 - Use schemas and migrations; avoid hardcoded sample logic in core services.
 - Must run on Windows with paths containing spaces and Unicode.
 - Store generated runtime data under project-local ignored directories.
+- The studio is provider-agnostic, not ComfyUI-only: use OpenAI first for story/scene/shot/prompt generation; support image generation per shot through either local ComfyUI or the OpenAI Images API; use ComfyUI H3 as the initial video provider; assemble approved images/videos locally with FFmpeg.
+- Define separate text-AI and media-generation provider interfaces. Persist provider, model/workflow, request parameters, cost/usage when available, seed, and provenance on every take; expose provider selection in the UI without leaking API keys.
 
 ## UX Direction
 Production cockpit:
@@ -38,6 +40,7 @@ Production cockpit:
 - Right: inspector for prompt, camera, references, seed, workflow and take
 - States: Draft / Ready / Generating / Needs Review / Approved / Failed
 - Approval gates before Generate and Final Render
+- Provide a visible light/dark theme toggle, persist the choice locally, honor the system preference on first visit, and verify contrast/readability in both themes.
 
 ## Quality Gates
 Before claiming completion:

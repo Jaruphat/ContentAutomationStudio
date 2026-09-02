@@ -22,6 +22,7 @@ from app.routers import (
     ai,
     exports,
     generation,
+    media,
     projects,
     review,
     scenes,
@@ -164,6 +165,7 @@ app.include_router(review.router)
 app.include_router(timeline.router)
 app.include_router(exports.router)
 app.include_router(ai.router)
+app.include_router(media.router)
 
 
 # ---------------------------------------------------------------------------

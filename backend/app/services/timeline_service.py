@@ -130,6 +130,30 @@ def get_timeline_manifest(db: Session, project_id: str) -> dict[str, Any]:
 
     total_duration = sum(i.duration_sec for i in items)
 
+    # One lookup for every referenced take, so each clip can carry the
+    # provider, model and cost that produced it. A manifest that only named a
+    # file path would leave a delivered cut with no record of what generated
+    # it - which is exactly the question asked after delivery.
+    take_ids = [item.take_id for item in items if item.take_id]
+    takes = (
+        {t.id: t for t in db.query(Take).filter(Take.id.in_(take_ids)).all()}
+        if take_ids
+        else {}
+    )
+
+    def _source(item: TimelineItem) -> dict[str, Any]:
+        take = takes.get(item.take_id) if item.take_id else None
+        if take is None:
+            return {}
+        return {
+            "file_path": take.file_path,
+            "media_provider_id": take.media_provider_id or "comfyui",
+            "media_model": take.media_model or "workflow",
+            "estimated_cost_usd": take.estimated_cost_usd,
+            "review_status": take.review_status,
+            "provenance": take.provenance or {},
+        }
+
     return {
         "project_id": project_id,
         "item_count": len(items),
@@ -146,6 +170,7 @@ def get_timeline_manifest(db: Session, project_id: str) -> dict[str, Any]:
                 "duration_sec": item.duration_sec,
                 "transition_in": item.transition_in,
                 "transition_out": item.transition_out,
+                "source": _source(item),
             }
             for item in items
         ],

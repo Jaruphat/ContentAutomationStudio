@@ -78,6 +78,31 @@ html.theme-light {
   --color-orange-300: #9a3412;
 }
 
+/* ══════════════════════════════════════════════════════════════════════════
+   Type scale
+   ──────────────────────────────────────────────────────────────────────────
+   The audit read the whole cockpit as a step too small (P1 #4). `text-xs` is
+   the workhorse for table rows, card bodies and diagnostics across every page,
+   so raising that one step to 13px lifts body copy app-wide without editing
+   several thousand lines of markup -- and without a page being fixed in one
+   place and forgotten in another.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+@theme {
+  --text-xs: 0.8125rem;
+  --text-xs--line-height: calc(1.125 / 0.8125);
+}
+
+/* The 10px and 11px arbitrary sizes are scattered across page components and
+   cannot be reached through the scale, so they get a floor instead: 12px is
+   the audit's minimum for metadata. Line height is deliberately left alone so
+   the `leading-*` utilities on the same elements keep working. Remove this
+   once those call sites move onto the scale. */
+.text-\[10px\],
+.text-\[11px\] {
+  font-size: 12px;
+}
+
 /* ── Base resets ───────────────────────────────────────────────────────── */
 
 html,
@@ -274,6 +299,19 @@ select {
   background-color: #27272a;
   color: #f4f4f5;
   border: 1px solid #3f3f46;
+  /* A text input's intrinsic width is about 20 characters, and as a grid item
+     that intrinsic width becomes its automatic minimum size -- two of them in
+     a `grid-cols-2` overflow a 390px viewport and hand the whole page a
+     horizontal scrollbar. */
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* Keeps single-line controls at the 32px minimum the audit asks for, whatever
+   padding a page happens to give them. */
+input:not([type="checkbox"]):not([type="radio"]),
+select {
+  min-height: 34px;
 }
 
 input:focus,
@@ -313,6 +351,21 @@ html.theme-light select:focus {
 
 html.theme-light :focus-visible {
   outline-color: #4f46e5;
+}
+
+/* ── Narrow-viewport form layout ───────────────────────────────────────────
+   Pages declare their desktop column count with a bare `grid-cols-2/3/4` and
+   no responsive variant. Collapsing those to one column below 640px is done
+   here rather than in each page so the phone layout cannot regress one page at
+   a time; the `sm:`/`lg:` variants generate different class names and are
+   untouched, so a page that has opted into a responsive grid keeps it.
+   ─────────────────────────────────────────────────────────────────────────*/
+@media (max-width: 639px) {
+  main .grid-cols-2,
+  main .grid-cols-3,
+  main .grid-cols-4 {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 /* ── Panel transition ──────────────────────────────────────────────────── */

@@ -148,6 +148,10 @@ export interface Shot {
   negative_prompt: string;
   reference_asset_ids: string[];
   workflow_preset_id: string | null;
+  /** Which provider generates this shot's stills. Video always uses ComfyUI. */
+  image_provider_id: MediaProviderId;
+  /** Model for a hosted image provider; "workflow" for local ComfyUI. */
+  image_model: string;
   seed_policy: string;
   status: ShotStatus;
   created_at: string;
@@ -245,6 +249,13 @@ export interface GenerationJob {
   /** SHA-256 of the registered workflow the snapshot was built from. */
   workflow_sha256: string | null;
   parameter_map: Record<string, unknown>;
+  /** Provider, model and request parameters this job was authorised with. */
+  media_provider_id: MediaProviderId;
+  media_model: string;
+  request_params: Record<string, unknown> | null;
+  usage: Record<string, unknown> | null;
+  estimated_cost_usd: number | null;
+  provenance: Record<string, unknown> | null;
   seed: number | null;
   comfyui_prompt_id: string | null;
   status: JobStatus;
@@ -269,6 +280,13 @@ export interface Take {
   height: number;
   frame_rate: number;
   codec: string;
+  /** Copied from the job that produced it, so a take's origin is auditable. */
+  media_provider_id: MediaProviderId;
+  media_model: string;
+  request_params: Record<string, unknown> | null;
+  usage: Record<string, unknown> | null;
+  estimated_cost_usd: number | null;
+  provenance: Record<string, unknown> | null;
   review_status: ReviewStatus;
   rating: number | null;
   notes: string;
@@ -543,6 +561,11 @@ export interface AITaskRequest {
   guidance?: string;
   /** False returns the draft without writing anything. */
   apply?: boolean;
+  /**
+   * A draft returned by an earlier preview. Sent with `apply` so the project
+   * receives exactly what was reviewed, with no second (billable) generation.
+   */
+  draft?: Record<string, unknown> | null;
 }
 
 export interface AIStoryboardRequest extends AITaskRequest {
@@ -588,6 +611,89 @@ export interface AISceneDraft {
 }
 
 // ── Form / create DTOs ───────────────────────────────────────────────────
+
+// ── Media generation providers ───────────────────────────────────────────
+
+export type MediaProviderId = "comfyui" | "openai";
+
+export interface MediaProviderModel {
+  id: string;
+  label: string;
+}
+
+export interface MediaProviderInfo {
+  id: MediaProviderId;
+  label: string;
+  /** Whether the required environment variable is set. Never a key value. */
+  configured: boolean;
+  local: boolean;
+  mock: boolean;
+  media_types: GenerationMode[];
+  default_model: string;
+  models: MediaProviderModel[];
+  /** Name of the variable to set, for the "not configured" message. */
+  api_key_env: string;
+  /** True when a generation on this provider is metered and must be confirmed. */
+  requires_confirmation: boolean;
+  cost_warning: string;
+  sizes: string[];
+  qualities: string[];
+}
+
+export interface MediaProviderCatalogue {
+  video_provider_id: MediaProviderId;
+  default_image_provider_id: MediaProviderId;
+  providers: MediaProviderInfo[];
+}
+
+export interface MediaProviderHealth {
+  id: MediaProviderId;
+  configured: boolean;
+  online: boolean;
+  mock: boolean;
+  model: string;
+  error: string;
+}
+
+export interface MediaHealthResponse {
+  providers: MediaProviderHealth[];
+}
+
+export interface GenerationProviderEstimate {
+  provider_id: MediaProviderId;
+  model: string;
+  shot_count: number;
+  paid: boolean;
+  configured: boolean;
+  estimated_cost_usd: number | null;
+  cost_basis: string;
+}
+
+export interface GenerationShotPlan {
+  shot_id: string;
+  generation_mode: GenerationMode;
+  provider_id: MediaProviderId;
+  model: string;
+  workflow_id: string | null;
+  estimated_cost_usd: number | null;
+  cost_basis: string;
+  paid: boolean;
+  blockers: string[];
+}
+
+/** What a Generate request would run, and what it is expected to cost. */
+export interface GenerationEstimate {
+  shot_count: number;
+  paid_shot_count: number;
+  requires_confirmation: boolean;
+  /** Sum over paid shots with a known rate; null when none are priced. */
+  estimated_cost_usd: number | null;
+  /** Paid shots with no published rate, so a partial total is never total. */
+  unpriced_paid_shots: number;
+  providers: GenerationProviderEstimate[];
+  shots: GenerationShotPlan[];
+  blockers: string[];
+}
 
 export type ProjectCreate = Partial<
   Omit<Project, "id" | "created_at" | "updated_at">

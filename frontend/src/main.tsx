@@ -4,7 +4,8 @@ import "./index.css";
 import App from "./App";
 import { initTheme } from "./theme";
 
-// Before the first render, so a light-mode user never sees a dark flash.
+// index.html sets the theme class before the first paint; this only re-asserts
+// it for entry points that load main.tsx without that inline bootstrap.
 initTheme();
 
 createRoot(document.getElementById("root")!).render(

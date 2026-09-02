@@ -13,6 +13,9 @@ import type {
   AIStoryboardRequest,
   AITaskRequest,
   AITaskResponse,
+  GenerationEstimate,
+  MediaHealthResponse,
+  MediaProviderCatalogue,
   Project,
   ProjectCreate,
   Character,
@@ -264,10 +267,27 @@ export const generation = {
       .get<PreflightResult>(`/projects/${projectId}/preflight`)
       .then((r) => r.data),
 
-  start: (projectId: string, shotIds?: string[]) =>
+  /**
+   * What the same request would run and cost. Creates nothing and calls no
+   * vendor API, so it is safe to fetch before every Generate.
+   */
+  estimate: (projectId: string, shotIds?: string[]) =>
+    http
+      .post<GenerationEstimate>(`/projects/${projectId}/generate/estimate`, {
+        shot_ids: shotIds ?? null,
+      })
+      .then((r) => r.data),
+
+  /**
+   * Queue the run. `confirmPaid` must be true when the estimate says a metered
+   * provider is involved; the backend refuses with 409 otherwise, so a paid
+   * run can never happen without the user having seen the price.
+   */
+  start: (projectId: string, shotIds?: string[], confirmPaid = false) =>
     http
       .post<GenerationJob[]>(`/projects/${projectId}/generate`, {
         shot_ids: shotIds ?? null,
+        confirm_paid_generation: confirmPaid,
       })
       .then((r) => r.data),
 
@@ -320,10 +340,30 @@ export const review = {
       .post<Take>(`/takes/${takeId}/reject`, { notes, rating })
       .then((r) => r.data),
 
-  regenerate: (shotId: string) =>
+  regenerate: (shotId: string, confirmPaid = false) =>
     http
-      .post<GenerationJob>(`/shots/${shotId}/regenerate`)
+      .post<GenerationJob>(`/shots/${shotId}/regenerate`, {
+        confirm_paid_generation: confirmPaid,
+      })
       .then((r) => r.data),
+
+  /**
+   * URL of a take's media, served by the backend. A take's file lives at an
+   * absolute path a browser cannot open, so previews go through the API.
+   */
+  mediaUrl: (takeId: string) => `/api/media/takes/${takeId}/file`,
+};
+
+// ── Media generation providers ───────────────────────────────────────────
+
+export const media = {
+  /** Catalogue of image/video providers. No network call on the backend. */
+  providers: () =>
+    http.get<MediaProviderCatalogue>("/media/providers").then((r) => r.data),
+
+  /** Live reachability. Unconfigured providers are reported without a call. */
+  health: () =>
+    http.get<MediaHealthResponse>("/media/health").then((r) => r.data),
 };
 
 // ── Timeline ─────────────────────────────────────────────────────────────
@@ -468,6 +508,7 @@ export const exports_ = {
 const api = {
   ai,
   health,
+  media,
   projects,
   characters,
   locations,

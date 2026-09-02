@@ -42,6 +42,7 @@ from app.services.ai.prompts import (
     build_story_bible_prompt,
 )
 from app.services.ai.task_schemas import SCHEMA_VERSIONS, TASK_SCHEMAS
+from app.services.ai.validation import SchemaViolation, validate_object
 
 logger = logging.getLogger("cas.ai.tasks")
 
@@ -100,6 +101,7 @@ def _provenance(result: StructuredResult, provider: AIProvider) -> dict[str, Any
     output.
     """
     return {
+        "source": "generated",
         "provider_id": result.provider_id,
         "model": result.model,
         "mock": getattr(provider, "id", "") == "mock",
@@ -109,6 +111,40 @@ def _provenance(result: StructuredResult, provider: AIProvider) -> dict[str, Any
         "latency_ms": result.latency_ms,
         "usage": result.usage.as_dict(),
         "response_id": result.response_id,
+        "generated_at": _utcnow().isoformat(),
+    }
+
+
+def _reviewed_draft(task: str, draft: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Validate a draft the user is applying, and describe where it came from.
+
+    The preview a user approves is applied verbatim rather than regenerated:
+    asking the provider a second time would write something the user never
+    saw, and would bill them twice for one decision. The draft still passes the
+    task's JSON Schema - arriving over the wire earns it no trust - and its
+    provenance is marked ``reviewed_draft`` so no record implies a generation
+    that did not happen at apply time.
+    """
+    try:
+        data = validate_object(dict(draft), TASK_SCHEMAS[task])
+    except SchemaViolation as exc:
+        raise AITaskError(
+            "bad_request",
+            f"The draft sent for '{task}' does not match the task schema and "
+            f"was not applied: {exc}",
+        ) from exc
+
+    return data, {
+        "source": "reviewed_draft",
+        "provider_id": "",
+        "model": "",
+        "mock": False,
+        "prompt_version": PROMPT_VERSIONS[task],
+        "schema_version": SCHEMA_VERSIONS[task],
+        "attempts": 0,
+        "latency_ms": 0,
+        "usage": {},
+        "response_id": "",
         "generated_at": _utcnow().isoformat(),
     }
 
@@ -200,16 +236,30 @@ def _require_source_text(project: Project) -> tuple[str, str]:
 async def generate_story_bible(
     db: Session,
     project: Project,
-    provider: AIProvider,
+    #: None is allowed only when a reviewed draft is being applied: that path
+    #: writes what the user already approved and calls no provider.
+    provider: AIProvider | None,
     *,
     guidance: str = "",
     apply: bool = False,
+    draft: dict[str, Any] | None = None,
 ) -> TaskOutcome:
     """Extract characters, locations and a visual style from brief and plot.
 
     Applying merges by name: an existing character keeps its id and gains the
     new detail, so scenes already referencing it stay valid.
     """
+    if apply and draft is not None:
+        data, provenance = _reviewed_draft("story_bible", draft)
+        return TaskOutcome(
+            task="story_bible",
+            data=data,
+            provenance=provenance,
+            applied=True,
+            summary=_apply_story_bible(db, project, data),
+            notes=str(data.get("notes") or ""),
+        )
+
     brief, plot = _require_source_text(project)
     characters, locations, styles = _bible(db, project.id)
 
@@ -341,7 +391,9 @@ def _apply_story_bible(
 async def generate_storyboard(
     db: Session,
     project: Project,
-    provider: AIProvider,
+    #: None is allowed only when a reviewed draft is being applied: that path
+    #: writes what the user already approved and calls no provider.
+    provider: AIProvider | None,
     *,
     scene_count: int = 3,
     min_shots: int = 9,
@@ -349,6 +401,7 @@ async def generate_storyboard(
     guidance: str = "",
     apply: bool = False,
     replace_existing: bool = False,
+    draft: dict[str, Any] | None = None,
 ) -> TaskOutcome:
     """Decompose the brief and plot into scenes and shots."""
     if not 1 <= scene_count <= MAX_SCENES:
@@ -375,6 +428,21 @@ async def generate_storyboard(
             f"would discard them along with their shots, jobs and takes. "
             f"Re-run with replace_existing set to true to confirm, or preview "
             f"the draft without applying it.",
+        )
+
+    if apply and draft is not None:
+        data, provenance = _reviewed_draft("scene_decomposition", draft)
+        summary, apply_warnings = _apply_storyboard(
+            db, project, data.get("scenes") or [], replace_existing,
+        )
+        return TaskOutcome(
+            task="scene_decomposition",
+            data=data,
+            provenance=provenance,
+            applied=True,
+            summary=summary,
+            warnings=apply_warnings,
+            notes=str(data.get("notes") or ""),
         )
 
     characters, locations, styles = _bible(db, project.id)
@@ -556,11 +624,14 @@ def _apply_storyboard(
 async def compile_shot_prompts(
     db: Session,
     project: Project,
-    provider: AIProvider,
+    #: None is allowed only when a reviewed draft is being applied: that path
+    #: writes what the user already approved and calls no provider.
+    provider: AIProvider | None,
     *,
     shot_ids: list[str] | None = None,
     guidance: str = "",
     apply: bool = False,
+    draft: dict[str, Any] | None = None,
 ) -> TaskOutcome:
     """Rewrite the image/video/negative prompts for a project's shots.
 
@@ -580,6 +651,21 @@ async def compile_shot_prompts(
             f"{len(shots)} shots is more than one request can compile without "
             f"the response being truncated. Select at most "
             f"{MAX_SHOTS_PER_COMPILE} shots per run.",
+        )
+
+    if apply and draft is not None:
+        data, provenance = _reviewed_draft("shot_prompts", draft)
+        summary, apply_warnings = _apply_shot_prompts(
+            db, project, shots, data.get("prompts") or [],
+        )
+        return TaskOutcome(
+            task="shot_prompts",
+            data=data,
+            provenance=provenance,
+            applied=True,
+            summary=summary,
+            warnings=apply_warnings,
+            notes=str(data.get("notes") or ""),
         )
 
     characters, locations, styles = _bible(db, project.id)

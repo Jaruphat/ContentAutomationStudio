@@ -23,11 +23,17 @@ from app.models import (
 )
 from app.schemas import (
     GenerateRequest,
+    GenerationEstimate,
     GenerationJobResponse,
     PreflightResult,
     QueueStatus,
 )
-from app.services import job_payload, workflow_registry
+from app.services import (
+    generation_planning,
+    job_payload,
+    media_providers,
+    workflow_registry,
+)
 from app.services.workflow_format import WorkflowFormat
 from app.services.prompt_compiler import compile_prompt
 from app.services.queue_manager import queue_manager
@@ -117,12 +123,13 @@ async def preflight_validation(project_id: str, db: Session = Depends(get_db)):
     workflow_checks: list[dict[str, Any]] = []
     workflow_ok: dict[str, bool] = {}
 
+    # One plan per shot, shared with /generate and /generate/estimate so
+    # preflight cannot approve a route the queue would not take.
+    plans = {shot.id: generation_planning.plan_shot(db, project, shot) for shot in shots}
+
     def _resolve_workflow_id(shot: Shot) -> str | None:
-        if shot.workflow_preset_id:
-            return shot.workflow_preset_id
-        if shot.generation_mode == "image":
-            return project.default_image_workflow_id
-        return project.default_video_workflow_id
+        # A shot generated through a hosted image API has no graph to validate.
+        return plans[shot.id].workflow_id
 
     referenced_ids = {
         wid for wid in (_resolve_workflow_id(s) for s in shots) if wid
@@ -216,19 +223,30 @@ async def preflight_validation(project_id: str, db: Session = Depends(get_db)):
     # -- Per-shot checks -------------------------------------------------
     for shot in shots:
         shot_issues: list[str] = []
+        plan = plans[shot.id]
 
         if shot.generation_mode == "image" and not shot.image_prompt:
             shot_issues.append("Missing image prompt")
         elif shot.generation_mode in ("video", "image-to-video") and not shot.video_prompt:
             shot_issues.append("Missing video prompt")
 
-        workflow_id = _resolve_workflow_id(shot)
-        if not workflow_id:
-            shot_issues.append("No workflow assigned (shot or project default)")
-        elif not workflow_ok.get(workflow_id, False):
-            shot_issues.append(
-                f"Assigned workflow '{workflow_id}' failed mapping validation"
-            )
+        # The plan reports a missing prompt too; it is already listed above,
+        # and repeating it as a provider blocker would read as two faults.
+        already_missing_prompt = bool(shot_issues)
+        shot_issues.extend(
+            blocker
+            for blocker in plan.blockers
+            if not (already_missing_prompt and "image prompt" in blocker)
+        )
+
+        if plan.provider_id == media_providers.COMFYUI:
+            workflow_id = plan.workflow_id
+            if not workflow_id:
+                shot_issues.append("No workflow assigned (shot or project default)")
+            elif not workflow_ok.get(workflow_id, False):
+                shot_issues.append(
+                    f"Assigned workflow '{workflow_id}' failed mapping validation"
+                )
 
         if shot.status not in ("Ready", "Draft", "Failed"):
             shot_issues.append(
@@ -244,6 +262,19 @@ async def preflight_validation(project_id: str, db: Session = Depends(get_db)):
             })
         else:
             ready_count += 1
+
+    # -- Paid generation ---------------------------------------------------
+    summary = generation_planning.summarise(list(plans.values()))
+    if summary["paid_shot_count"]:
+        total = summary["estimated_cost_usd"]
+        amount = f"about ${total:.2f}" if total is not None else "an unpriced amount"
+        unpriced = summary["unpriced_paid_shots"]
+        warnings.append(
+            f"{summary['paid_shot_count']} shot(s) are routed to a metered "
+            f"provider and will cost {amount}"
+            + (f", plus {unpriced} shot(s) with no published rate" if unpriced else "")
+            + ". Generation must be confirmed explicitly before it runs."
+        )
 
     return PreflightResult(
         ready=len(issues) == 0 and len(shots) > 0,
@@ -308,27 +339,58 @@ def start_generation(
     target_ids = set(payload.shot_ids) if payload.shot_ids else None
     eligible_statuses = {"Draft", "Ready", "Failed", "NeedsReview"}
 
+    selected = [
+        shot
+        for shot in all_shots
+        if not (target_ids and shot.id not in target_ids)
+        and shot.status in eligible_statuses
+    ]
+
+    # Nothing is queued until every metered shot in the selection has been
+    # authorised. Confirming is one explicit flag on the request, not a
+    # side-effect of clicking Generate, and it covers the whole selection so a
+    # user cannot approve one image and be charged for twelve.
+    plans = {shot.id: generation_planning.plan_shot(db, project, shot) for shot in selected}
+    summary = generation_planning.summarise(list(plans.values()))
+    if summary["requires_confirmation"] and not payload.confirm_paid_generation:
+        total = summary["estimated_cost_usd"]
+        amount = f"about ${total:.2f}" if total is not None else "an unpriced amount"
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"{summary['paid_shot_count']} of {summary['shot_count']} "
+                f"selected shot(s) generate through a metered provider and "
+                f"would cost {amount}. Re-send with confirm_paid_generation "
+                f"set to true to authorise this run."
+            ),
+        )
+
+    unconfigured = [
+        plan for plan in plans.values()
+        if plan.paid and not media_providers.is_configured(plan.provider_id)
+    ]
+    if unconfigured:
+        env_names = sorted(
+            media_providers.API_KEY_ENV.get(p.provider_id, "its credentials")
+            for p in unconfigured
+        )
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"{len(unconfigured)} selected shot(s) are routed to a provider "
+                f"this machine is not configured for. Set "
+                f"{', '.join(dict.fromkeys(env_names))} in your local .env and "
+                f"restart the backend, or switch those shots back to local "
+                f"ComfyUI."
+            ),
+        )
+
     created_jobs: list[GenerationJob] = []
 
-    for shot in all_shots:
-        if target_ids and shot.id not in target_ids:
-            continue
-        if shot.status not in eligible_statuses:
-            continue
-
-        # Determine workflow
-        workflow_id = shot.workflow_preset_id
-        if not workflow_id:
-            if shot.generation_mode == "image":
-                workflow_id = project.default_image_workflow_id
-            else:
-                workflow_id = project.default_video_workflow_id
-
-        workflow_version = ""
-        if workflow_id:
-            workflow = db.query(Workflow).filter(Workflow.id == workflow_id).first()
-            if workflow:
-                workflow_version = workflow.version
+    for shot in selected:
+        plan = plans[shot.id]
+        workflow_id = plan.workflow_id
+        workflow_version = plan.workflow_version
 
         # Compile prompt
         scene = db.query(Scene).filter(Scene.id == shot.scene_id).first()
@@ -386,12 +448,25 @@ def start_generation(
             ))
             parameter_map[job_payload.FRAMES] = frames
 
+        request_params = dict(plan.request_params)
+        if plan.paid:
+            # Recorded on the job, so an audit can show the run was authorised
+            # and what it was authorised to cost.
+            request_params["paid_generation_confirmed"] = True
+            request_params["cost_basis"] = plan.cost_basis
+
         job = GenerationJob(
             id=str(uuid.uuid4()),
             shot_id=shot.id,
             workflow_id=workflow_id,
             workflow_version=workflow_version,
             parameter_map=parameter_map,
+            media_provider_id=plan.provider_id,
+            media_model=plan.model,
+            request_params=request_params,
+            usage={},
+            estimated_cost_usd=plan.estimated_cost_usd,
+            provenance={},
             seed=seed,
             status="Queued",
             attempts=0,
@@ -407,6 +482,37 @@ def start_generation(
         db.refresh(job)
 
     return created_jobs
+
+
+@router.post(
+    "/api/projects/{project_id}/generate/estimate",
+    response_model=GenerationEstimate,
+)
+def estimate_generation(
+    project_id: str,
+    payload: GenerateRequest,
+    db: Session = Depends(get_db),
+):
+    """What the same request would generate, and what it would cost.
+
+    Called before Generate so the user sees the provider, model and price of a
+    run before authorising it. Creates nothing and calls no vendor API.
+    """
+    project = _get_project_or_404(db, project_id)
+    all_shots = _get_project_shots(db, project_id)
+
+    target_ids = set(payload.shot_ids) if payload.shot_ids else None
+    eligible_statuses = {"Draft", "Ready", "Failed", "NeedsReview"}
+    selected = [
+        shot
+        for shot in all_shots
+        if not (target_ids and shot.id not in target_ids)
+        and shot.status in eligible_statuses
+    ]
+
+    return generation_planning.summarise(
+        [generation_planning.plan_shot(db, project, shot) for shot in selected]
+    )
 
 
 # ---------------------------------------------------------------------------

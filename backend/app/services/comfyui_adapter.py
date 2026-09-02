@@ -156,3 +156,22 @@ class ComfyUIProvider(ABC):
             Health report including online flag and queue status.
         """
         ...
+
+    def get_provenance(self, prompt_id: str) -> dict[str, Any]:
+        """
+        Anything the provider can say about how a submitted job was run.
+
+        Recognised keys are ``provider_id``, ``model``, ``request_params``,
+        ``usage``, ``estimated_cost_usd`` and ``response_id``; a provider
+        returns only what it actually knows. The queue manager merges this into
+        the job and its takes, which is what makes a take's origin auditable
+        whoever produced it. Returning ``{}`` - the default - means "nothing
+        beyond what the job already records".
+        """
+        return {}
+
+
+#: The interface is not ComfyUI-specific: OpenAI Images implements it too, and
+#: business logic depends on this name rather than on any one vendor. The
+#: original name is kept as the class so existing imports keep working.
+MediaProvider = ComfyUIProvider

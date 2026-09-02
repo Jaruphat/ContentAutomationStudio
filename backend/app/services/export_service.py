@@ -67,6 +67,8 @@ def _build_storyboard_data(db: Session, project_id: str) -> list[dict[str, Any]]
                 "dialogue": shot.dialogue,
                 "planned_duration_sec": shot.planned_duration_sec,
                 "generation_mode": shot.generation_mode,
+                "image_provider_id": shot.image_provider_id or "comfyui",
+                "image_model": shot.image_model or "workflow",
                 "image_prompt": shot.image_prompt,
                 "video_prompt": shot.video_prompt,
                 "negative_prompt": shot.negative_prompt,
@@ -300,6 +302,16 @@ def export_generation_manifest(db: Session, project_id: str) -> dict[str, Any]:
             # registered source it came from (PRD FR-11, NFR-10).
             "workflow_snapshot_path": job.workflow_snapshot_path or "",
             "workflow_sha256": job.workflow_sha256 or "",
+            # Which vendor ran it, on what model, with what parameters and at
+            # what cost. A ComfyUI job and an OpenAI job are both fully
+            # described here, so the export explains itself without the reader
+            # having to know which one produced the media.
+            "media_provider_id": job.media_provider_id or "comfyui",
+            "media_model": job.media_model or "workflow",
+            "request_params": job.request_params or {},
+            "usage": job.usage or {},
+            "estimated_cost_usd": job.estimated_cost_usd,
+            "provenance": job.provenance or {},
             "seed": job.seed,
             "status": job.status,
             "attempts": job.attempts,
@@ -313,6 +325,12 @@ def export_generation_manifest(db: Session, project_id: str) -> dict[str, Any]:
                 {
                     "take_id": t.id,
                     "file_path": t.file_path,
+                    "media_provider_id": t.media_provider_id or "comfyui",
+                    "media_model": t.media_model or "workflow",
+                    "request_params": t.request_params or {},
+                    "usage": t.usage or {},
+                    "estimated_cost_usd": t.estimated_cost_usd,
+                    "provenance": t.provenance or {},
                     "review_status": t.review_status,
                     "rating": t.rating,
                     "notes": t.notes,
@@ -473,6 +491,9 @@ def export_project_archive(db: Session, project_id: str) -> dict[str, Any]:
                     {
                         "id": j.id,
                         "workflow_id": j.workflow_id,
+                        "media_provider_id": j.media_provider_id or "comfyui",
+                        "media_model": j.media_model or "workflow",
+                        "estimated_cost_usd": j.estimated_cost_usd,
                         "seed": j.seed,
                         "status": j.status,
                         "attempts": j.attempts,
@@ -485,6 +506,12 @@ def export_project_archive(db: Session, project_id: str) -> dict[str, Any]:
                         "id": t.id,
                         "job_id": t.job_id,
                         "file_path": t.file_path,
+                        "media_provider_id": t.media_provider_id or "comfyui",
+                        "media_model": t.media_model or "workflow",
+                        "request_params": t.request_params or {},
+                        "usage": t.usage or {},
+                        "estimated_cost_usd": t.estimated_cost_usd,
+                        "provenance": t.provenance or {},
                         "review_status": t.review_status,
                         "rating": t.rating,
                         "notes": t.notes,

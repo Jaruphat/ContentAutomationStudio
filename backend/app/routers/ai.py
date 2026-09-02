@@ -27,6 +27,7 @@ from app.models import Project
 from app.schemas import (
     AIHealthResponse,
     AIPromptCompileRequest,
+    AITaskRequest,
     AIProviderCatalogue,
     AIStoryBibleRequest,
     AIStoryboardRequest,
@@ -100,6 +101,18 @@ def _project_or_error(db: Session, project_id: str) -> Project | JSONResponse:
             },
         )
     return project
+
+
+def _provider_for(payload: AITaskRequest):
+    """The provider a request needs, or None when it needs none.
+
+    Applying a reviewed draft writes text the user already approved, so it
+    calls no vendor - and must not fail merely because no provider is
+    configured on this machine.
+    """
+    if payload.apply and payload.draft is not None:
+        return None
+    return registry.create_provider(payload.provider_id, payload.model)
 
 
 def _outcome_response(outcome: TaskOutcome) -> dict:
@@ -181,10 +194,11 @@ async def ai_story_bible(
         return project
 
     try:
-        provider = registry.create_provider(payload.provider_id, payload.model)
+        provider = _provider_for(payload)
         outcome = await generate_story_bible(
             db, project, provider,
             guidance=payload.guidance, apply=payload.apply,
+            draft=payload.draft,
         )
     except (AIProviderError, AITaskError) as exc:
         return _error_response(exc.category, exc.message, payload.provider_id)
@@ -214,7 +228,7 @@ async def ai_storyboard(
         return project
 
     try:
-        provider = registry.create_provider(payload.provider_id, payload.model)
+        provider = _provider_for(payload)
         outcome = await generate_storyboard(
             db, project, provider,
             scene_count=payload.scene_count,
@@ -223,6 +237,7 @@ async def ai_storyboard(
             guidance=payload.guidance,
             apply=payload.apply,
             replace_existing=payload.replace_existing,
+            draft=payload.draft,
         )
     except (AIProviderError, AITaskError) as exc:
         return _error_response(exc.category, exc.message, payload.provider_id)
@@ -250,12 +265,13 @@ async def ai_compile_prompts(
         return project
 
     try:
-        provider = registry.create_provider(payload.provider_id, payload.model)
+        provider = _provider_for(payload)
         outcome = await compile_shot_prompts(
             db, project, provider,
             shot_ids=payload.shot_ids,
             guidance=payload.guidance,
             apply=payload.apply,
+            draft=payload.draft,
         )
     except (AIProviderError, AITaskError) as exc:
         return _error_response(exc.category, exc.message, payload.provider_id)

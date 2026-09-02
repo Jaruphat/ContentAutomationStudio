@@ -10,7 +10,31 @@ Each ORM model has three schemas:
 from datetime import datetime
 from typing import Any, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+from app.services import media_providers
+
+#: Providers a shot may name for its stills. Kept in step with the media
+#: provider registry rather than restated, so adding a provider there is enough.
+KNOWN_IMAGE_PROVIDER_IDS = (media_providers.COMFYUI, media_providers.OPENAI)
+
+
+def _validated_provider_id(value: str | None) -> str | None:
+    """Reject a provider this build cannot run, at the API boundary.
+
+    Catching it here means a shot can never be saved in a state that would
+    only fail later, at generation time, with the money already committed
+    elsewhere in the batch.
+    """
+    if value is None:
+        return None
+    normalised = value.strip().lower()
+    if normalised not in KNOWN_IMAGE_PROVIDER_IDS:
+        raise ValueError(
+            f"Unknown image provider '{value}'. Known providers: "
+            f"{', '.join(KNOWN_IMAGE_PROVIDER_IDS)}."
+        )
+    return normalised
 
 
 # ============================================================================
@@ -291,8 +315,15 @@ class ShotCreate(BaseModel):
     negative_prompt: str = ""
     reference_asset_ids: list[str] = Field(default_factory=list)
     workflow_preset_id: Optional[str] = None
+    image_provider_id: str = "comfyui"
+    image_model: str = "workflow"
     seed_policy: str = "random"
     status: str = "Draft"
+
+    @field_validator("image_provider_id")
+    @classmethod
+    def _check_provider(cls, value):
+        return _validated_provider_id(value)
 
 
 class ShotUpdate(BaseModel):
@@ -312,8 +343,15 @@ class ShotUpdate(BaseModel):
     negative_prompt: Optional[str] = None
     reference_asset_ids: Optional[list[str]] = None
     workflow_preset_id: Optional[str] = None
+    image_provider_id: Optional[str] = None
+    image_model: Optional[str] = None
     seed_policy: Optional[str] = None
     status: Optional[str] = None
+
+    @field_validator("image_provider_id")
+    @classmethod
+    def _check_provider(cls, value):
+        return _validated_provider_id(value)
 
 
 class ShotResponse(BaseModel):
@@ -337,6 +375,8 @@ class ShotResponse(BaseModel):
     negative_prompt: str
     reference_asset_ids: list[str]
     workflow_preset_id: Optional[str]
+    image_provider_id: Optional[str] = "comfyui"
+    image_model: Optional[str] = "workflow"
     seed_policy: str
     status: str
     created_at: datetime
@@ -489,6 +529,12 @@ class GenerationJobResponse(BaseModel):
     workflow_snapshot_path: Optional[str] = None
     workflow_sha256: Optional[str] = None
     parameter_map: dict[str, Any]
+    media_provider_id: Optional[str] = "comfyui"
+    media_model: Optional[str] = "workflow"
+    request_params: Optional[dict[str, Any]] = None
+    usage: Optional[dict[str, Any]] = None
+    estimated_cost_usd: Optional[float] = None
+    provenance: Optional[dict[str, Any]] = None
     seed: Optional[int]
     comfyui_prompt_id: Optional[str]
     status: str
@@ -519,6 +565,12 @@ class TakeResponse(BaseModel):
     height: int
     frame_rate: float
     codec: str
+    media_provider_id: Optional[str] = "comfyui"
+    media_model: Optional[str] = "workflow"
+    request_params: Optional[dict[str, Any]] = None
+    usage: Optional[dict[str, Any]] = None
+    estimated_cost_usd: Optional[float] = None
+    provenance: Optional[dict[str, Any]] = None
     review_status: str
     rating: Optional[int]
     notes: str
@@ -628,6 +680,43 @@ class PreflightResult(BaseModel):
 
 class GenerateRequest(BaseModel):
     shot_ids: Optional[list[str]] = None  # None means all ready shots
+    #: Must be set explicitly before any shot routed to a metered provider is
+    #: queued. Defaulting it to true would make a paid run the accident.
+    confirm_paid_generation: bool = False
+
+
+class GenerationProviderEstimate(BaseModel):
+    provider_id: str
+    model: str
+    shot_count: int
+    paid: bool
+    #: Whether the environment variable this provider needs is set. The value
+    #: itself is never read or returned.
+    configured: bool
+    estimated_cost_usd: Optional[float] = None
+    cost_basis: str = ""
+
+
+class GenerationEstimate(BaseModel):
+    """What a generation request would run, and what it is expected to cost."""
+
+    shot_count: int
+    paid_shot_count: int
+    requires_confirmation: bool
+    #: Sum over the paid shots whose rate is known. None when none are priced.
+    estimated_cost_usd: Optional[float] = None
+    #: Paid shots with no published rate, so a partial total is never shown as
+    #: a complete one.
+    unpriced_paid_shots: int = 0
+    providers: list[GenerationProviderEstimate] = Field(default_factory=list)
+    shots: list[dict[str, Any]] = Field(default_factory=list)
+    blockers: list[str] = Field(default_factory=list)
+
+
+class RegenerateRequest(BaseModel):
+    """Body for a single-shot regeneration; same confirmation gate as above."""
+
+    confirm_paid_generation: bool = False
 
 
 class QueueStatus(BaseModel):
@@ -716,8 +805,14 @@ class AIHealthResponse(BaseModel):
 
 
 class AIProvenance(BaseModel):
-    """What produced a generation, carried with every result."""
+    """What produced a generation, carried with every result.
 
+    ``source`` is ``"generated"`` for a fresh provider response and
+    ``"reviewed_draft"`` when a previously previewed draft was applied
+    unchanged, so a record cannot imply a generation that did not happen.
+    """
+
+    source: str = "generated"
     provider_id: str
     #: The model the vendor reported serving, which for an alias is the dated
     #: build that actually ran.
@@ -744,6 +839,11 @@ class AITaskRequest(BaseModel):
     guidance: str = ""
     #: False returns the draft without writing anything.
     apply: bool = False
+    #: A draft returned by an earlier preview of this same task. When present
+    #: with ``apply``, that exact draft is validated and written instead of
+    #: asking the provider again - so what the user reviewed is what lands in
+    #: the project, and applying costs no second generation.
+    draft: Optional[dict[str, Any]] = None
 
 
 class AIStoryBibleRequest(AITaskRequest):

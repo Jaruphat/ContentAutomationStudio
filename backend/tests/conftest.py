@@ -86,9 +86,14 @@ def isolated_data_dir():
 AI_ENV_VARS = (
     "OPENAI_API_KEY",
     "OPENAI_MODEL",
+    "OPENAI_IMAGE_MODEL",
+    "OPENAI_IMAGE_QUALITY",
     "OPENAI_BASE_URL",
     "OPENAI_ORG_ID",
     "CAS_AI_PROVIDER",
+    # Overrides the estimated price of a paid image; left unset so cost
+    # assertions test the published table rather than a machine's local rate.
+    "CAS_OPENAI_IMAGE_PRICE_USD",
 )
 
 
@@ -103,7 +108,15 @@ def ai_env(monkeypatch):
     """
     for name in AI_ENV_VARS:
         monkeypatch.delenv(name, raising=False)
-    return monkeypatch
+
+    # The media registry caches its OpenAI adapter, which reads the key at
+    # construction time. Dropping it here stops an adapter built under one
+    # test's environment from being reused under another's.
+    from app.services import media_providers
+
+    media_providers.reset_provider_cache()
+    yield monkeypatch
+    media_providers.reset_provider_cache()
 
 
 # ---------------------------------------------------------------------------
