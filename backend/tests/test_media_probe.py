@@ -112,6 +112,61 @@ class TestAudioDetection:
         assert probe["frame_rate"] == 24.0
 
 
+class TestContainerTags:
+    """Container tags are what leaks a workflow into a delivered file, so they
+    have to be readable separately from the stream metadata."""
+
+    def test_missing_file_returns_empty(self, tmp_path):
+        assert media_probe.read_container_tags(str(tmp_path / "absent.mp4")) == {}
+
+    def test_missing_file_reports_no_embedded_keys(self, tmp_path):
+        assert media_probe.embedded_metadata_keys(str(tmp_path / "absent.mp4")) == []
+
+    @ffprobe_required
+    @ffmpeg_required
+    def test_clean_clip_has_no_embedded_keys(self, tmp_path):
+        path = str(tmp_path / "clean.mp4")
+        _create_placeholder_mp4(path, 320, 180, 0.5, 24.0)
+        assert media_probe.embedded_metadata_keys(path) == []
+
+    @ffprobe_required
+    @ffmpeg_required
+    def test_muxer_tags_are_not_reported_as_embedded(self, tmp_path):
+        """major_brand and friends come from the muxer, not a generator."""
+        path = str(tmp_path / "clean.mp4")
+        _create_placeholder_mp4(path, 320, 180, 0.5, 24.0)
+        tags = media_probe.read_container_tags(path)
+        assert "major_brand" in tags["format"]
+        assert media_probe.embedded_metadata_keys(path) == []
+
+    @ffprobe_required
+    @ffmpeg_required
+    def test_generator_tags_are_reported(self, tmp_path, synthesise_clip):
+        path = synthesise_clip(
+            str(tmp_path / "tagged.mp4"), with_audio=False,
+            metadata={
+                "prompt": '{"3": {"class_type": "KSampler"}}',
+                "comment": "model.safetensors",
+            },
+        )
+        keys = media_probe.embedded_metadata_keys(path)
+        assert "prompt" in keys
+        assert "comment" in keys
+
+    @ffprobe_required
+    @ffmpeg_required
+    def test_only_keys_are_returned_never_values(self, tmp_path, synthesise_clip):
+        """The values are the payload being kept out of the deliverable; they
+        must not travel back through logs or API responses."""
+        secret = "a calm blue sky with drifting clouds"
+        path = synthesise_clip(
+            str(tmp_path / "tagged.mp4"), with_audio=False,
+            metadata={"prompt": secret},
+        )
+        assert media_probe.embedded_metadata_keys(path) == ["prompt"]
+        assert secret not in str(media_probe.embedded_metadata_keys(path))
+
+
 class TestProviderMetadata:
     """The provider must persist what it probed, not what it guessed."""
 

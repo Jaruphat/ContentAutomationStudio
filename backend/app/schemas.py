@@ -605,6 +605,12 @@ class RenderResult(BaseModel):
     #: take on the timeline had any.
     has_audio: bool = False
     audio_codec: str = ""
+    #: Sidecar holding the provenance stripped out of the delivered MP4.
+    provenance_path: str = ""
+    #: Non-muxer container tags still present in the delivered MP4. Keys only -
+    #: the values are the embedded workflow graph this render exists to remove.
+    #: A non-empty list means the strip did not fully take effect.
+    embedded_metadata_keys: list[str] = Field(default_factory=list)
 
 
 class PreflightResult(BaseModel):

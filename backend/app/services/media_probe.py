@@ -21,6 +21,23 @@ logger = logging.getLogger("cas.media_probe")
 
 VIDEO_EXTENSIONS = (".mp4", ".mov", ".webm", ".mkv", ".avi", ".gif")
 
+#: Container tags a muxer writes about itself. Anything else in a delivered
+#: file came from an upstream generator: ComfyUI's SaveVideo embeds the entire
+#: prompt graph - node classes, local model filenames and the creative prompt -
+#: as a ``prompt`` tag, and other nodes reuse ``comment``/``title`` for the
+#: same payload. An allow-list is used rather than a list of known-bad keys so
+#: a tag nobody anticipated is still reported.
+STRUCTURAL_CONTAINER_TAGS = frozenset({
+    "major_brand",
+    "minor_version",
+    "compatible_brands",
+    "encoder",
+    "handler_name",
+    "language",
+    "vendor_id",
+    "creation_time",
+})
+
 
 def ffmpeg_path() -> str | None:
     """Absolute path to ffmpeg, or None when it is not installed."""
@@ -127,3 +144,61 @@ def probe_media_file(file_path: str) -> dict[str, Any]:
         "audio_codec": (audio or {}).get("codec_name") or "",
     }
     return result
+
+
+def read_container_tags(file_path: str) -> dict[str, Any]:
+    """
+    Return a file's format-level and per-stream metadata tags.
+
+    Shape: ``{"format": {...}, "streams": [{...}, ...]}``. Returns ``{}`` when
+    the file is missing or ffprobe is unavailable - "unknown", never "none".
+    """
+    ffprobe = ffprobe_path()
+    if not ffprobe or not os.path.isfile(file_path):
+        return {}
+
+    cmd = [
+        ffprobe, "-v", "error",
+        "-show_entries", "format_tags",
+        "-show_entries", "stream_tags",
+        "-of", "json", file_path,
+    ]
+    returncode, stdout, stderr = run_captured(cmd, timeout=30)
+    if returncode != 0:
+        logger.warning("ffprobe tags failed for %s: %s", file_path, stderr[-200:])
+        return {}
+    try:
+        data = json.loads(stdout or "{}")
+    except json.JSONDecodeError:
+        return {}
+
+    return {
+        "format": dict((data.get("format") or {}).get("tags") or {}),
+        "streams": [
+            dict(stream.get("tags") or {}) for stream in (data.get("streams") or [])
+        ],
+    }
+
+
+def embedded_metadata_keys(file_path: str) -> list[str]:
+    """
+    Tag keys in a file that did not come from the muxer.
+
+    Only keys are returned, never values: the values are exactly the workflow
+    graph and prompt text that must not leak, so they have no business in a log
+    line or an API response. Provenance is kept in the sidecar instead.
+
+    An empty list means either that the file is clean or that ffprobe could not
+    read it; callers that need to distinguish those should check
+    :func:`read_container_tags` for an empty result first.
+    """
+    tags = read_container_tags(file_path)
+    if not tags:
+        return []
+    keys: set[str] = set()
+    for scope in [tags.get("format") or {}] + list(tags.get("streams") or []):
+        keys.update(
+            key for key in scope
+            if key.lower() not in STRUCTURAL_CONTAINER_TAGS
+        )
+    return sorted(keys)

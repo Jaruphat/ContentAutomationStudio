@@ -16,27 +16,40 @@ with no source audio (stills, silent clips) get silence synthesised. When
 nothing on the timeline has audio, the render stays video-only rather than
 padding a silent track onto it.
 
+The delivered MP4 carries no inherited container metadata. ComfyUI's SaveVideo
+embeds the whole prompt graph - creative prompt text, node classes and local
+model filenames - in the file it writes, and FFmpeg copies input metadata to
+the output by default, so both the per-segment normalisation and the concat
+step pass ``-map_metadata -1 -map_chapters -1``. The same provenance is written
+alongside the video as ``review.provenance.json``: kept, auditable and
+inspectable, but not shipped inside the deliverable.
+
 Rendering is skipped - with an explicit reason, never a fabricated result -
 when FFmpeg is unavailable, the timeline is empty, or any referenced media file
 is missing. A failed render never touches approved takes or project state
 (NFR-09); it only writes under the project's export directory.
 """
 
+import hashlib
+import json
 import logging
 import os
+from datetime import datetime, timezone
 from typing import Any
 
 from sqlalchemy.orm import Session
 
 from app import paths
-from app.models import Project, Take
+from app.models import GenerationJob, Project, Scene, Shot, Take, Workflow
 # ffmpeg_path/ffprobe_path are re-exported: callers and tests treat this
 # module as the render entry point and ask it whether FFmpeg is available.
 from app.services.media_probe import (  # noqa: F401
     VIDEO_EXTENSIONS,
+    embedded_metadata_keys,
     ffmpeg_path,
     ffprobe_path,
     probe_media_file,
+    read_container_tags,
     run_captured,
 )
 from app.services.timeline_service import get_timeline_manifest
@@ -48,6 +61,14 @@ logger = logging.getLogger("cas.render_service")
 AUDIO_SAMPLE_RATE = 48000
 AUDIO_CHANNELS = 2
 AUDIO_BITRATE = "192k"
+
+#: Drop every tag and chapter the input carried. Applied to each segment and
+#: again to the concat output, because either stage would otherwise inherit
+#: the generator's embedded workflow graph.
+STRIP_METADATA_ARGS = ["-map_metadata", "-1", "-map_chapters", "-1"]
+
+#: Filename of the provenance record written next to the review video.
+PROVENANCE_FILENAME = "review.provenance.json"
 
 
 def parse_resolution(value: str) -> tuple[int, int]:
@@ -102,7 +123,148 @@ def _blocked(project_id: str, reason: str) -> dict[str, Any]:
         "size_bytes": 0,
         "has_audio": False,
         "audio_codec": "",
+        "provenance_path": "",
+        "embedded_metadata_keys": [],
     }
+
+
+def _sha256(file_path: str) -> str:
+    """SHA-256 of a file, or '' when it cannot be read."""
+    digest = hashlib.sha256()
+    try:
+        with open(file_path, "rb") as f:
+            for chunk in iter(lambda: f.read(1024 * 1024), b""):
+                digest.update(chunk)
+    except OSError:
+        return ""
+    return digest.hexdigest()
+
+
+def _segment_provenance(
+    db: Session, index: int, item: dict[str, Any], take: Take
+) -> dict[str, Any]:
+    """Everything needed to trace one delivered segment back to its origin."""
+    shot = db.query(Shot).filter(Shot.id == take.shot_id).first()
+    scene = (
+        db.query(Scene).filter(Scene.id == shot.scene_id).first()
+        if shot is not None else None
+    )
+    job = (
+        db.query(GenerationJob).filter(GenerationJob.id == take.job_id).first()
+        if take.job_id else None
+    )
+    workflow = (
+        db.query(Workflow).filter(Workflow.id == job.workflow_id).first()
+        if job is not None and job.workflow_id else None
+    )
+
+    record: dict[str, Any] = {
+        "segment_index": index,
+        "timeline_order": item.get("order"),
+        "duration_sec": item.get("duration_sec"),
+        "take": {
+            "id": take.id,
+            "source_path": take.file_path,
+            "source_sha256": _sha256(take.file_path),
+            "probe": probe_media_file(take.file_path),
+            # What the source file carried before the render stripped it.
+            "embedded_metadata_keys": embedded_metadata_keys(take.file_path),
+        },
+    }
+    if scene is not None:
+        record["scene"] = {
+            "id": scene.id, "order": scene.order, "title": scene.title,
+        }
+    if shot is not None:
+        record["shot"] = {
+            "id": shot.id,
+            "order": shot.order,
+            "generation_mode": shot.generation_mode,
+            "image_prompt": shot.image_prompt,
+            "video_prompt": shot.video_prompt,
+            "negative_prompt": shot.negative_prompt,
+        }
+    if job is not None:
+        record["job"] = {
+            "id": job.id,
+            "seed": job.seed,
+            "comfyui_prompt_id": job.comfyui_prompt_id,
+            "attempts": job.attempts,
+            "workflow_snapshot_path": job.workflow_snapshot_path,
+            "workflow_sha256": job.workflow_sha256,
+        }
+    if workflow is not None:
+        record["workflow"] = {
+            "id": workflow.id,
+            "name": workflow.name,
+            "purpose": workflow.purpose,
+            "version": workflow.version,
+            "source_format": workflow.source_format,
+            "sha256_hash": workflow.sha256_hash,
+        }
+    return record
+
+
+def write_render_provenance(
+    db: Session,
+    project: Project,
+    sources: list[tuple[dict[str, Any], Take]],
+    output_path: str,
+    render_settings: dict[str, Any],
+) -> str:
+    """
+    Write the sidecar recording what went into the review video.
+
+    The deliverable itself is stripped of container metadata, so this file is
+    the record: which take, job, workflow snapshot, seed and prompt produced
+    each segment. It sits next to the video under the project's export
+    directory and is never muxed into it.
+
+    Returns the sidecar path, or '' when it could not be written - a provenance
+    failure must not fail an otherwise good render.
+    """
+    payload = {
+        "kind": "cas.review_render.provenance",
+        "schema_version": 1,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "project": {
+            "id": project.id,
+            "title": project.title,
+            "target_resolution": project.target_resolution,
+            "frame_rate": project.frame_rate,
+            "aspect_ratio": project.aspect_ratio,
+        },
+        "output": {
+            "path": output_path,
+            "filename": os.path.basename(output_path),
+            "sha256": _sha256(output_path),
+            "size_bytes": (
+                os.path.getsize(output_path) if os.path.isfile(output_path) else 0
+            ),
+            "probe": probe_media_file(output_path),
+            "container_tags": read_container_tags(output_path),
+        },
+        "render_settings": render_settings,
+        "segments": [
+            _segment_provenance(db, index, item, take)
+            for index, (item, take) in enumerate(sources)
+        ],
+        "note": (
+            "Container metadata is stripped from the delivered MP4 so the "
+            "generator's embedded workflow graph, model filenames and prompt "
+            "text are not shipped inside it. This sidecar is the provenance "
+            "record."
+        ),
+    }
+
+    sidecar = os.path.join(os.path.dirname(output_path), PROVENANCE_FILENAME)
+    try:
+        with open(sidecar, "w", encoding="utf-8") as f:
+            json.dump(payload, f, indent=2, ensure_ascii=False, default=str)
+    except OSError as exc:
+        logger.warning("Could not write render provenance to %s: %s", sidecar, exc)
+        return ""
+    return sidecar
 
 
 def render_review_video(db: Session, project_id: str) -> dict[str, Any]:
@@ -199,6 +361,9 @@ def render_review_video(db: Session, project_id: str) -> dict[str, Any]:
         cmd += ["-map", "0:v:0"]
         if keep_audio:
             cmd += ["-map", "1:a:0"] if needs_silence else ["-map", "0:a:0"]
+        # Streams are mapped explicitly, so the source's tags and chapters
+        # would otherwise ride along into the segment and then the delivery.
+        cmd += STRIP_METADATA_ARGS
         cmd += [
             "-t", f"{duration:g}",
             "-r", f"{frame_rate:g}",
@@ -243,6 +408,7 @@ def render_review_video(db: Session, project_id: str) -> dict[str, Any]:
     ok, err = _run([
         ffmpeg, "-y", "-loglevel", "error",
         "-f", "concat", "-safe", "0", "-i", concat_file,
+        *STRIP_METADATA_ARGS,
         "-c", "copy", output_path,
     ])
     if not ok:
@@ -264,6 +430,38 @@ def render_review_video(db: Session, project_id: str) -> dict[str, Any]:
             "audio stream."
         )
 
+    # The deliverable must not carry the generator's embedded workflow graph.
+    # Only key names are surfaced; the values are the payload being excluded.
+    leaked = embedded_metadata_keys(output_path)
+    if leaked:
+        warnings.append(
+            "The review video still carries container metadata that did not "
+            "come from the muxer: " + ", ".join(leaked) + ". Provenance belongs "
+            "in the sidecar, not in the delivered file."
+        )
+
+    provenance_path = write_render_provenance(
+        db, project, sources, output_path,
+        {
+            "width": width,
+            "height": height,
+            "frame_rate": frame_rate,
+            "segment_count": len(segment_paths),
+            "audio": {
+                "kept": keep_audio,
+                "sample_rate": AUDIO_SAMPLE_RATE if keep_audio else 0,
+                "channels": AUDIO_CHANNELS if keep_audio else 0,
+                "bitrate": AUDIO_BITRATE if keep_audio else "",
+            },
+            "container_metadata_stripped": True,
+        },
+    )
+    if not provenance_path:
+        warnings.append(
+            "The review video was rendered but its provenance sidecar could "
+            "not be written."
+        )
+
     logger.info(
         "Rendered review video for project %s: %s (%d segments)",
         project_id, output_path, len(segment_paths),
@@ -283,4 +481,6 @@ def render_review_video(db: Session, project_id: str) -> dict[str, Any]:
         "size_bytes": os.path.getsize(output_path),
         "has_audio": bool(probe.get("has_audio")) if probe else keep_audio,
         "audio_codec": probe.get("audio_codec", "aac" if keep_audio else ""),
+        "provenance_path": provenance_path,
+        "embedded_metadata_keys": leaked,
     }

@@ -402,6 +402,240 @@ class TestAudioPreservation:
         assert sample_rate == render_service.AUDIO_SAMPLE_RATE
 
 
+# ---------------------------------------------------------------------------
+# Delivery hygiene: metadata out of the MP4, provenance into a sidecar
+# ---------------------------------------------------------------------------
+
+#: What ComfyUI's SaveVideo actually embeds - the full prompt graph, including
+#: local model filenames and the creative prompt text.
+COMFY_EMBEDDED_TAGS = {
+    "prompt": (
+        '{"140:131": {"inputs": {"prompt": "a calm blue sky", '
+        '"class_type": "MiniMaxH3ImageToVideo"}}}'
+    ),
+    "comment": "minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+    "title": "internal working title",
+}
+
+
+@ffmpeg_required
+@ffprobe_required
+class TestDeliveryMetadata:
+    """The delivered review.mp4 must not ship the generator's embedded
+    workflow. A real H3 output carries a `prompt` tag holding the whole graph;
+    FFmpeg copies input metadata to the output unless told not to."""
+
+    def test_source_fixture_really_carries_metadata(self, tmp_path, synthesise_clip):
+        """Guards the test itself: if the fixture stopped embedding tags, the
+        stripping tests below would pass for the wrong reason."""
+        media = synthesise_clip(
+            str(tmp_path / "tagged.mp4"), with_audio=True,
+            metadata=COMFY_EMBEDDED_TAGS,
+        )
+        keys = render_service.embedded_metadata_keys(media)
+        assert "prompt" in keys
+        assert "comment" in keys
+
+    def test_render_strips_embedded_workflow_metadata(
+        self, db_session, sample_project, sample_shot, tmp_path, synthesise_clip
+    ):
+        media = synthesise_clip(
+            str(tmp_path / "tagged.mp4"), with_audio=True,
+            metadata=COMFY_EMBEDDED_TAGS,
+        )
+        add_approved_take_on_timeline(
+            db_session, sample_project.id, sample_shot.id, media, duration=1.0
+        )
+
+        result = render_service.render_review_video(db_session, sample_project.id)
+        assert result["rendered"] is True, result["reason"]
+
+        assert render_service.embedded_metadata_keys(result["output_path"]) == []
+        assert result["embedded_metadata_keys"] == []
+
+    def test_no_prompt_text_survives_anywhere_in_the_container(
+        self, db_session, sample_project, sample_shot, tmp_path, synthesise_clip
+    ):
+        """Not just the known keys: the prompt string must not appear in any
+        format or stream tag of the delivered file."""
+        media = synthesise_clip(
+            str(tmp_path / "tagged.mp4"), with_audio=True,
+            metadata=COMFY_EMBEDDED_TAGS,
+        )
+        add_approved_take_on_timeline(
+            db_session, sample_project.id, sample_shot.id, media, duration=1.0
+        )
+        result = render_service.render_review_video(db_session, sample_project.id)
+        assert result["rendered"] is True, result["reason"]
+
+        tags = render_service.read_container_tags(result["output_path"])
+        blob = str(tags)
+        assert "a calm blue sky" not in blob
+        assert "safetensors" not in blob
+        assert "internal working title" not in blob
+
+    def test_intermediate_segments_are_stripped_too(
+        self, db_session, sample_project, sample_shot, tmp_path, synthesise_clip
+    ):
+        """The concat stream-copies the segments, so a leak there reaches the
+        delivery."""
+        media = synthesise_clip(
+            str(tmp_path / "tagged.mp4"), with_audio=True,
+            metadata=COMFY_EMBEDDED_TAGS,
+        )
+        add_approved_take_on_timeline(
+            db_session, sample_project.id, sample_shot.id, media, duration=1.0
+        )
+        result = render_service.render_review_video(db_session, sample_project.id)
+        assert result["rendered"] is True, result["reason"]
+
+        segments_dir = os.path.join(
+            os.path.dirname(result["output_path"]), "segments"
+        )
+        for name in os.listdir(segments_dir):
+            if name.startswith("seg_"):
+                path = os.path.join(segments_dir, name)
+                assert render_service.embedded_metadata_keys(path) == [], name
+
+
+@ffmpeg_required
+class TestProvenanceSidecar:
+    """Stripping the file must not lose the provenance - it moves beside it."""
+
+    def test_sidecar_is_written_next_to_the_video(
+        self, db_session, sample_project, sample_shot, tmp_path
+    ):
+        media = str(tmp_path / "frame.png")
+        _create_placeholder_png(media, 320, 180)
+        add_approved_take_on_timeline(
+            db_session, sample_project.id, sample_shot.id, media, duration=1.0
+        )
+
+        result = render_service.render_review_video(db_session, sample_project.id)
+        assert result["rendered"] is True, result["reason"]
+
+        sidecar = result["provenance_path"]
+        assert sidecar, "no provenance sidecar path returned"
+        assert os.path.isfile(sidecar)
+        assert os.path.dirname(sidecar) == os.path.dirname(result["output_path"])
+        assert sidecar.endswith(render_service.PROVENANCE_FILENAME)
+
+    def test_sidecar_records_take_and_prompt_for_every_segment(
+        self, db_session, sample_project, sample_shot, tmp_path
+    ):
+        import json
+
+        sample_shot.video_prompt = "a calm blue sky with drifting clouds"
+        sample_shot.generation_mode = "video"
+        db_session.commit()
+
+        media = str(tmp_path / "frame.png")
+        _create_placeholder_png(media, 320, 180)
+        take = add_approved_take_on_timeline(
+            db_session, sample_project.id, sample_shot.id, media, duration=1.0
+        )
+
+        result = render_service.render_review_video(db_session, sample_project.id)
+        assert result["rendered"] is True, result["reason"]
+
+        with open(result["provenance_path"], encoding="utf-8") as f:
+            record = json.load(f)
+
+        assert record["project"]["id"] == sample_project.id
+        assert record["render_settings"]["container_metadata_stripped"] is True
+        assert len(record["segments"]) == 1
+
+        segment = record["segments"][0]
+        assert segment["take"]["id"] == take.id
+        assert segment["take"]["source_path"] == media
+        assert segment["take"]["source_sha256"]
+        assert segment["shot"]["id"] == sample_shot.id
+        assert segment["shot"]["video_prompt"] == "a calm blue sky with drifting clouds"
+        assert record["output"]["sha256"]
+
+    def test_sidecar_carries_job_and_workflow_provenance(
+        self, db_session, sample_project, sample_shot, tmp_path
+    ):
+        """A take made by a real job must be traceable to the workflow snapshot
+        and seed that produced it."""
+        import json
+
+        from app.models import GenerationJob, Workflow
+
+        workflow = Workflow(
+            id=str(uuid.uuid4()),
+            name="H3 T2V",
+            purpose="text-to-video",
+            source_format="api",
+            sha256_hash="abc123",
+            version="1.0",
+        )
+        job = GenerationJob(
+            id=str(uuid.uuid4()),
+            shot_id=sample_shot.id,
+            workflow_id=workflow.id,
+            seed=42,
+            status="Completed",
+            comfyui_prompt_id="7bd626a7",
+            workflow_snapshot_path="/snapshots/abc.json",
+            workflow_sha256="abc123",
+        )
+        db_session.add_all([workflow, job])
+        db_session.commit()
+
+        media = str(tmp_path / "frame.png")
+        _create_placeholder_png(media, 320, 180)
+        take = add_approved_take_on_timeline(
+            db_session, sample_project.id, sample_shot.id, media, duration=1.0
+        )
+        take.job_id = job.id
+        db_session.commit()
+
+        result = render_service.render_review_video(db_session, sample_project.id)
+        assert result["rendered"] is True, result["reason"]
+
+        with open(result["provenance_path"], encoding="utf-8") as f:
+            segment = json.load(f)["segments"][0]
+
+        assert segment["job"]["seed"] == 42
+        assert segment["job"]["comfyui_prompt_id"] == "7bd626a7"
+        assert segment["job"]["workflow_snapshot_path"] == "/snapshots/abc.json"
+        assert segment["workflow"]["name"] == "H3 T2V"
+        assert segment["workflow"]["sha256_hash"] == "abc123"
+
+    @ffprobe_required
+    def test_sidecar_keeps_what_the_delivery_dropped(
+        self, db_session, sample_project, sample_shot, tmp_path, synthesise_clip
+    ):
+        """The tags stripped from the MP4 are still recorded - as the source's
+        key list, so nothing is lost, and as proof the output has none."""
+        import json
+
+        media = synthesise_clip(
+            str(tmp_path / "tagged.mp4"), with_audio=True,
+            metadata=COMFY_EMBEDDED_TAGS,
+        )
+        add_approved_take_on_timeline(
+            db_session, sample_project.id, sample_shot.id, media, duration=1.0
+        )
+        result = render_service.render_review_video(db_session, sample_project.id)
+        assert result["rendered"] is True, result["reason"]
+
+        with open(result["provenance_path"], encoding="utf-8") as f:
+            record = json.load(f)
+
+        assert "prompt" in record["segments"][0]["take"]["embedded_metadata_keys"]
+        output_tags = record["output"]["container_tags"]["format"]
+        assert "prompt" not in output_tags
+        assert "comment" not in output_tags
+
+    def test_blocked_render_writes_no_sidecar(self, db_session, sample_project):
+        result = render_service.render_review_video(db_session, sample_project.id)
+        assert result["rendered"] is False
+        assert result["provenance_path"] == ""
+        assert result["embedded_metadata_keys"] == []
+
+
 def _audio_layout(path: str) -> tuple[str, int, int]:
     """(codec, channels, sample_rate) of a file's first audio stream."""
     import json

@@ -142,6 +142,8 @@ def synthesise_clip():
     Media tests must assert against a file FFmpeg actually produced, never a
     stub. ``with_audio=True`` adds a stereo AAC track, mirroring what MiniMax
     H3 emits (32 kHz stereo); ``with_audio=False`` yields a silent clip.
+    ``metadata`` embeds container tags the way ComfyUI's SaveVideo does, so a
+    test can prove the delivery render strips them.
     Skips the calling test when FFmpeg cannot produce the file.
     """
     from app.services import media_probe
@@ -155,6 +157,7 @@ def synthesise_clip():
         duration: float = 1.0,
         frame_rate: float = 24.0,
         sample_rate: int = 32000,
+        metadata: dict[str, str] | None = None,
     ) -> str:
         ffmpeg = media_probe.ffmpeg_path()
         if not ffmpeg:
@@ -171,6 +174,12 @@ def synthesise_clip():
                       f":sample_rate={sample_rate}",
                 "-ac", "2", "-c:a", "aac",
             ]
+        if metadata:
+            # ComfyUI writes non-standard keys such as `prompt`; the mp4 muxer
+            # only keeps those with use_metadata_tags.
+            cmd += ["-movflags", "use_metadata_tags"]
+            for key, value in metadata.items():
+                cmd += ["-metadata", f"{key}={value}"]
         cmd += [
             "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p",
             "-shortest", path,
