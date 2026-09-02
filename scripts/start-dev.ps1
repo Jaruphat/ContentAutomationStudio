@@ -75,7 +75,7 @@ Write-Host "Use stop-dev.bat to stop both development services."
 
 if (-not $NoBrowser) {
     if (Test-Path $Chrome) {
-        Start-Process -FilePath $Chrome -ArgumentList "http://127.0.0.1:5173"
+        Start-Process -FilePath $Chrome -ArgumentList @("--profile-directory=Default", "http://127.0.0.1:5173")
     } else {
         Start-Process "http://127.0.0.1:5173"
     }
