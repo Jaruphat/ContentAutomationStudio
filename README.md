@@ -495,6 +495,23 @@ One authorised job on `video_minimax_h3_t2v.api.json`. Full record in
 | Defect found | takes recorded `0x0 / 0.0s / codec=mp4` - the provider never probed downloads. Fixed and regression-tested |
 | Follow-up defect | the original review render dropped source audio and exposed workflow metadata; both were fixed, with provenance retained in a sidecar |
 
+### Real H3 T2V through export (2026-09-02)
+
+A fresh one-shot run exercised project creation, preflight, real ComfyUI H3 T2V,
+job persistence, take approval, timeline assembly, FFmpeg rendering and every
+metadata export. It completed in one attempt with prompt id
+`cbf580d1-4471-4fe5-a2d9-28fac8a3ec88`; a hard backend restart preserved the
+completed job, prompt id, approved take and one-item timeline.
+
+The delivered review is h264 864x480 at 24 fps with 124 frames and AAC stereo;
+its container duration is 5.188 seconds. There were no black intervals or
+freezes over 0.5 seconds, and audio/video start and duration offsets remained
+within one video frame. The delivery MP4 contains no prompt, workflow,
+ComfyUI identifier or internal path. Two release warnings remain: generated
+audio is quiet at -37.9 LUFS, and 864x480 is 9:5 rather than exact 16:9.
+Evidence is under
+`docs/release_evidence/2026-09-02/comfyui-h3-t2v-export-e2e/`.
+
 ### Paid OpenAI Images E2E (2026-09-02)
 
 Exactly one confirmed paid request used `gpt-image-1-mini`; the estimate was
@@ -517,7 +534,7 @@ take returned 404.
 |------|---------|--------|
 | Backend tests | `python -m pytest tests/ -q` | 685 passed (2026-09-02) |
 | Backend lint | `python -m ruff check app/ tests/` | clean |
-| Frontend tests | `npm test -- --run` | 8 passed (2026-09-02) |
+| Frontend tests | `npm test -- --run` | 16 passed (2026-09-02) |
 | Frontend lint | `npm run lint` | clean |
 | Frontend typecheck | `npx tsc -b` | clean |
 | Frontend build | `npm run build` | succeeds |

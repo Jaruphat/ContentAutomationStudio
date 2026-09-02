@@ -1,0 +1,112 @@
+{
+  "kind": "cas.review_render.provenance",
+  "schema_version": 1,
+  "generated_at": "2026-09-02T10:05:43.310681+00:00",
+  "project": {
+    "id": "2b04f988-cab0-4973-b570-3e3d76aae215",
+    "title": "Release Real H3 T2V Export E2E 20260902",
+    "target_resolution": "864x480",
+    "frame_rate": 24.0,
+    "aspect_ratio": "16:9"
+  },
+  "output": {
+    "path": "C:\\Users\\jongp\\Desktop\\Thinkpad_and_PC_Sync\\ContentAutomationStudio\\backend\\data\\exports\\2b04f988-cab0-4973-b570-3e3d76aae215\\review.mp4",
+    "filename": "review.mp4",
+    "sha256": "fa74e743cef1e2ad1dc98df1f07d40ff53e05ec1adab521267c4845740d75033",
+    "size_bytes": 483407,
+    "probe": {
+      "width": 864,
+      "height": 480,
+      "codec": "h264",
+      "duration_sec": 5.188333,
+      "frame_rate": 24.0,
+      "has_audio": true,
+      "audio_codec": "aac"
+    },
+    "container_tags": {
+      "format": {
+        "major_brand": "isom",
+        "minor_version": "512",
+        "compatible_brands": "isomiso2avc1mp41",
+        "encoder": "Lavf62.12.102"
+      },
+      "streams": [
+        {
+          "language": "und",
+          "handler_name": "VideoHandler"
+        },
+        {
+          "language": "und",
+          "handler_name": "SoundHandler"
+        }
+      ]
+    }
+  },
+  "render_settings": {
+    "width": 864,
+    "height": 480,
+    "frame_rate": 24.0,
+    "segment_count": 1,
+    "audio": {
+      "kept": true,
+      "sample_rate": 48000,
+      "channels": 2,
+      "bitrate": "192k"
+    },
+    "container_metadata_stripped": true
+  },
+  "segments": [
+    {
+      "segment_index": 0,
+      "timeline_order": 0,
+      "duration_sec": 5.167,
+      "take": {
+        "id": "1296ab3e-a0d0-425c-968c-36843585d572",
+        "source_path": "C:\\Users\\jongp\\Desktop\\Thinkpad_and_PC_Sync\\ContentAutomationStudio\\backend\\data\\generated\\cbf580d1-4471-4fe5-a2d9-28fac8a3ec88_2b04f988_def687d6_00001_.mp4",
+        "source_sha256": "1a881c2202530005422ad059cc9be8b8d6ea4ac43c16024f12a36d6a883f2d7d",
+        "probe": {
+          "width": 864,
+          "height": 480,
+          "codec": "h264",
+          "duration_sec": 5.167,
+          "frame_rate": 24.0,
+          "has_audio": true,
+          "audio_codec": "aac"
+        },
+        "embedded_metadata_keys": [
+          "prompt"
+        ]
+      },
+      "scene": {
+        "id": "16e59995-401d-429e-a7a4-2a012c30c7cd",
+        "order": 1,
+        "title": "Sunrise Drift"
+      },
+      "shot": {
+        "id": "def687d6-c82f-4924-81f8-b8a9df8c60f0",
+        "order": 1,
+        "generation_mode": "video",
+        "image_prompt": "",
+        "video_prompt": "A small white paper boat drifts gently across a calm pond at sunrise, subtle ripples, soft warm sky, slow stable cinematic tracking shot, realistic water, no text, no logo",
+        "negative_prompt": "text, watermark, logo, flicker, jitter, distortion, malformed boat"
+      },
+      "job": {
+        "id": "90cca932-062a-436d-a2a0-7858257aa666",
+        "seed": 42,
+        "comfyui_prompt_id": "cbf580d1-4471-4fe5-a2d9-28fac8a3ec88",
+        "attempts": 1,
+        "workflow_snapshot_path": "C:\\Users\\jongp\\Desktop\\Thinkpad_and_PC_Sync\\ContentAutomationStudio\\backend\\data\\snapshots\\90cca932-062a-436d-a2a0-7858257aa666.json",
+        "workflow_sha256": "06392e8508554ce7b9cbefc8ae1ebc59e12e7019c3d04d372ad11a4864030088"
+      },
+      "workflow": {
+        "id": "afdaf6f8-d4bd-48a9-91c0-9b3b6a3b2023",
+        "name": "H3 Video - T2V (API)",
+        "purpose": "text-to-video",
+        "version": "1.0",
+        "source_format": "api",
+        "sha256_hash": "06392e8508554ce7b9cbefc8ae1ebc59e12e7019c3d04d372ad11a4864030088"
+      }
+    }
+  ],
+  "note": "Container metadata is stripped from the delivered MP4 so the generator's embedded workflow graph, model filenames and prompt text are not shipped inside it. This sidecar is the provenance record."
+}

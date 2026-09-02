@@ -1,0 +1,103 @@
+{
+  "kind": "cas.real_h3_t2v_export_e2e",
+  "schema_version": 1,
+  "completed_at": "2026-09-02T10:05:43.578265+00:00",
+  "result": "pass_with_warning",
+  "scope": "One-shot real-media path: project -> scene/shot -> preflight -> real ComfyUI H3 T2V -> persistent job -> take approval -> timeline -> FFmpeg render -> metadata exports -> hard-restart persistence",
+  "project_id": "2b04f988-cab0-4973-b570-3e3d76aae215",
+  "scene_id": "16e59995-401d-429e-a7a4-2a012c30c7cd",
+  "shot_id": "def687d6-c82f-4924-81f8-b8a9df8c60f0",
+  "job_id": "90cca932-062a-436d-a2a0-7858257aa666",
+  "take_id": "1296ab3e-a0d0-425c-968c-36843585d572",
+  "workflow_id": "afdaf6f8-d4bd-48a9-91c0-9b3b6a3b2023",
+  "elapsed_sec": 301.312,
+  "comfyui": {
+    "version": "0.34.0",
+    "mock": false,
+    "prompt_id": "cbf580d1-4471-4fe5-a2d9-28fac8a3ec88",
+    "attempts": 1,
+    "final_status": "Completed"
+  },
+  "source_take": {
+    "filename": "source-take.mp4",
+    "sha256": "1a881c2202530005422ad059cc9be8b8d6ea4ac43c16024f12a36d6a883f2d7d",
+    "width": 864,
+    "height": 480,
+    "duration_sec": 5.167,
+    "frame_rate": 24.0,
+    "video_codec": "h264"
+  },
+  "render": {
+    "filename": "review.mp4",
+    "provenance_filename": "review.provenance.json",
+    "sha256": "fa74e743cef1e2ad1dc98df1f07d40ff53e05ec1adab521267c4845740d75033",
+    "size_bytes": 483407,
+    "container_duration_sec": 5.188333,
+    "video": {
+      "codec": "h264",
+      "width": 864,
+      "height": 480,
+      "display_aspect_ratio": "9:5",
+      "frame_rate": 24.0,
+      "frames": 124,
+      "start_time_sec": 0.020996,
+      "duration_sec": 5.166667
+    },
+    "audio": {
+      "codec": "aac",
+      "sample_rate_hz": 48000,
+      "channels": 2,
+      "layout": "stereo",
+      "start_time_sec": 0.0,
+      "duration_sec": 5.188333,
+      "integrated_loudness_lufs": -37.9,
+      "true_peak_dbfs": -19.4
+    },
+    "av_timing": {
+      "start_offset_sec": 0.020996,
+      "duration_delta_sec": 0.021666,
+      "within_one_video_frame": true
+    },
+    "blackdetect_events": 0,
+    "freezedetect_events_over_0_5_sec": 0,
+    "visual_midpoint_check": "valid; coherent white paper boat on calm sunrise water; no blank, black, corruption, malformed geometry, or bad crop",
+    "metadata_scan": {
+      "container_tags_only": [
+        "major_brand",
+        "minor_version",
+        "compatible_brands",
+        "encoder",
+        "language",
+        "handler_name"
+      ],
+      "prompt_found": false,
+      "workflow_found": false,
+      "comfyui_found": false,
+      "internal_path_found": false,
+      "project_or_prompt_id_found": false
+    }
+  },
+  "exports": {
+    "storyboard_json": 200,
+    "storyboard_csv": 200,
+    "storyboard_markdown": 200,
+    "prompts": 200,
+    "generation_manifest": 200,
+    "timeline_manifest": 200,
+    "project_archive": 200
+  },
+  "hard_restart_persistence": {
+    "project_restored": true,
+    "job_status": "Completed",
+    "job_attempts": 1,
+    "prompt_id_restored": true,
+    "take_status": "Approved",
+    "timeline_item_count": 1,
+    "timeline_duration_sec": 5.167
+  },
+  "warnings": [
+    "Generated audio is very quiet at -37.9 LUFS integrated; add loudness normalization or a delivery loudness target before calling audio production-ready.",
+    "The H3 workflow outputs 864x480 (9:5), which is slightly wider than exact 16:9; treat this as the workflow's native resolution or normalize to a strict delivery raster when required.",
+    "This proves the one-shot real H3 media path, not a multi-shot full-product story workflow with AI authoring and mixed T2I/T2V/I2V media."
+  ]
+}
