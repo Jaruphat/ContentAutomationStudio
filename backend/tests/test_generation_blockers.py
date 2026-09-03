@@ -251,6 +251,34 @@ def test_generate_refuses_a_recurring_prop_continuity_failure(
     assert _counts(db_session) == (0, 0)
 
 
+def test_mixed_selection_with_active_job_refuses_the_whole_batch(
+    client, db_session, sample_project, sample_scene, sample_shot
+):
+    """A busy shot must not be silently dropped while clean peers are queued."""
+    clean_id = _add_shot(
+        client,
+        sample_project.id,
+        sample_scene.id,
+        status="Ready",
+    )
+    first = client.post(
+        f"/api/projects/{sample_project.id}/generate",
+        json={"shot_ids": [sample_shot.id]},
+    )
+    assert first.status_code == 200, first.text
+    before = _counts(db_session)
+
+    response = client.post(
+        f"/api/projects/{sample_project.id}/generate",
+        json={"shot_ids": [sample_shot.id, clean_id]},
+    )
+
+    assert response.status_code == 409, response.text
+    assert "queued or running" in response.json()["detail"].lower()
+    assert _counts(db_session) == before
+    assert db_session.query(Shot).filter(Shot.id == clean_id).one().status == "Ready"
+
+
 def test_a_clean_selection_still_queues_normally(
     client, db_session, sample_project, sample_scene, sample_shot
 ):

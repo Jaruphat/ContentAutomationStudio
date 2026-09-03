@@ -433,18 +433,19 @@ def start_generation(
     # metered provider. Shot status alone is not enough, because it can drift
     # (a manual edit, a status reset) while the job is still in flight.
     busy = generation_runs.shots_with_active_jobs(db, [shot.id for shot in selected])
+    if busy and (target_ids is not None or len(busy) == len(selected)):
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"{len(busy)} selected shot(s) already have a queued or "
+                f"running generation job. Nothing was queued; wait for the "
+                f"current run to finish, or cancel those jobs first."
+            ),
+        )
     if busy:
-        remaining = [shot for shot in selected if shot.id not in busy]
-        if not remaining:
-            raise HTTPException(
-                status_code=409,
-                detail=(
-                    f"{len(busy)} selected shot(s) already have a queued or "
-                    f"running generation job. Wait for the current run to "
-                    f"finish, or cancel those jobs first."
-                ),
-            )
-        selected = remaining
+        # An implicit "generate all eligible" request has no caller-supplied
+        # batch contract, so active shots are safely omitted from that sweep.
+        selected = [shot for shot in selected if shot.id not in busy]
 
     # Nothing is queued until every metered shot in the selection has been
     # authorised. Confirming is one explicit flag on the request, not a
