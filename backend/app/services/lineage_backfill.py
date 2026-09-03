@@ -24,7 +24,11 @@ import logging
 
 from sqlalchemy import inspect, text
 
-from app.services.revisions import LEGACY_LINEAGE_FLAG
+from app.services.revisions import (
+    FIRST_TRACKED_REVISION,
+    LEGACY_BASELINE_FLAG,
+    LEGACY_LINEAGE_FLAG,
+)
 
 logger = logging.getLogger("cas.lineage_backfill")
 
@@ -56,6 +60,45 @@ _TAKE_LINEAGE_DEFAULTS: dict[str, object] = {
 #: The same for ``timeline_items``: a row with NULL revisions reads as a
 #: mismatch against any shot, which is what makes a migrated cut look stale.
 _TIMELINE_LINEAGE_COLUMNS = ("take_prompt_revision", "shot_prompt_revision")
+
+
+def _record_legacy_baselines(conn) -> int:
+    """Stamp each flagged take with the revision of the shot it belongs to.
+
+    A migrated shot has no revision yet - the column was added moments ago and
+    the first revision refresh derives it - so the value it will settle on,
+    :data:`FIRST_TRACKED_REVISION`, is what a NULL means here. Idempotent: a
+    take that already carries a baseline is not selected.
+    """
+    rows = conn.execute(text(
+        "SELECT t.id, s.prompt_revision FROM takes t "
+        "LEFT JOIN shots s ON s.id = t.shot_id "
+        f"WHERE t.lineage LIKE '%\"{LEGACY_LINEAGE_FLAG}\"%' "
+        f"  AND t.lineage NOT LIKE '%\"{LEGACY_BASELINE_FLAG}\"%'"
+    )).all()
+    if not rows:
+        return 0
+
+    for take_id, shot_revision in rows:
+        baseline = (
+            int(shot_revision)
+            if isinstance(shot_revision, int) and shot_revision >= FIRST_TRACKED_REVISION
+            else FIRST_TRACKED_REVISION
+        )
+        conn.execute(
+            text("UPDATE takes SET lineage = :lineage WHERE id = :id"),
+            {
+                "lineage": json.dumps({
+                    LEGACY_LINEAGE_FLAG: True,
+                    LEGACY_BASELINE_FLAG: baseline,
+                }),
+                "id": take_id,
+            },
+        )
+    logger.info(
+        "Recorded a lineage baseline on %d legacy take(s)", len(rows)
+    )
+    return len(rows)
 
 
 def backfill_take_lineage(engine) -> int:
@@ -116,6 +159,15 @@ def backfill_take_lineage(engine) -> int:
                     flagged.rowcount,
                 )
                 touched = max(touched, flagged.rowcount)
+
+        # 2b. Record the shot revision each flagged take is unverifiable at.
+        #     Without it "unverified" never expires, and a take nothing can
+        #     vouch for keeps passing as deliverable however far the shot moves
+        #     afterwards. Runs over rows this backfill has just flagged and
+        #     over rows an earlier build flagged without a baseline, which is
+        #     why it matches on the absence of the key rather than on NULL.
+        if "lineage" in columns and "shots" in tables:
+            touched = max(touched, _record_legacy_baselines(conn))
 
         # 3. A take is at least as old as the job that made it; failing that,
         #    it is as old as the migration. Either beats a NULL the response

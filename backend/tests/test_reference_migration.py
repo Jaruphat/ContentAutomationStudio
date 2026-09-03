@@ -95,7 +95,7 @@ def test_existing_rows_survive_the_migration(pre_reference_db):
 
     with pre_reference_db.begin() as conn:
         shot = conn.execute(text(
-            "SELECT image_prompt, status, prompt_revision, is_stale "
+            "SELECT image_prompt, status, prompt_revision, is_stale, content_sha256 "
             "FROM shots WHERE id = 'sh1'"
         )).one()
         take = conn.execute(text(
@@ -104,10 +104,11 @@ def test_existing_rows_survive_the_migration(pre_reference_db):
 
     assert shot[0] == "an existing prompt"
     assert shot[1] == "Approved"
-    # New columns backfill as NULL; the app layer reads that as "not yet known"
-    # and the first revision refresh fills them in.
-    assert shot[2] is None
-    assert shot[3] is None
+    # Startup records the baseline immediately. Otherwise the first user edit
+    # could become the first refresh and look identical to migrated content.
+    assert shot[2] == 1
+    assert shot[3] == 0
+    assert len(shot[4]) == 64
     assert take[0] == "C:/data/generated/t1.png"
     assert take[1] == "Approved"
 

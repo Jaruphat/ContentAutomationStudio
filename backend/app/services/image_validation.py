@@ -218,21 +218,134 @@ def _png_container_length(data: bytes) -> int | None:
     return None
 
 
+def _jpeg_scan_end(data: bytes, offset: int) -> int | None:
+    """Step over one entropy-coded scan, returning the next marker's offset.
+
+    Scan data is not length-prefixed: it runs until a marker that is not part
+    of it. A literal 0xFF byte inside the stream is stuffed as ``FF 00``, and
+    restart markers and fill bytes belong to the scan, so those are stepped
+    over rather than mistaken for the end of the image.
+    """
+    total = len(data)
+    while offset < total:
+        if data[offset] != 0xFF:
+            offset += 1
+            continue
+        if offset + 1 >= total:
+            return None
+        following = data[offset + 1]
+        if following == 0xFF:  # fill byte before the next marker
+            offset += 1
+            continue
+        if following == 0x00 or 0xD0 <= following <= 0xD7:
+            offset += 2
+            continue
+        return offset
+    return None
+
+
 def _jpeg_container_length(data: bytes) -> int | None:
-    """Byte length of the JPEG up to and including its end-of-image marker."""
-    end = data.rfind(b"\xff\xd9")
-    if end == -1:
+    """Byte length of the JPEG up to and including its own end-of-image marker.
+
+    Found by walking the marker segments from the start and stepping over each
+    entropy-coded scan, never by searching backwards for the last ``FFD9`` in
+    the file. The two disagree on exactly the file this exists for: a complete
+    image, a payload, and a second end-of-image marker appended after it reads
+    as one whole image to a search from the end, and as an image with a rider
+    to a walk from the front.
+    """
+    total = len(data)
+    if total < 4 or data[0:2] != b"\xff\xd8":
         return None
-    return end + 2
+
+    offset = 2
+    while offset + 1 < total:
+        if data[offset] != 0xFF:
+            return None
+        # Any number of 0xFF fill bytes may precede a marker.
+        while offset + 1 < total and data[offset + 1] == 0xFF:
+            offset += 1
+        if offset + 1 >= total:
+            return None
+
+        marker = data[offset + 1]
+        if marker == 0xD9:  # EOI: the image ends here, whatever follows
+            return offset + 2
+        if marker == 0x01 or 0xD0 <= marker <= 0xD8:  # standalone, no segment
+            offset += 2
+            continue
+
+        if offset + 4 > total:
+            return None
+        (segment_length,) = struct.unpack(">H", data[offset + 2:offset + 4])
+        if segment_length < 2:
+            return None
+        offset += 2 + segment_length
+        if offset > total:
+            return None
+        if marker == 0xDA:  # SOS is followed by unlengthed scan data
+            scan_end = _jpeg_scan_end(data, offset)
+            if scan_end is None:
+                return None
+            offset = scan_end
+    return None
+
+
+#: Chunk types a WEBP file may legitimately contain. Anything else - a JUNK
+#: chunk carrying a payload, say - makes the upload a container for something
+#: that is not part of the image, whatever its RIFF header was rewritten to say.
+_WEBP_CHUNK_TYPES: frozenset[bytes] = frozenset({
+    b"VP8 ", b"VP8L", b"VP8X", b"ALPH", b"ANIM", b"ANMF",
+    b"ICCP", b"EXIF", b"XMP ",
+})
+
+#: The two simple forms carry the entire image in a single chunk. Alpha and
+#: metadata chunks are only defined for the extended (VP8X) form, so a chunk
+#: sitting after a bare VP8/VP8L is a rider rather than metadata.
+_WEBP_SIMPLE_CHUNK_TYPES: frozenset[bytes] = frozenset({b"VP8 ", b"VP8L"})
 
 
 def _webp_container_length(data: bytes) -> int | None:
-    """Byte length declared by the RIFF header, which covers the whole file."""
+    """Byte length of a structurally complete WEBP file, or None.
+
+    The RIFF header declares its own size, which is evidence of nothing on its
+    own: appending a chunk and rewriting that field produces a file whose
+    declared length matches its real length exactly. So every chunk is walked
+    and named instead, and the walk has to reach the declared end with no
+    unknown chunk and nothing left over.
+    """
     if len(data) < 12:
         return None
     (riff_size,) = struct.unpack("<I", data[4:8])
+    if riff_size < 4:
+        return None
     # The RIFF size counts everything after the size field itself.
-    return riff_size + 8
+    end = riff_size + 8
+    if end > len(data):
+        return None
+
+    offset = 12
+    first_chunk = True
+    while offset < end:
+        if offset + 8 > end:
+            return None
+        chunk_type = data[offset:offset + 4]
+        (chunk_size,) = struct.unpack("<I", data[offset + 4:offset + 8])
+        if chunk_type not in _WEBP_CHUNK_TYPES:
+            return None
+        payload_end = offset + 8 + chunk_size
+        if payload_end > end:
+            return None
+        # Chunks are padded to an even length; a final pad byte is sometimes
+        # left off at end of file, which is not a reason to refuse the image.
+        offset = min(payload_end + (chunk_size % 2), end)
+        if first_chunk and chunk_type in _WEBP_SIMPLE_CHUNK_TYPES and offset != end:
+            return None
+        first_chunk = False
+
+    if offset != end:
+        return None
+    return end
 
 
 _CONTAINER_LENGTH = {
@@ -255,17 +368,25 @@ def container_length(data: bytes, mime_type: str) -> int | None:
 def _check_container(data: bytes, sniffed: SniffedImage) -> None:
     """Refuse anything that is not exactly one complete image.
 
-    Two failures look identical from the header alone and are both refused
+    Three failures look identical from the header alone and are all refused
     here: a file that stops before the image does (a truncated download, or a
-    header-only stub forged to declare convenient dimensions), and one that
+    header-only stub forged to declare convenient dimensions), one that
     continues after it does (an archive or script appended to a real image, so
-    that one upload is two files depending on who opens it).
+    that one upload is two files depending on who opens it), and one whose
+    container is internally malformed - an unknown chunk, a segment that runs
+    past the end, a length the structure contradicts.
+
+    The measurement is structural on purpose. A file may not be trusted about
+    where it ends: the two ways of asking cheaply - search backwards for a
+    JPEG's end marker, read a WEBP's declared RIFF size - are exactly the two a
+    polyglot rewrites so that its payload falls inside the answer.
     """
     length = container_length(data, sniffed.mime_type)
     if length is None or length > len(data):
         raise ImageValidationError(
-            "The image file is incomplete - it ends part-way through the "
-            "image data. Re-export or re-upload it.",
+            "The image file is not a structurally complete image: it is "
+            "truncated, or it carries data that is not part of the image. "
+            "Re-export or re-upload it.",
             "malformed_image",
         )
     if length < len(data):

@@ -2,6 +2,7 @@
 
 import os
 import pytest
+import httpx
 
 from app.services.comfyui_provider import RealComfyUIProvider
 from app.services.comfyui_adapter import HealthStatus
@@ -103,3 +104,45 @@ class TestRealComfyUIProviderUnit:
         provider = RealComfyUIProvider(base_url="http://127.0.0.1:59999")
         result = provider._parse_history_outputs({})
         assert result == []
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("history_status,queue_status", [(500, 200), (200, 503)])
+    async def test_submission_existence_is_unknown_when_either_query_is_non_200(
+        self, monkeypatch, history_status, queue_status
+    ):
+        """An empty queue cannot turn an ambiguous history response into absence."""
+        def handler(request: httpx.Request) -> httpx.Response:
+            if "/history/" in str(request.url):
+                return httpx.Response(history_status, json={})
+            return httpx.Response(
+                queue_status, json={"queue_running": [], "queue_pending": []}
+            )
+
+        transport = httpx.MockTransport(handler)
+        real_client = httpx.AsyncClient
+        monkeypatch.setattr(
+            "app.services.comfyui_provider.httpx.AsyncClient",
+            lambda *args, **kwargs: real_client(transport=transport),
+        )
+        provider = RealComfyUIProvider(base_url="http://comfy.test")
+
+        assert await provider.submission_exists("unknown-prompt") is None
+
+    @pytest.mark.asyncio
+    async def test_submission_is_absent_only_after_two_successful_negative_queries(
+        self, monkeypatch
+    ):
+        def handler(request: httpx.Request) -> httpx.Response:
+            if "/history/" in str(request.url):
+                return httpx.Response(200, json={})
+            return httpx.Response(200, json={"queue_running": [], "queue_pending": []})
+
+        transport = httpx.MockTransport(handler)
+        real_client = httpx.AsyncClient
+        monkeypatch.setattr(
+            "app.services.comfyui_provider.httpx.AsyncClient",
+            lambda *args, **kwargs: real_client(transport=transport),
+        )
+        provider = RealComfyUIProvider(base_url="http://comfy.test")
+
+        assert await provider.submission_exists("definitely-absent") is False

@@ -58,7 +58,7 @@ def test_a_second_generate_starts_a_new_run(
     job = db_session.query(GenerationJob).one()
     job.status = "Completed"
     shot = db_session.query(Shot).filter(Shot.id == sample_shot.id).one()
-    shot.status = "NeedsReview"
+    shot.status = "Ready"
     db_session.commit()
 
     second = client.post(f"/api/projects/{sample_project.id}/generate", json={})

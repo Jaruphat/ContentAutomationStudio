@@ -7,6 +7,8 @@ upload claimed. These tests pin the sniffing, the limits and the filename
 sanitisation that stand between an upload and the project's runtime directory.
 """
 
+import struct
+
 import pytest
 
 from app.services import image_validation as iv
@@ -151,6 +153,84 @@ def test_validate_rejects_a_jpeg_with_trailing_data(encoded_image_bytes):
     with pytest.raises(iv.ImageValidationError) as exc:
         iv.validate_image_bytes(data)
     assert exc.value.code == "malformed_image"
+
+
+# -- Polyglots that survive a naive end-of-file measurement -----------------
+#
+# Both files below are complete images followed by a payload, dressed so that
+# the cheap way of asking "where does this image end?" answers "at the last
+# byte". Measuring from the end of the file, or trusting a length the file
+# declares about itself, accepts them; only walking the format's own structure
+# from the start does not.
+
+def _rebuilt_webp(image: bytes, extra: bytes) -> bytes:
+    """A WEBP with ``extra`` appended and its RIFF length rewritten to match."""
+    body = image[12:] + extra
+    return b"RIFF" + struct.pack("<I", 4 + len(body)) + b"WEBP" + body
+
+
+def _webp_chunk(fourcc: bytes, payload: bytes) -> bytes:
+    chunk = fourcc + struct.pack("<I", len(payload)) + payload
+    return chunk + (b"\x00" if len(payload) % 2 else b"")
+
+
+def test_validate_rejects_a_jpeg_carrying_a_payload_before_a_second_eoi(
+    encoded_image_bytes
+):
+    """A whole JPEG, a payload, then another FFD9 to make the file look closed."""
+    image = encoded_image_bytes("jpg", 96, 96)
+    polyglot = image + b"PK\x03\x04" + b"payload" * 64 + b"\xff\xd9"
+
+    # Searching backwards for the end-of-image marker finds the forged one and
+    # concludes the file ends exactly where the image does. It does not.
+    assert polyglot.rfind(b"\xff\xd9") + 2 == len(polyglot)
+    assert iv.container_length(polyglot, "image/jpeg") == len(image)
+
+    with pytest.raises(iv.ImageValidationError) as exc:
+        iv.validate_image_bytes(polyglot, declared_filename="hero.jpg")
+    assert exc.value.code == "malformed_image"
+
+
+def test_validate_rejects_a_webp_with_an_appended_chunk_and_adjusted_length(
+    encoded_image_bytes
+):
+    """A JUNK chunk carrying a payload, with the RIFF size rewritten to cover it."""
+    image = encoded_image_bytes("webp", 128, 72)
+    polyglot = _rebuilt_webp(image, _webp_chunk(b"JUNK", b"payload" * 64))
+
+    # The file's own declared length now agrees with its real length, so the
+    # header alone reports a complete, self-consistent WEBP.
+    assert struct.unpack("<I", polyglot[4:8])[0] + 8 == len(polyglot)
+    assert iv.container_length(polyglot, "image/webp") is None
+
+    with pytest.raises(iv.ImageValidationError) as exc:
+        iv.validate_image_bytes(polyglot, declared_filename="hero.webp")
+    assert exc.value.code == "malformed_image"
+
+
+def test_validate_rejects_a_webp_riding_metadata_chunks_on_a_simple_file(
+    encoded_image_bytes
+):
+    """A named chunk is not a licence either: EXIF needs a VP8X container."""
+    image = encoded_image_bytes("webp", 128, 72)
+    polyglot = _rebuilt_webp(image, _webp_chunk(b"EXIF", b"payload" * 64))
+
+    with pytest.raises(iv.ImageValidationError) as exc:
+        iv.validate_image_bytes(polyglot, declared_filename="hero.webp")
+    assert exc.value.code == "malformed_image"
+
+
+def test_a_real_jpeg_and_webp_still_measure_to_their_own_length(
+    encoded_image_bytes
+):
+    """The structural walk must agree with an ordinary encoder's output."""
+    jpeg = encoded_image_bytes("jpg", 96, 96)
+    webp = encoded_image_bytes("webp", 128, 72)
+
+    assert iv.container_length(jpeg, "image/jpeg") == len(jpeg)
+    assert iv.container_length(webp, "image/webp") == len(webp)
+    assert iv.validate_image_bytes(jpeg).mime_type == "image/jpeg"
+    assert iv.validate_image_bytes(webp).mime_type == "image/webp"
 
 
 def test_validate_rejects_a_png_whose_pixel_data_is_corrupt(png_bytes):

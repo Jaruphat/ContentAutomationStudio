@@ -307,11 +307,14 @@ class RealComfyUIProvider(ComfyUIProvider):
         try:
             async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
                 hist_resp = await client.get(f"{self._base_url}/history/{prompt_id}")
-                if hist_resp.status_code == 200 and prompt_id in hist_resp.json():
+                if hist_resp.status_code != 200:
+                    return None
+                if prompt_id in hist_resp.json():
                     return True
 
                 queue_resp = await client.get(f"{self._base_url}/queue")
-                queue_resp.raise_for_status()
+                if queue_resp.status_code != 200:
+                    return None
                 queue_data = queue_resp.json()
                 for key in ("queue_running", "queue_pending"):
                     for item in queue_data.get(key, []):

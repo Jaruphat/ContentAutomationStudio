@@ -310,9 +310,9 @@ class Shot(Base):
     # Everything a generation depends on - the compiled prompt, the scene, the
     # Story Bible entries that reach this shot, its reference images - folds
     # into content_sha256. prompt_revision counts the times that digest moved;
-    # generated_revision records which revision the last job was built from.
-    # A shot is stale exactly when it has been generated and the two disagree,
-    # which is what keeps invalidation selective instead of project-wide.
+    # generated_revision records which current revision a successful job was
+    # credited to. generated_content_sha256 also records an older first job
+    # that completed after an edit, so revision zero cannot hide stale output.
     prompt_revision = Column(Integer, nullable=False, default=1)
     prompt_sha256 = Column(String, default="")
     content_sha256 = Column(String, default="")

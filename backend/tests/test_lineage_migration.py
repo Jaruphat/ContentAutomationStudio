@@ -12,11 +12,13 @@ timeline.
 """
 
 import pytest
+from fastapi import HTTPException
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import sessionmaker
 
 from app import database
-from app.models import Take, TimelineItem
+from app.models import Shot, Take, TimelineItem
+from app.routers import review as review_router
 from app.schemas import TakeResponse
 from app.services import revisions, timeline_service
 
@@ -230,6 +232,118 @@ def test_an_empty_derived_build_never_replaces_a_real_timeline(migrated_session)
 
     remaining = migrated_session.query(TimelineItem).all()
     assert {item.id for item in remaining} == {"ti1", "ti2"}
+
+
+# ---------------------------------------------------------------------------
+# ...but the preservation ends where the shot changes
+#
+# "Unverified" is a claim about a moment: this take predates lineage tracking,
+# and the shot has not moved since the migration looked at it. Editing the shot
+# ends that. A take that stays permanently unverified is worse than one that
+# was never migrated, because it keeps passing as deliverable through approve,
+# the timeline and the render while the brief moves away underneath it.
+# ---------------------------------------------------------------------------
+
+def _edit_shot(session, shot_id: str) -> None:
+    """Change a migrated shot's content, the way a user editing it would."""
+    shot = session.query(Shot).filter(Shot.id == shot_id).one()
+    shot.image_prompt = "a prompt this take was never generated from"
+    session.commit()
+    revisions.refresh_project(session, "p1")
+    session.refresh(shot)
+
+
+def test_the_migration_records_the_revision_a_legacy_take_is_unverified_at(
+    migrated_session
+):
+    """Without a baseline there is nothing for a later edit to be measured against."""
+    take = migrated_session.query(Take).filter(Take.id == "t2").one()
+    revisions.refresh_project(migrated_session, "p1")
+
+    assert revisions.is_legacy_lineage(take) is True
+    assert revisions.legacy_baseline_revision(take) == take.shot.prompt_revision
+
+
+def test_an_edited_shot_makes_its_legacy_take_stale_not_unverified(migrated_session):
+    revisions.refresh_project(migrated_session, "p1")
+    take = migrated_session.query(Take).filter(Take.id == "t2").one()
+    assert revisions.take_lineage_state(take, take.shot) == revisions.LINEAGE_UNVERIFIED
+
+    _edit_shot(migrated_session, "sh2")
+
+    assert revisions.take_lineage_state(take, take.shot) == revisions.LINEAGE_STALE
+    # Selective, as ever: the shot that was not touched keeps its take.
+    other = migrated_session.query(Take).filter(Take.id == "t1").one()
+    assert revisions.take_lineage_state(other, other.shot) == (
+        revisions.LINEAGE_UNVERIFIED
+    )
+
+
+def test_a_legacy_take_cannot_be_approved_after_its_shot_changes(migrated_session):
+    """Approving is what marks a shot delivered; an edited shot was not."""
+    take = migrated_session.query(Take).filter(Take.id == "t2").one()
+    take.review_status = "Pending"
+    migrated_session.commit()
+    _edit_shot(migrated_session, "sh2")
+
+    with pytest.raises(HTTPException) as exc:
+        review_router.approve_take("t2", None, migrated_session)
+
+    assert exc.value.status_code == 409
+    migrated_session.refresh(take)
+    assert take.review_status == "Pending"
+    assert take.shot.status != "Approved"
+
+
+def test_an_edited_shot_drops_its_legacy_take_off_a_rebuilt_cut(migrated_session):
+    _edit_shot(migrated_session, "sh2")
+
+    built = timeline_service.build_timeline_from_approved_takes(
+        migrated_session, "p1"
+    )
+
+    assert [item["shot_id"] for item in built] == ["sh1"]
+    reasons = {
+        entry["shot_id"]: entry["reason"]
+        for entry in timeline_service.timeline_coverage(
+            migrated_session, "p1"
+        )["missing"]
+    }
+    assert reasons == {}  # nothing missing yet: the old cut still covers sh2
+
+
+def test_an_edited_shot_cannot_have_its_legacy_take_placed(migrated_session):
+    _edit_shot(migrated_session, "sh2")
+
+    with pytest.raises(timeline_service.StaleTimelineError):
+        timeline_service.save_timeline_items(migrated_session, "p1", [{
+            "shot_id": "sh2",
+            "take_id": "t2",
+            "order": 0,
+            "duration_sec": 4.0,
+        }])
+
+    # The refusal is not allowed to delete the cut it refused to replace.
+    assert {item.id for item in migrated_session.query(TimelineItem).all()} == {
+        "ti1", "ti2"
+    }
+
+
+def test_an_edited_shot_makes_the_existing_cut_fail_the_strict_read(
+    migrated_session
+):
+    """The strict read is what every export and the render go through."""
+    _edit_shot(migrated_session, "sh2")
+
+    manifest = timeline_service.get_timeline_manifest(migrated_session, "p1")
+    assert manifest["delivery_validation"]["pipeline_pass"] is False
+
+    with pytest.raises(timeline_service.StaleTimelineError):
+        timeline_service.get_timeline_manifest(
+            migrated_session, "p1", strict_lineage=True
+        )
+    with pytest.raises(timeline_service.StaleTimelineError):
+        timeline_service.generate_render_plan(migrated_session, "p1")
 
 
 def test_the_backfill_is_idempotent(pre_lineage_db):

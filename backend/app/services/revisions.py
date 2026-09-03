@@ -43,6 +43,14 @@ LINEAGE_STALE = "stale"
 #: something indistinguishable from "this does not match".
 LEGACY_LINEAGE_FLAG = "legacy_unverified_lineage"
 
+#: Written alongside the flag: the shot revision the migration observed. It is
+#: what turns "unverified" from a permanent excuse into a claim with an expiry.
+LEGACY_BASELINE_FLAG = "legacy_baseline_revision"
+
+#: The revision a migrated shot starts at, and therefore the baseline assumed
+#: for a take flagged by a build that recorded no baseline of its own.
+FIRST_TRACKED_REVISION = 1
+
 
 @dataclass
 class ShotDigest:
@@ -199,15 +207,27 @@ def apply_digest(shot: Shot, digest: ShotDigest) -> bool:
 def _sync_staleness(shot: Shot) -> None:
     """A shot is stale exactly when what it produced is not what it now is."""
     shot.is_stale = bool(
-        shot.generated_revision
-        and shot.generated_revision != shot.prompt_revision
+        (
+            shot.generated_revision
+            and shot.generated_revision != shot.prompt_revision
+        )
+        or (
+            shot.generated_content_sha256
+            and shot.generated_content_sha256 != shot.content_sha256
+        )
     )
 
 
 def is_stale(shot: Shot) -> bool:
     return bool(
-        shot.generated_revision
-        and shot.generated_revision != shot.prompt_revision
+        (
+            shot.generated_revision
+            and shot.generated_revision != shot.prompt_revision
+        )
+        or (
+            shot.generated_content_sha256
+            and shot.generated_content_sha256 != shot.content_sha256
+        )
     )
 
 
@@ -241,11 +261,18 @@ def refresh_project(db: Session, project_id: str) -> list[str]:
             .all()
         )
         for shot in shots:
+            had_content_baseline = bool(shot.content_sha256)
             digest = shot_digest(
                 db, shot, scene=scene, bible=bible, project_id=project_id
             )
             if apply_digest(shot, digest):
                 advanced.append(shot.id)
+                # Editing delivered content revokes the shot-level approval.
+                # Historical takes keep their review records, but the edited
+                # shot must return to an eligible state until a current take is
+                # generated and approved.
+                if had_content_baseline and shot.status == "Approved":
+                    shot.status = "Ready"
             _sync_staleness(shot)
 
     db.commit()
@@ -291,6 +318,12 @@ def mark_generated_if_current(
     if matches:
         shot.generated_revision = shot.prompt_revision
         shot.generated_content_sha256 = shot.content_sha256
+    elif content_sha256:
+        # A first job can become stale before the shot has any credited
+        # generation revision. Keep its submitted digest as durable evidence
+        # that output exists for older content without pretending revision zero
+        # generated the edited shot.
+        shot.generated_content_sha256 = content_sha256
     _sync_staleness(shot)
     return matches
 
@@ -305,16 +338,40 @@ def is_legacy_lineage(take: Take) -> bool:
     return bool(lineage.get(LEGACY_LINEAGE_FLAG))
 
 
+def legacy_baseline_revision(take: Take) -> int:
+    """The shot revision a legacy take is unverifiable *at*.
+
+    A database migrated by a build that predates this records the flag without
+    a baseline; those takes fall back to the revision a migrated shot starts
+    at, which is what the migration would have written anyway.
+    """
+    lineage = take.lineage if isinstance(take.lineage, dict) else {}
+    value = lineage.get(LEGACY_BASELINE_FLAG)
+    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+        return FIRST_TRACKED_REVISION
+    return value
+
+
 def take_lineage_state(take: Take, shot: Shot) -> str:
     """Classify a take against the shot as it stands now.
 
     Three answers, not two: a take written before lineage was recorded cannot
     be proven current, but neither can it be called stale. Collapsing that into
     "does not match" is what silently drops migrated approved work off the cut.
+
+    Unverified is bounded, though. It says "this take predates lineage
+    tracking, and the shot has not moved since the migration looked at it" -
+    which stops being true the moment someone edits the shot or its references.
+    Past that baseline the take is no longer merely unproven; the shot it was
+    generated from demonstrably no longer exists, so it is stale like any
+    other take of a superseded revision.
     """
     if take is None or shot is None or take.shot_id != shot.id:
         return LINEAGE_STALE
     if is_legacy_lineage(take) or not (take.prompt_sha256 or take.content_sha256):
+        current = shot.prompt_revision or FIRST_TRACKED_REVISION
+        if current > legacy_baseline_revision(take):
+            return LINEAGE_STALE
         return LINEAGE_UNVERIFIED
     if (
         take.prompt_revision == shot.prompt_revision

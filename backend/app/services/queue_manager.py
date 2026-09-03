@@ -131,6 +131,21 @@ class QueueManager:
                 .all()
             )
             for job in running_jobs:
+                if job.submitted_at and not (job.comfyui_prompt_id or "").strip():
+                    job.status = "Failed"
+                    job.error_code = UNRECONCILED_ERROR
+                    job.error_message = (
+                        "This job began submission before the backend restarted, "
+                        "but no provider identity was committed. The provider may "
+                        "already have accepted and charged for it, so it was not "
+                        "resubmitted automatically. Check the provider, then use "
+                        "Retry to submit it again."
+                    )
+                    job.completed_at = datetime.now(timezone.utc)
+                    shot = db.query(Shot).filter(Shot.id == job.shot_id).first()
+                    if shot:
+                        shot.status = "Failed"
+                    continue
                 job.status = "Queued"
                 if job.comfyui_prompt_id:
                     logger.info(
@@ -274,18 +289,42 @@ class QueueManager:
             job.workflow_sha256 = built.workflow_sha256
             db.commit()
 
+            # Commit before crossing the provider boundary. If the provider
+            # accepts the work and this process dies before receiving/storing
+            # its id, restart can now distinguish that ambiguous window from a
+            # job that was never submitted and quarantine it instead of paying
+            # for a duplicate.
+            job.submitted_at = datetime.now(timezone.utc)
+            db.commit()
             prompt_id = await provider.submit_job(
                 built.payload, job.id, context=self._job_context(db, job, shot)
             )
             job.comfyui_prompt_id = prompt_id
-            job.submitted_at = datetime.now(timezone.utc)
             db.commit()
 
             await self._poll_until_terminal(db, job, shot, provider, prompt_id)
 
         except Exception as exc:
             logger.exception("Error executing job %s", job.id)
-            self._handle_failure(db, job, shot, message=str(exc), exception=exc)
+            classification = error_classifier.classify(str(exc), exc)
+            if not classification.retryable:
+                # Deterministic provider rejection (invalid model, OOM, etc.)
+                # is a known failure, not an unknown accepted submission.
+                self._handle_failure(db, job, shot, message=str(exc), exception=exc)
+            elif job.submitted_at and not (job.comfyui_prompt_id or "").strip():
+                self._fail_permanently(
+                    db,
+                    job,
+                    shot,
+                    UNRECONCILED_ERROR,
+                    "Submission started but no provider identity was returned. "
+                    "The provider may already have accepted and charged for the "
+                    "work, so it was not retried automatically. Check the "
+                    "provider, then use Retry to submit it again. "
+                    f"Provider error: {exc}",
+                )
+            else:
+                self._handle_failure(db, job, shot, message=str(exc), exception=exc)
 
     async def _poll_until_terminal(
         self,

@@ -60,16 +60,40 @@ def backfill_data():
     feature needs on existing rows is derived here instead. Imported lazily to
     keep this module free of service-layer imports at module scope.
     """
-    from app.services import generation_runs, lineage_backfill
+    from app.models import Scene, Shot
+    from app.services import generation_runs, lineage_backfill, revisions
 
     generation_runs.backfill_legacy_job_defaults(engine)
     generation_runs.backfill_legacy_runs(engine)
     # Runs after the job defaults, so a take can still inherit the lineage its
     # job recorded before those columns are normalised. Shot revision columns
-    # are deliberately left alone: the first revision refresh derives them, and
-    # deriving is better than guessing.
+    # are then derived from content below rather than guessed by SQL defaults.
     lineage_backfill.backfill_take_lineage(engine)
     lineage_backfill.backfill_timeline_lineage(engine)
+
+    # Establish the content baseline during migration, before a later user edit
+    # can become the first digest refresh and look indistinguishable from the
+    # migrated state. Only projects with uninitialised shot digests are touched;
+    # current databases pay no startup-wide revision refresh cost.
+    migration_session = sessionmaker(
+        autocommit=False, autoflush=False, bind=engine
+    )
+    db = migration_session()
+    try:
+        project_ids = [
+            project_id
+            for (project_id,) in (
+                db.query(Scene.project_id)
+                .join(Shot, Shot.scene_id == Scene.id)
+                .filter((Shot.content_sha256.is_(None)) | (Shot.content_sha256 == ""))
+                .distinct()
+                .all()
+            )
+        ]
+        for project_id in project_ids:
+            revisions.refresh_project(db, project_id)
+    finally:
+        db.close()
 
 
 def ensure_schema():

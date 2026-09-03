@@ -78,6 +78,99 @@ def _parse_resolution(value: str) -> tuple[int, int]:
     return generation_planning.parse_resolution(value)
 
 
+ELIGIBLE_GENERATION_STATUSES = {"Draft", "Ready", "Failed"}
+
+
+def _status_issue(shot: Shot) -> str | None:
+    if shot.status in ELIGIBLE_GENERATION_STATUSES:
+        return None
+    return (
+        f"Shot status is '{shot.status}', expected "
+        + ", ".join(sorted(ELIGIBLE_GENERATION_STATUSES))
+    )
+
+
+def _continuity_issues_by_shot(
+    db: Session, project_id: str, shots: list[Shot]
+) -> dict[str, dict[str, Any]]:
+    bible_requirements = [
+        loc.props or ""
+        for loc in db.query(Location).filter(Location.project_id == project_id).all()
+    ]
+    bible_requirements.extend(
+        value
+        for style in db.query(Style).filter(Style.project_id == project_id).all()
+        for value in (
+            style.visual_keywords,
+            style.lighting_rules,
+            style.negative_constraints,
+        )
+        if value
+    )
+    findings = continuity.find_continuity_issues(
+        [
+            {
+                "id": shot.id,
+                "subject": shot.subject,
+                "action": shot.action,
+                "environment": shot.environment,
+                "image_prompt": shot.image_prompt,
+                "video_prompt": shot.video_prompt,
+            }
+            for shot in shots
+        ],
+        bible_requirements,
+    )
+    return {finding["shot_id"]: finding for finding in findings}
+
+
+def _validate_workflow_record(
+    workflow: Workflow, provider
+) -> tuple[str, list[str], list[str]]:
+    """Validate one assigned workflow for both preflight and /generate."""
+    errors: list[str] = []
+    warnings: list[str] = []
+    source_format = (workflow.source_format or "unknown").lower()
+    if source_format != WorkflowFormat.API.value:
+        errors.append(
+            f"Workflow is {source_format}-format JSON, which ComfyUI cannot "
+            "execute. Re-import it via Workflow -> Export (API) in ComfyUI."
+        )
+        workflow.validation_status = "unsupported_format"
+        return source_format, errors, warnings
+
+    try:
+        workflow_data = workflow_registry.load_workflow_source(
+            workflow.source_json_path
+        )
+    except (FileNotFoundError, ValueError) as exc:
+        errors.append(str(exc))
+        workflow_data = None
+
+    if workflow_data is not None:
+        _valid, map_errors, map_warnings = workflow_registry.validate_mapping(
+            workflow_data=workflow_data,
+            parameter_mapping=workflow.parameter_mapping or {},
+            output_mapping=workflow.output_mapping or [],
+        )
+        errors.extend(map_errors)
+        warnings.extend(map_warnings)
+        missing = [
+            field
+            for field in job_payload.REQUIRED_LOGICAL_FIELDS
+            if field not in (workflow.parameter_mapping or {})
+        ]
+        if missing:
+            message = f"Required logical field(s) not mapped: {', '.join(missing)}"
+            if provider.requires_workflow_payload:
+                errors.append(message)
+            else:
+                warnings.append(message + " (tolerated in mock mode)")
+
+    workflow.validation_status = "valid" if not errors else "invalid"
+    return source_format, errors, warnings
+
+
 # ---------------------------------------------------------------------------
 # Preflight validation
 # ---------------------------------------------------------------------------
@@ -131,33 +224,7 @@ async def preflight_validation(project_id: str, db: Session = Depends(get_db)):
 
     # Story/Style Bible prose can carry explicit recurring-prop invariants.
     # Keep these findings shot-addressable so only failed shots need regeneration.
-    bible_requirements = [
-        loc.props or ""
-        for loc in db.query(Location).filter(Location.project_id == project_id).all()
-    ]
-    bible_requirements.extend(
-        value
-        for style in db.query(Style).filter(Style.project_id == project_id).all()
-        for value in (style.visual_keywords, style.lighting_rules, style.negative_constraints)
-        if value
-    )
-    continuity_findings = continuity.find_continuity_issues(
-        [
-            {
-                "id": shot.id,
-                "subject": shot.subject,
-                "action": shot.action,
-                "environment": shot.environment,
-                "image_prompt": shot.image_prompt,
-                "video_prompt": shot.video_prompt,
-            }
-            for shot in shots
-        ],
-        bible_requirements,
-    )
-    continuity_by_shot = {
-        finding["shot_id"]: finding for finding in continuity_findings
-    }
+    continuity_by_shot = _continuity_issues_by_shot(db, project_id, shots)
 
     def _resolve_workflow_id(shot: Shot) -> str | None:
         # A shot generated through a hosted image API has no graph to validate.
@@ -181,60 +248,9 @@ async def preflight_validation(project_id: str, db: Session = Depends(get_db)):
             workflow_ok[workflow_id] = False
             continue
 
-        errors: list[str] = []
-        check_warnings: list[str] = []
-
-        # An editor/UI graph fails for a reason no amount of mapping fixes, so
-        # it is reported as such and not re-checked as a mapping problem.
-        source_format = (workflow.source_format or "unknown").lower()
-        if source_format != WorkflowFormat.API.value:
-            workflow_ok[workflow_id] = False
-            workflow_checks.append({
-                "workflow_id": workflow_id,
-                "name": workflow.name,
-                "valid": False,
-                "source_format": source_format,
-                "errors": [
-                    f"Workflow is {source_format}-format JSON, which ComfyUI "
-                    f"cannot execute. Re-import it via Workflow -> Export (API) "
-                    f"in ComfyUI."
-                ],
-                "warnings": [],
-            })
-            workflow.validation_status = "unsupported_format"
-            continue
-
-        try:
-            workflow_data = workflow_registry.load_workflow_source(
-                workflow.source_json_path
-            )
-        except (FileNotFoundError, ValueError) as exc:
-            errors.append(str(exc))
-            workflow_data = None
-
-        if workflow_data is not None:
-            valid, map_errors, map_warnings = workflow_registry.validate_mapping(
-                workflow_data=workflow_data,
-                parameter_mapping=workflow.parameter_mapping or {},
-                output_mapping=workflow.output_mapping or [],
-            )
-            errors.extend(map_errors)
-            check_warnings.extend(map_warnings)
-
-            mapping = workflow.parameter_mapping or {}
-            missing = [
-                f for f in job_payload.REQUIRED_LOGICAL_FIELDS if f not in mapping
-            ]
-            if missing:
-                message = (
-                    f"Required logical field(s) not mapped: {', '.join(missing)}"
-                )
-                # Only blocking for a real instance; the mock does not execute
-                # the graph, so an unmapped field cannot break it.
-                if provider.requires_workflow_payload:
-                    errors.append(message)
-                else:
-                    check_warnings.append(message + " (tolerated in mock mode)")
+        source_format, errors, check_warnings = _validate_workflow_record(
+            workflow, provider
+        )
 
         is_ok = not errors
         workflow_ok[workflow_id] = is_ok
@@ -247,8 +263,7 @@ async def preflight_validation(project_id: str, db: Session = Depends(get_db)):
             "warnings": check_warnings,
         })
 
-        # Keep the stored validation status in step with what we just checked.
-        workflow.validation_status = "valid" if is_ok else "invalid"
+
 
     db.commit()
 
@@ -311,10 +326,9 @@ async def preflight_validation(project_id: str, db: Session = Depends(get_db)):
                         "referenceImage workflow mapping"
                     )
 
-        if shot.status not in ("Ready", "Draft", "Failed"):
-            shot_issues.append(
-                f"Shot status is '{shot.status}', expected Ready, Draft or Failed"
-            )
+        status_issue = _status_issue(shot)
+        if status_issue:
+            shot_issues.append(status_issue)
 
         if shot_issues:
             issues.append({
@@ -406,14 +420,13 @@ def start_generation(
 
     # Filter shots
     target_ids = set(payload.shot_ids) if payload.shot_ids else None
-    eligible_statuses = {"Draft", "Ready", "Failed", "NeedsReview"}
-
-    selected = [
-        shot
-        for shot in all_shots
-        if not (target_ids and shot.id not in target_ids)
-        and shot.status in eligible_statuses
-    ]
+    if target_ids is not None:
+        selected = [shot for shot in all_shots if shot.id in target_ids]
+    else:
+        selected = [
+            shot for shot in all_shots
+            if shot.status in ELIGIBLE_GENERATION_STATUSES
+        ]
 
     # A shot that is already Queued or Running must not be queued again: that
     # would produce two takes for one request, and two charges for it on a
@@ -486,9 +499,24 @@ def start_generation(
     # use, and leave a run whose shot list does not describe it.
     references: dict[str, list[Any]] = {}
     blocked: list[str] = []
+    continuity_by_shot = _continuity_issues_by_shot(db, project_id, selected)
     for shot in selected:
         plan = plans[shot.id]
         shot_blockers = list(plan.blockers)
+        status_issue = _status_issue(shot)
+        if status_issue:
+            shot_blockers.append(status_issue)
+        if shot.generation_mode == "image" and not (shot.image_prompt or "").strip():
+            shot_blockers.append("Missing image prompt")
+        elif shot.generation_mode in ("video", "image-to-video") and not (
+            shot.video_prompt or ""
+        ).strip():
+            shot_blockers.append("Missing video prompt")
+        finding = continuity_by_shot.get(shot.id)
+        if finding:
+            shot_blockers.append(
+                "recurring prop continuity missing " + ", ".join(finding["missing"])
+            )
         resolved_references, reference_problems = reference_bible.resolve_images(
             db, project_id, list(shot.reference_asset_ids or [])
         )
@@ -496,6 +524,19 @@ def start_generation(
         shot_blockers.extend(problem.message for problem in reference_problems)
         if shot.generation_mode == "image-to-video" and not resolved_references:
             shot_blockers.append("Image-to-video requires a reference image.")
+        if plan.provider_id == media_providers.COMFYUI and plan.workflow_id:
+            workflow = db.query(Workflow).filter(Workflow.id == plan.workflow_id).first()
+            if workflow is None:
+                shot_blockers.append("Assigned workflow was not found.")
+            else:
+                _format, workflow_errors, _warnings = _validate_workflow_record(
+                    workflow, queue_manager.provider
+                )
+                if workflow_errors:
+                    shot_blockers.append(
+                        "Assigned workflow mapping is invalid: "
+                        + "; ".join(workflow_errors)
+                    )
         if resolved_references and plan.provider_id == media_providers.COMFYUI:
             workflow = (
                 db.query(Workflow).filter(Workflow.id == plan.workflow_id).first()
@@ -842,6 +883,7 @@ def retry_job(job_id: str, db: Session = Depends(get_db)):
     job.started_at = None
     job.completed_at = None
     job.comfyui_prompt_id = None
+    job.submitted_at = None
     db.commit()
     db.refresh(job)
 

@@ -8,6 +8,7 @@ while a job is polling, and driving a job to a Take through the mock provider.
 """
 
 import uuid
+from datetime import datetime, timezone
 
 import pytest
 from sqlalchemy.orm import Session, sessionmaker
@@ -88,6 +89,24 @@ class TestReconcileOnStartup:
         assert job.status == "Queued"
         assert job.comfyui_prompt_id is None
         assert job.started_at is None
+
+    def test_started_submission_without_an_identity_is_quarantined(
+        self, db_session, sample_shot, manager, patched_sessions
+    ):
+        """A crash after provider acceptance cannot be treated as never sent."""
+        job = make_job(
+            db_session,
+            sample_shot.id,
+            status="Running",
+            submitted_at=datetime.now(timezone.utc),
+        )
+
+        manager.reconcile_on_startup()
+
+        db_session.refresh(job)
+        assert job.status == "Failed"
+        assert job.error_code == qm_module.UNRECONCILED_ERROR
+        assert "may already have accepted" in job.error_message
 
     def test_submitted_running_job_keeps_its_provider_prompt_id(
         self, db_session, sample_shot, manager, patched_sessions
@@ -217,6 +236,32 @@ class TestExecuteJob:
         assert take.reference_image_ids == ["image-1"]
         assert take.reference_sha256s == ["d" * 64]
         assert take.provenance["references"] == job.reference_provenance
+
+    @pytest.mark.asyncio
+    async def test_submission_is_marked_before_the_provider_call_and_not_auto_retried(
+        self, db_session, sample_shot, manager, patched_sessions
+    ):
+        """An ambiguous submit exception is not permission to call submit again."""
+        job = make_job(db_session, sample_shot.id)
+        observed = {}
+
+        async def accepted_then_connection_dropped(payload, job_id, context=None):
+            db_session.expire_all()
+            durable = db_session.query(GenerationJob).filter(
+                GenerationJob.id == job_id
+            ).one()
+            observed["submitted_at"] = durable.submitted_at
+            raise ConnectionError("response lost after provider acceptance")
+
+        manager._provider.submit_job = accepted_then_connection_dropped
+        manager._running = True
+        await manager._execute_job(db_session, job)
+
+        db_session.refresh(job)
+        assert observed["submitted_at"] is not None
+        assert job.status == "Failed"
+        assert job.error_code == qm_module.UNRECONCILED_ERROR
+        assert job.comfyui_prompt_id is None
 
     @pytest.mark.asyncio
     async def test_cancel_during_poll_stops_the_job(
@@ -371,6 +416,33 @@ class TestResumeAfterRestart:
 # ---------------------------------------------------------------------------
 
 class TestStaleCompletion:
+    @pytest.mark.asyncio
+    async def test_first_generation_finishing_after_an_edit_stays_stale(
+        self, db_session, sample_project, sample_shot, manager,
+        patched_sessions, monkeypatch,
+    ):
+        monkeypatch.setattr(qm_module, "POLL_INTERVAL_SEC", 0.01)
+        monkeypatch.setattr(mock_provider_module, "QUEUED_SEC", 0.0)
+        monkeypatch.setattr(mock_provider_module, "RUNNING_SEC", 0.0)
+        revisions.refresh_project(db_session, sample_project.id)
+        job = make_job(
+            db_session, sample_shot.id,
+            prompt_revision=sample_shot.prompt_revision,
+            prompt_sha256=sample_shot.prompt_sha256,
+            content_sha256=sample_shot.content_sha256,
+        )
+        sample_shot.action = "changed while the first generation was in flight"
+        db_session.commit()
+        revisions.refresh_project(db_session, sample_project.id)
+        assert sample_shot.generated_revision == 0
+
+        manager._running = True
+        await manager._execute_job(db_session, job)
+
+        db_session.refresh(sample_shot)
+        assert sample_shot.generated_revision == 0
+        assert sample_shot.is_stale is True
+
     @pytest.mark.asyncio
     async def test_completion_clears_staleness_only_for_the_matching_revision(
         self, db_session, sample_project, sample_shot, manager,
@@ -537,10 +609,13 @@ class TestRetryPolicy:
         assert "Suggested action" in job.error_message
 
     @pytest.mark.asyncio
-    async def test_connection_error_is_requeued(
+    async def test_connection_error_after_submit_starts_is_quarantined(
         self, db_session, sample_shot, manager, patched_sessions
     ):
+        submissions = []
+
         async def refused(_payload, _job_id, context=None):
+            submissions.append(_job_id)
             raise ConnectionError("All connection attempts failed")
 
         manager._provider.submit_job = refused
@@ -549,31 +624,31 @@ class TestRetryPolicy:
         await manager._execute_job(db_session, job)
 
         db_session.refresh(job)
-        assert job.status == "Queued"
-        assert job.attempts == 1
+        assert job.status == "Failed"
+        assert submissions == [job.id]
         assert job.comfyui_prompt_id is None
+        assert job.error_code == qm_module.UNRECONCILED_ERROR
 
     @pytest.mark.asyncio
-    async def test_connection_error_stops_at_the_attempt_ceiling(
+    async def test_connection_error_never_reaches_an_automatic_second_attempt(
         self, db_session, sample_shot, manager, patched_sessions
     ):
+        submissions = []
+
         async def refused(_payload, _job_id, context=None):
+            submissions.append(_job_id)
             raise ConnectionError("Cannot connect to ComfyUI")
 
         manager._provider.submit_job = refused
         job = make_job(db_session, sample_shot.id)
         manager._running = True
 
-        for _ in range(qm_module.MAX_ATTEMPTS):
-            db_session.refresh(job)
-            if job.status != "Queued":
-                break
-            await manager._execute_job(db_session, job)
+        await manager._execute_job(db_session, job)
 
         db_session.refresh(job)
         assert job.status == "Failed"
-        assert job.error_code == "ConnectionError"
-        assert job.attempts == qm_module.MAX_ATTEMPTS
+        assert job.error_code == qm_module.UNRECONCILED_ERROR
+        assert submissions == [job.id]
 
     @pytest.mark.asyncio
     async def test_missing_model_is_not_retried(

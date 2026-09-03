@@ -12,8 +12,9 @@ recorded shot list does not describe what it did.
 import os
 import uuid
 
-from app.models import GenerationJob, GenerationRun, Shot
-from app.services import reference_bible
+from app.routers import generation as generation_router
+from app.models import GenerationJob, GenerationRun, Shot, Workflow
+from app.services import job_payload, reference_bible, workflow_registry
 
 
 def _add_shot(client, project_id, scene_id, **fields) -> str:
@@ -51,6 +52,23 @@ def test_generate_refuses_a_shot_its_plan_reports_as_blocked(
 
     assert response.status_code == 409, response.text
     assert "compiled image prompt" in response.json()["detail"]
+    assert _counts(db_session) == (0, 0)
+
+
+def test_generate_refuses_a_comfyui_shot_with_no_prompt(
+    client, db_session, sample_project, sample_shot
+):
+    sample_shot.image_prompt = ""
+    sample_shot.status = "Ready"
+    db_session.commit()
+
+    response = client.post(
+        f"/api/projects/{sample_project.id}/generate",
+        json={"shot_ids": [sample_shot.id]},
+    )
+
+    assert response.status_code == 409, response.text
+    assert "Missing image prompt" in response.json()["detail"]
     assert _counts(db_session) == (0, 0)
 
 
@@ -121,6 +139,115 @@ def test_image_to_video_without_a_reference_is_refused_atomically(
 
     assert response.status_code == 409, response.text
     assert "reference image" in response.json()["detail"]
+    assert _counts(db_session) == (0, 0)
+
+
+def test_generate_refuses_an_explicit_needs_review_shot_atomically(
+    client, db_session, sample_project, sample_shot
+):
+    sample_shot.status = "NeedsReview"
+    db_session.commit()
+
+    response = client.post(
+        f"/api/projects/{sample_project.id}/generate",
+        json={"shot_ids": [sample_shot.id]},
+    )
+
+    assert response.status_code == 409, response.text
+    assert "NeedsReview" in response.json()["detail"]
+    assert _counts(db_session) == (0, 0)
+
+
+def test_generate_refuses_an_explicit_approved_shot_atomically(
+    client, db_session, sample_project, sample_shot
+):
+    sample_shot.status = "Approved"
+    db_session.commit()
+
+    response = client.post(
+        f"/api/projects/{sample_project.id}/generate",
+        json={"shot_ids": [sample_shot.id]},
+    )
+
+    assert response.status_code == 409, response.text
+    assert "Approved" in response.json()["detail"]
+    assert _counts(db_session) == (0, 0)
+
+
+def test_generate_refuses_an_assigned_workflow_with_an_invalid_mapping(
+    client, db_session, sample_project, sample_shot, sample_workflow_json
+):
+    record = workflow_registry.import_workflow(
+        raw_bytes=sample_workflow_json, name="Invalid mapping", purpose="image"
+    )
+    workflow = Workflow(**record)
+    workflow.parameter_mapping = {
+        job_payload.POSITIVE_PROMPT: {"nodeId": "missing", "field": "text"}
+    }
+    workflow.output_mapping = [{"nodeId": "9", "type": "image"}]
+    db_session.add(workflow)
+    sample_shot.workflow_preset_id = workflow.id
+    sample_shot.status = "Ready"
+    db_session.commit()
+
+    response = client.post(
+        f"/api/projects/{sample_project.id}/generate",
+        json={"shot_ids": [sample_shot.id]},
+    )
+
+    assert response.status_code == 409, response.text
+    assert "mapping" in response.json()["detail"].lower()
+    assert _counts(db_session) == (0, 0)
+
+
+def test_generate_refuses_unmapped_required_workflow_fields_for_live_comfyui(
+    client, db_session, monkeypatch, sample_project, sample_shot,
+    sample_workflow_json,
+):
+    monkeypatch.setattr(
+        generation_router.queue_manager.provider,
+        "requires_workflow_payload",
+        True,
+    )
+    record = workflow_registry.import_workflow(
+        raw_bytes=sample_workflow_json, name="Unmapped fields", purpose="image"
+    )
+    workflow = Workflow(**record)
+    workflow.parameter_mapping = {
+        job_payload.POSITIVE_PROMPT: {"nodeId": "6", "field": "text"}
+    }
+    workflow.output_mapping = [{"nodeId": "9", "type": "image"}]
+    db_session.add(workflow)
+    sample_shot.workflow_preset_id = workflow.id
+    sample_shot.status = "Ready"
+    db_session.commit()
+
+    response = client.post(
+        f"/api/projects/{sample_project.id}/generate",
+        json={"shot_ids": [sample_shot.id]},
+    )
+
+    assert response.status_code == 409, response.text
+    assert "not mapped" in response.json()["detail"]
+    assert _counts(db_session) == (0, 0)
+
+
+def test_generate_refuses_a_recurring_prop_continuity_failure(
+    client, db_session, sample_project, sample_location, sample_shot
+):
+    sample_location.props = "Exactly one recurring white paper boat throughout."
+    sample_shot.subject = "Alice holding the paper boat"
+    sample_shot.image_prompt = "Alice holding a boat"
+    sample_shot.status = "Ready"
+    db_session.commit()
+
+    response = client.post(
+        f"/api/projects/{sample_project.id}/generate",
+        json={"shot_ids": [sample_shot.id]},
+    )
+
+    assert response.status_code == 409, response.text
+    assert "recurring prop continuity" in response.json()["detail"]
     assert _counts(db_session) == (0, 0)
 
 
