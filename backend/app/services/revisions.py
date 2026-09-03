@@ -25,8 +25,16 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from app.models import Project, ReferenceImage, ReferenceSheet, Scene, Shot, Take
-from app.services import prompt_context
+from app.models import (
+    CharacterSet,
+    Project,
+    ReferenceImage,
+    ReferenceSheet,
+    Scene,
+    Shot,
+    Take,
+)
+from app.services import character_sets, continuity_frames, prompt_context
 
 logger = logging.getLogger("cas.revisions")
 
@@ -62,6 +70,13 @@ class ShotDigest:
     negative_prompt: str = ""
     reference_image_ids: list[str] = field(default_factory=list)
     reference_sha256s: list[str] = field(default_factory=list)
+    #: The bound character sets and the canonical digest each one currently
+    #: resolves to, in binding order.
+    character_set_ids: list[str] = field(default_factory=list)
+    character_set_sha256s: list[str] = field(default_factory=list)
+    #: The take this shot hands off from and the hash of its current end frame.
+    continuity_source_take_id: str = ""
+    continuity_source_sha256: str = ""
 
 
 def _sha256(payload: Any) -> str:
@@ -120,6 +135,36 @@ def _reference_fingerprint(
     return ids, hashes, sheet_digests
 
 
+def _character_set_fingerprint(
+    db: Session, project_id: str, set_ids: list[str]
+) -> list[str]:
+    """The canonical digest each bound character set currently resolves to.
+
+    An empty string means the set exists but has nothing approved, which is a
+    real state a shot can be in and must hash differently from one bound to an
+    approved identity. ``unresolved`` covers a set that was deleted or belongs
+    to another project, so pointing at a set that vanished is visibly different
+    from pointing at one that was never approved.
+    """
+    if not set_ids:
+        return []
+
+    found = {
+        character_set.id: character_set
+        for character_set in db.query(CharacterSet)
+        .filter(CharacterSet.id.in_(set_ids))
+        .all()
+    }
+    digests: list[str] = []
+    for set_id in set_ids:
+        character_set = found.get(set_id)
+        if character_set is None or character_set.project_id != project_id:
+            digests.append("unresolved")
+            continue
+        digests.append(character_sets.canonical_digest(db, character_set))
+    return digests
+
+
 def shot_digest(
     db: Session,
     shot: Shot,
@@ -146,7 +191,15 @@ def shot_digest(
     )
     project = db.query(Project).filter(Project.id == project_id).first()
 
-    content_sha256 = _sha256({
+    character_set_ids = [
+        str(value) for value in (shot.character_set_ids or []) if value
+    ]
+    character_set_hashes = _character_set_fingerprint(
+        db, project_id, character_set_ids
+    )
+    continuity = continuity_frames.source_fingerprint(db, shot)
+
+    payload: dict[str, Any] = {
         "prompt": prompt_sha256,
         # Routing and duration change what is produced, but never appear in the
         # prompt text, so they are hashed alongside it.
@@ -167,7 +220,19 @@ def shot_digest(
         "reference_image_ids": reference_ids,
         "reference_sha256s": reference_hashes,
         "reference_sheet_sha256s": sheet_digests,
-    })
+    }
+
+    # Added only when actually used. A shot that binds no character set and
+    # continues from nothing has to hash to the value the build before these
+    # features produced, or upgrading would mark every existing shot in every
+    # project stale on the first refresh.
+    if character_set_ids:
+        payload["character_set_ids"] = character_set_ids
+        payload["character_set_sha256s"] = character_set_hashes
+    if continuity["mode"] != continuity_frames.MODE_NONE:
+        payload["continuity_source"] = continuity
+
+    content_sha256 = _sha256(payload)
 
     return ShotDigest(
         prompt_sha256=prompt_sha256,
@@ -176,6 +241,10 @@ def shot_digest(
         negative_prompt=context.compiled.negative_prompt,
         reference_image_ids=reference_ids,
         reference_sha256s=reference_hashes,
+        character_set_ids=character_set_ids,
+        character_set_sha256s=character_set_hashes,
+        continuity_source_take_id=continuity["take_id"],
+        continuity_source_sha256=continuity["sha256"],
     )
 
 
@@ -190,7 +259,7 @@ def apply_digest(shot: Shot, digest: ShotDigest) -> bool:
         # Keep the derived fields fresh even when the digest is unchanged, so a
         # database written before these columns existed backfills quietly.
         shot.prompt_sha256 = digest.prompt_sha256
-        shot.reference_sha256s = list(digest.reference_sha256s)
+        _apply_resolved_dependencies(shot, digest)
         return False
 
     if shot.content_sha256:
@@ -200,8 +269,21 @@ def apply_digest(shot: Shot, digest: ShotDigest) -> bool:
 
     shot.content_sha256 = digest.content_sha256
     shot.prompt_sha256 = digest.prompt_sha256
-    shot.reference_sha256s = list(digest.reference_sha256s)
+    _apply_resolved_dependencies(shot, digest)
     return True
+
+
+def _apply_resolved_dependencies(shot: Shot, digest: ShotDigest) -> None:
+    """Mirror what the shot's dependencies resolved to onto the shot itself.
+
+    These columns are a cache of the digest's inputs, not inputs of their own.
+    Keeping them beside the bindings is what lets a take's lineage be judged
+    later from two rows, without a session that could re-resolve them to
+    whatever is true now rather than what was true then.
+    """
+    shot.reference_sha256s = list(digest.reference_sha256s)
+    shot.character_set_sha256s = list(digest.character_set_sha256s)
+    shot.continuity_source_sha256 = digest.continuity_source_sha256
 
 
 def _sync_staleness(shot: Shot) -> None:
@@ -379,6 +461,19 @@ def take_lineage_state(take: Take, shot: Shot) -> str:
         and take.content_sha256 == shot.content_sha256
         and list(take.reference_image_ids or []) == list(shot.reference_asset_ids or [])
         and list(take.reference_sha256s or []) == list(shot.reference_sha256s or [])
+        # Identity and continuity are compared explicitly rather than left to
+        # the content digest they also feed. The digest answers "would this
+        # shot generate differently now?"; these answer "was this take made
+        # from the identity and the hand-off frame the shot names today?",
+        # which is the question Review has to put to a take before it can be
+        # approved.
+        and list(take.character_set_ids or []) == list(shot.character_set_ids or [])
+        and list(take.character_set_sha256s or [])
+        == list(shot.character_set_sha256s or [])
+        and (take.continuity_source_take_id or "")
+        == (shot.continuity_source_take_id or "")
+        and (take.continuity_source_sha256 or "")
+        == (shot.continuity_source_sha256 or "")
     ):
         return LINEAGE_CURRENT
     return LINEAGE_STALE

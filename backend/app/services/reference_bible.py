@@ -36,7 +36,13 @@ logger = logging.getLogger("cas.reference_bible")
 #: What a reference sheet may describe. Deliberately closed: each kind has a
 #: different meaning downstream, and an unrecognised one would silently never
 #: be applied.
-SHEET_KINDS: tuple[str, ...] = ("character", "prop", "location")
+#: A sheet holding end frames lifted from approved takes. Kept as a kind of
+#: its own so continuity stills are stored, validated and conditioned through
+#: exactly the same path as a hand-uploaded plate, while still being
+#: distinguishable from art direction someone chose.
+KIND_CONTINUITY = "continuity"
+
+SHEET_KINDS: tuple[str, ...] = ("character", "prop", "location", KIND_CONTINUITY)
 
 #: Roles an image may play on its sheet. "canonical" is what generation uses.
 IMAGE_ROLES: tuple[str, ...] = ("canonical", "support")

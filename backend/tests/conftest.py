@@ -191,6 +191,9 @@ def synthesise_clip():
     H3 emits (32 kHz stereo); ``with_audio=False`` yields a silent clip.
     ``metadata`` embeds container tags the way ComfyUI's SaveVideo does, so a
     test can prove the delivery render strips them.
+    ``moving=True`` swaps the flat colour for an animated test pattern, so
+    every frame differs - which is what a test about *which* frame was cut
+    needs, and what a flat clip can never demonstrate.
     Skips the calling test when FFmpeg cannot produce the file.
     """
     from app.services import media_probe
@@ -205,14 +208,19 @@ def synthesise_clip():
         frame_rate: float = 24.0,
         sample_rate: int = 32000,
         metadata: dict[str, str] | None = None,
+        moving: bool = False,
     ) -> str:
         ffmpeg = media_probe.ffmpeg_path()
         if not ffmpeg:
             pytest.skip("ffmpeg is not installed on this machine")
+        source = (
+            f"testsrc2=s={width}x{height}:r={frame_rate:g}:d={duration:g}"
+            if moving
+            else f"color=c=gray:s={width}x{height}:r={frame_rate:g}:d={duration:g}"
+        )
         cmd = [
             ffmpeg, "-y", "-loglevel", "error",
-            "-f", "lavfi",
-            "-i", f"color=c=gray:s={width}x{height}:r={frame_rate:g}:d={duration:g}",
+            "-f", "lavfi", "-i", source,
         ]
         if with_audio:
             cmd += [

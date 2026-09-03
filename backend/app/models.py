@@ -462,6 +462,11 @@ class Shot(Base):
     #: none / end_frame. Held separately from the take id so "continuity was
     #: turned off" is distinguishable from "the source take went away".
     continuity_source_mode = Column(String, default="none")
+    #: The hash of the frame that binding currently resolves to, as of the last
+    #: revision refresh. Stored beside the binding for the same reason the
+    #: character-set digests are: judging "did the hand-off move?" must be a
+    #: value comparison, not a re-derivation that needs a database session.
+    continuity_source_sha256 = Column(String, default="")
     workflow_preset_id = Column(String, nullable=True)
     image_provider_id = Column(String, default="comfyui")
     image_model = Column(String, default="workflow")
