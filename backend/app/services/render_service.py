@@ -475,9 +475,13 @@ def render_review_video(db: Session, project_id: str) -> dict[str, Any]:
         if burn_subtitles else ""
     )
 
+    # Fill the delivery frame edge-to-edge. Provider images commonly use a
+    # nearby-but-different aspect ratio (for example 2:3 assets in a 9:16
+    # project); fitting with padding produced visible black letterbox bars.
+    # Scale to cover, then center-crop the small excess instead.
     scale_filter = (
-        f"scale={width}:{height}:force_original_aspect_ratio=decrease,"
-        f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2,setsar=1"
+        f"scale={width}:{height}:force_original_aspect_ratio=increase,"
+        f"crop={width}:{height}:(iw-ow)/2:(ih-oh)/2,setsar=1"
     )
 
     # Decide once whether this render carries audio at all: the segments have

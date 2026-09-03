@@ -12,6 +12,7 @@ import re
 import uuid
 
 import pytest
+from PIL import Image
 from sqlalchemy.orm import Session
 
 from app.models import Shot, Take, TimelineItem
@@ -272,6 +273,39 @@ class TestRenderExecution:
         assert result["rendered"] is True, result["reason"]
         probe = render_service.probe_media(result["output_path"])
         assert (probe["width"], probe["height"]) == (1080, 1920)
+
+    @ffprobe_required
+    def test_mismatched_still_fills_vertical_frame_without_black_letterbox(
+        self, db_session, sample_project, sample_shot, tmp_path
+    ):
+        """A 2:3 provider image must fill 9:16 instead of gaining black bars."""
+        sample_project.target_resolution = "108x192"
+        db_session.commit()
+
+        media = str(tmp_path / "solid-red.png")
+        Image.new("RGB", (100, 150), (220, 30, 30)).save(media)
+        add_approved_take_on_timeline(
+            db_session,
+            sample_project.id,
+            sample_shot.id,
+            media,
+            duration=0.5,
+            width=100,
+            height=150,
+        )
+
+        result = render_service.render_review_video(db_session, sample_project.id)
+        assert result["rendered"] is True, result["reason"]
+
+        frame = str(tmp_path / "rendered-frame.png")
+        returncode, _stdout, stderr = render_service.run_captured([
+            render_service.ffmpeg_path(), "-y", "-loglevel", "error",
+            "-i", result["output_path"], "-frames:v", "1", frame,
+        ], timeout=30)
+        assert returncode == 0, stderr
+        with Image.open(frame) as rendered:
+            top_center = rendered.convert("RGB").getpixel((rendered.width // 2, 2))
+        assert top_center[0] > 150 and top_center[1] < 80 and top_center[2] < 80
 
     def test_rerender_overwrites_same_output(
         self, db_session, sample_project, sample_shot, tmp_path
