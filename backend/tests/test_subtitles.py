@@ -108,10 +108,45 @@ def test_cues_use_strict_manifest_timing_and_shot_dialogue(db_session, sample_pr
 
     assert cues == [{
         "index": 1,
-        "start_sec": 1.25,
-        "end_sec": 4.75,
+        "start_sec": 0.0,
+        "end_sec": 3.5,
         "text": "Hello {world}\\N\nsecond line",
     }]
+
+
+def test_cues_follow_sequential_cut_timing_not_each_sources_trim_points(
+    db_session, sample_project, sample_shot, monkeypatch
+):
+    sample_shot.dialogue = "Story beat"
+    db_session.commit()
+    monkeypatch.setattr(
+        "app.services.subtitle_service.get_timeline_manifest",
+        lambda *_args, **_kwargs: {
+            "items": [
+                {
+                    "shot_id": sample_shot.id,
+                    "order": 0,
+                    "in_point_sec": 0.0,
+                    "out_point_sec": 5.0,
+                    "duration_sec": 5.0,
+                },
+                {
+                    "shot_id": sample_shot.id,
+                    "order": 1,
+                    "in_point_sec": 0.0,
+                    "out_point_sec": 5.0,
+                    "duration_sec": 5.0,
+                },
+            ]
+        },
+    )
+
+    cues = build_subtitle_cues(db_session, sample_project.id)
+
+    assert [(cue["start_sec"], cue["end_sec"]) for cue in cues] == [
+        (0.0, 5.0),
+        (5.0, 10.0),
+    ]
 
 
 def test_blank_dialogue_is_omitted(db_session, sample_project, sample_shot):
@@ -140,10 +175,10 @@ def test_long_dialogue_splits_into_timed_cues_without_losing_thai_graphemes(
 
     assert len(cues) > 1
     assert "".join(cue["text"] for cue in cues) == dialogue
-    assert cues[0]["start_sec"] == 10.0
-    assert cues[-1]["end_sec"] == 18.0
+    assert cues[0]["start_sec"] == 0.0
+    assert cues[-1]["end_sec"] == 8.0
     assert all(
-        10.0 <= cue["start_sec"] < cue["end_sec"] <= 18.0 for cue in cues
+        0.0 <= cue["start_sec"] < cue["end_sec"] <= 8.0 for cue in cues
     )
     assert all(
         len(render_srt([cue], 12).splitlines()[2:]) <= 2 for cue in cues

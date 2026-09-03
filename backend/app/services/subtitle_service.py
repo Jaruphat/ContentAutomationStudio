@@ -213,18 +213,24 @@ def build_subtitle_cues(
         for shot in db.query(Shot).filter(Shot.id.in_(shot_ids)).all()
     } if shot_ids else {}
     cues: list[dict[str, Any]] = []
+    timeline_cursor = 0.0
     for item in manifest.get("items", []):
+        duration_sec = float(item["duration_sec"])
+        cue_start = timeline_cursor
+        cue_end = cue_start + duration_sec
+        timeline_cursor = cue_end
+
         shot = shots.get(item.get("shot_id"))
         raw = (shot.dialogue if shot is not None else "") or ""
         normalized = raw.strip()
         if not normalized:
             continue
-        # Keep source text untouched in the cue. Renderers wrap independently,
-        # allowing a future cue model to add edited/translated variants.
+        # Timeline in/out points trim the source take; subtitle timing follows
+        # the placed clip's cumulative output position instead.
         source_cue = {
             "index": 0,
-            "start_sec": float(item["in_point_sec"]),
-            "end_sec": float(item["out_point_sec"]),
+            "start_sec": cue_start,
+            "end_sec": cue_end,
             "text": normalized,
         }
         for cue in _validated_cues([source_cue], max_chars_per_line):
