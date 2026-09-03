@@ -14,8 +14,8 @@ import uuid
 import pytest
 from sqlalchemy.orm import Session
 
-from app.models import Take, TimelineItem
-from app.services import render_service
+from app.models import Shot, Take, TimelineItem
+from app.services import render_service, revisions, timeline_service
 from app.services.mock_provider import _create_placeholder_png
 
 ffmpeg_required = pytest.mark.skipif(
@@ -40,14 +40,25 @@ def add_approved_take_on_timeline(
     order: int = 0,
     duration: float = 1.0,
     review_status: str = "Approved",
+    lineage: dict | None = None,
+    width: int = 320,
+    height: int = 180,
 ) -> Take:
+    revisions.refresh_project(db, project_id)
+    shot = db.query(Shot).filter(Shot.id == shot_id).one()
     take = Take(
         id=str(uuid.uuid4()),
         shot_id=shot_id,
         file_path=media_path,
         review_status=review_status,
-        width=320,
-        height=180,
+        width=width,
+        height=height,
+        lineage=lineage or {},
+        prompt_revision=shot.prompt_revision,
+        prompt_sha256=shot.prompt_sha256,
+        content_sha256=shot.content_sha256,
+        reference_image_ids=list(shot.reference_asset_ids or []),
+        reference_sha256s=list(shot.reference_sha256s or []),
     )
     db.add(take)
     db.add(TimelineItem(
@@ -59,6 +70,8 @@ def add_approved_take_on_timeline(
         in_point_sec=order * duration,
         out_point_sec=(order + 1) * duration,
         duration_sec=duration,
+        take_prompt_revision=shot.prompt_revision,
+        shot_prompt_revision=shot.prompt_revision,
     ))
     db.commit()
     db.refresh(take)
@@ -78,6 +91,10 @@ class TestParseResolution:
 
     def test_rounds_odd_dimensions_down_for_h264(self):
         assert render_service.parse_resolution("1921x1081") == (1920, 1080)
+
+    @pytest.mark.parametrize("value", ["-10x-20", "0x0", "1x2", "2x1", "1x1"])
+    def test_falls_back_on_non_positive_dimensions(self, value):
+        assert render_service.parse_resolution(value) == (1920, 1080)
 
     @pytest.mark.parametrize("value", ["", "not-a-resolution", "1920", None])
     def test_falls_back_on_bad_input(self, value):
@@ -99,6 +116,34 @@ class TestRenderRefusals:
         assert "Timeline is empty" in result["reason"]
         assert result["output_path"] == ""
 
+    def test_stale_timeline_cannot_be_labeled_as_a_pipeline_pass(
+        self, db_session, sample_project, sample_shot, monkeypatch
+    ):
+        revisions.refresh_project(db_session, sample_project.id)
+        take = Take(
+            id=str(uuid.uuid4()),
+            shot_id=sample_shot.id,
+            file_path="C:/missing/source.png",
+            review_status="Approved",
+            prompt_revision=sample_shot.prompt_revision,
+            prompt_sha256=sample_shot.prompt_sha256,
+            content_sha256=sample_shot.content_sha256,
+            reference_image_ids=list(sample_shot.reference_asset_ids or []),
+            reference_sha256s=list(sample_shot.reference_sha256s or []),
+        )
+        db_session.add(take)
+        db_session.commit()
+        built = timeline_service.build_timeline_from_approved_takes(
+            db_session, sample_project.id
+        )
+        timeline_service.save_timeline_items(db_session, sample_project.id, built)
+        sample_shot.action = "changed after timeline build"
+        db_session.commit()
+        monkeypatch.setattr(render_service, "ffmpeg_path", lambda: "ffmpeg")
+
+        with pytest.raises(timeline_service.StaleTimelineError):
+            render_service.render_review_video(db_session, sample_project.id)
+
     def test_missing_media_file_does_not_render(
         self, db_session, sample_project, sample_shot, tmp_path
     ):
@@ -119,9 +164,8 @@ class TestRenderRefusals:
             db_session, sample_project.id, sample_shot.id, media,
             review_status="Pending",
         )
-        result = render_service.render_review_video(db_session, sample_project.id)
-        assert result["rendered"] is False
-        assert "Only approved takes" in result["reason"]
+        with pytest.raises(timeline_service.StaleTimelineError):
+            render_service.render_review_video(db_session, sample_project.id)
 
     def test_deleted_take_does_not_render(
         self, db_session, sample_project, sample_shot
@@ -135,9 +179,8 @@ class TestRenderRefusals:
             duration_sec=1.0,
         ))
         db_session.commit()
-        result = render_service.render_review_video(db_session, sample_project.id)
-        assert result["rendered"] is False
-        assert "no longer exists" in result["reason"]
+        with pytest.raises(timeline_service.StaleTimelineError):
+            render_service.render_review_video(db_session, sample_project.id)
 
 
 # ---------------------------------------------------------------------------
@@ -317,7 +360,71 @@ class TestAudioPreservation:
 
         output_loudness = _audio_loudness(result["output_path"])
         assert output_loudness["input_i"] == pytest.approx(-16.0, abs=1.0)
-        assert output_loudness["input_tp"] <= -1.0
+        assert output_loudness["input_tp"] <= -1.5
+        with open(result["provenance_path"], encoding="utf-8") as f:
+            audio_report = json.load(f)["render_settings"]["audio"]
+        assert audio_report["target_achieved"] is True
+
+    def test_unattainable_high_crest_loudness_is_reported(
+        self, db_session, sample_project, sample_scene, tmp_path
+    ):
+        """Sparse generated ambience needs gain staging before loudnorm.
+
+        A single-pass loudnorm filter cannot raise very quiet high-crest audio
+        to -16 LUFS without violating its true-peak ceiling.  This fixture
+        reproduces the shape of the real H3 output surrounded by silent stills.
+        """
+        from app.models import Shot
+
+        media = str(tmp_path / "sparse_audio.mp4")
+        returncode, _stdout, stderr = render_service.run_captured([
+            render_service.ffmpeg_path(), "-y", "-loglevel", "error",
+            "-f", "lavfi", "-i", "color=c=black:s=320x180:r=24:d=3",
+            "-f", "lavfi", "-i",
+            "aevalsrc=if(lt(mod(t\\,0.5)\\,0.015)\\,0.03*sin(2*PI*440*t)\\,0):s=48000:d=3",
+            "-shortest", "-c:v", "libx264", "-pix_fmt", "yuv420p",
+            "-c:a", "aac", media,
+        ], timeout=30)
+        assert returncode == 0, stderr
+        source_loudness = _audio_loudness(media)
+        assert source_loudness["input_i"] < -35.0
+        assert source_loudness["input_tp"] > source_loudness["input_i"] + 15.0
+
+        still = str(tmp_path / "frame.png")
+        _create_placeholder_png(still, 320, 180)
+        for order, (source, duration) in enumerate([
+            (still, 3.0), (media, 3.0), (still, 3.0),
+        ]):
+            shot = Shot(
+                id=str(uuid.uuid4()),
+                scene_id=sample_scene.id,
+                order=order,
+                generation_mode="video" if source == media else "image",
+                planned_duration_sec=duration,
+            )
+            db_session.add(shot)
+            db_session.commit()
+            add_approved_take_on_timeline(
+                db_session, sample_project.id, shot.id, source,
+                order=order, duration=duration,
+            )
+
+        result = render_service.render_review_video(db_session, sample_project.id)
+        assert result["rendered"] is True, result["reason"]
+
+        output_loudness = _audio_loudness(result["output_path"])
+        assert output_loudness["input_tp"] <= -1.5
+        assert output_loudness["input_i"] < -17.0
+        assert any("could not reach -16 LUFS" in item for item in result["warnings"])
+        with open(result["provenance_path"], encoding="utf-8") as f:
+            audio_report = json.load(f)["render_settings"]["audio"]
+        assert audio_report["target_achieved"] is False
+        assert audio_report["measured_output_lufs"] == pytest.approx(
+            output_loudness["input_i"], abs=0.05
+        )
+        assert audio_report["measured_output_true_peak_dbtp"] == pytest.approx(
+            output_loudness["input_tp"], abs=0.05
+        )
 
     def test_still_only_timeline_stays_silent(
         self, db_session, sample_project, sample_shot, tmp_path
@@ -528,8 +635,312 @@ class TestDeliveryMetadata:
 
 
 @ffmpeg_required
+class TestRenderResultDeliveryValidation:
+    """The render result is what the Timeline page shows after a render.
+
+    A waiver that only reaches the sidecar leaves the person looking at the
+    screen believing the delivery passed.
+    """
+
+    def test_render_result_repeats_the_scoped_override_warning(
+        self, db_session, sample_project, sample_shot, tmp_path
+    ):
+        media = str(tmp_path / "frame.png")
+        _create_placeholder_png(media, 320, 180)
+        # A real prior take for this shot - what the waiver below claims to
+        # have replaced. Not placed on the timeline itself.
+        revisions.refresh_project(db_session, sample_project.id)
+        original = Take(
+            id=str(uuid.uuid4()), shot_id=sample_shot.id, file_path=media,
+            review_status="Rejected",
+        )
+        db_session.add(original)
+        db_session.commit()
+        take = add_approved_take_on_timeline(
+            db_session, sample_project.id, sample_shot.id, media, duration=1.0,
+            # sample_project targets 1920x1080 (16:9); this take is
+            # portrait, so the mismatch the waiver excuses is real.
+            width=1080, height=1920,
+            lineage={
+                "waived_from_take_id": original.id,
+                "waiver_reason": timeline_service.TRUSTED_WAIVER_REASON,
+            },
+        )
+
+        result = render_service.render_review_video(db_session, sample_project.id)
+
+        assert result["rendered"] is True, result["reason"]
+        assert timeline_service.E2E_ASPECT_OVERRIDE_WARNING in result["warnings"]
+        assert result["warning_metadata"][0]["take_ids"] == [take.id]
+        assert result["delivery_validation"] == {
+            "pipeline_pass": True,
+            "delivery_spec_pass": False,
+        }
+
+    def test_an_unwaived_render_reports_a_clean_delivery(
+        self, db_session, sample_project, sample_shot, tmp_path
+    ):
+        media = str(tmp_path / "frame.png")
+        _create_placeholder_png(media, 320, 180)
+        add_approved_take_on_timeline(
+            db_session, sample_project.id, sample_shot.id, media, duration=1.0
+        )
+
+        result = render_service.render_review_video(db_session, sample_project.id)
+
+        assert result["rendered"] is True, result["reason"]
+        assert result["warning_metadata"] == []
+        assert result["delivery_validation"] == {
+            "pipeline_pass": True,
+            "delivery_spec_pass": True,
+        }
+        assert timeline_service.E2E_ASPECT_OVERRIDE_WARNING not in result["warnings"]
+
+    def test_duration_deviation_fails_the_delivery_spec(
+        self, db_session, sample_project, sample_shot, tmp_path, monkeypatch
+    ):
+        media = str(tmp_path / "frame.png")
+        _create_placeholder_png(media, 320, 180)
+        add_approved_take_on_timeline(
+            db_session, sample_project.id, sample_shot.id, media, duration=1.0
+        )
+
+        real_probe = render_service.probe_media
+
+        def fake_probe(path):
+            probe = real_probe(path)
+            if path.endswith("review.mp4") and probe:
+                probe = dict(probe)
+                probe["duration_sec"] = (probe.get("duration_sec") or 0.0) + 5.0
+            return probe
+
+        monkeypatch.setattr(render_service, "probe_media", fake_probe)
+
+        result = render_service.render_review_video(db_session, sample_project.id)
+
+        assert result["rendered"] is True, result["reason"]
+        assert any(
+            "differs from the manifest total" in w for w in result["warnings"]
+        )
+        assert result["delivery_validation"] == {
+            "pipeline_pass": True,
+            "delivery_spec_pass": False,
+        }
+
+    @ffprobe_required
+    def test_missing_required_audio_fails_the_delivery_spec(
+        self, db_session, sample_project, sample_shot, tmp_path, synthesise_clip,
+        monkeypatch,
+    ):
+        media = synthesise_clip(str(tmp_path / "voiced.mp4"), with_audio=True)
+        add_approved_take_on_timeline(
+            db_session, sample_project.id, sample_shot.id, media, duration=1.0
+        )
+
+        real_probe = render_service.probe_media
+
+        def fake_probe(path):
+            probe = real_probe(path)
+            if path.endswith("review.mp4") and probe:
+                probe = dict(probe)
+                probe["has_audio"] = False
+            return probe
+
+        monkeypatch.setattr(render_service, "probe_media", fake_probe)
+
+        result = render_service.render_review_video(db_session, sample_project.id)
+
+        assert result["rendered"] is True, result["reason"]
+        assert any("no audio stream" in w for w in result["warnings"])
+        assert result["delivery_validation"] == {
+            "pipeline_pass": True,
+            "delivery_spec_pass": False,
+        }
+
+    def test_leaked_container_metadata_blocks_and_removes_the_delivery(
+        self, db_session, sample_project, sample_shot, tmp_path, monkeypatch
+    ):
+        media = str(tmp_path / "frame.png")
+        _create_placeholder_png(media, 320, 180)
+        add_approved_take_on_timeline(
+            db_session, sample_project.id, sample_shot.id, media, duration=1.0
+        )
+
+        monkeypatch.setattr(
+            render_service,
+            "read_container_tags",
+            lambda _path: {"format": {"prompt": "hidden"}, "streams": []},
+        )
+
+        result = render_service.render_review_video(db_session, sample_project.id)
+
+        assert result["rendered"] is False
+        assert "disallowed container metadata" in result["reason"]
+        assert result["embedded_metadata_keys"] == ["prompt"]
+        assert result["output_path"] == ""
+        assert result["delivery_validation"] == {
+            "pipeline_pass": False,
+            "delivery_spec_pass": False,
+        }
+
+    def test_metadata_classification_uses_the_single_verified_snapshot(
+        self, db_session, sample_project, sample_shot, tmp_path, monkeypatch
+    ):
+        media = str(tmp_path / "frame.png")
+        _create_placeholder_png(media, 320, 180)
+        add_approved_take_on_timeline(
+            db_session, sample_project.id, sample_shot.id, media, duration=1.0
+        )
+        calls = 0
+
+        def verified_tags(_path):
+            nonlocal calls
+            calls += 1
+            return {"format": {"prompt": "not returned"}, "streams": []}
+
+        monkeypatch.setattr(render_service, "read_container_tags", verified_tags)
+        monkeypatch.setattr(render_service, "embedded_metadata_keys", lambda _path: [])
+
+        result = render_service.render_review_video(db_session, sample_project.id)
+
+        assert result["rendered"] is False
+        assert result["metadata_status"] == "leaked"
+        assert result["embedded_metadata_keys"] == ["prompt"]
+        assert calls == 1
+
+    def test_missing_provenance_sidecar_blocks_and_removes_delivery(
+        self, db_session, sample_project, sample_shot, tmp_path, monkeypatch
+    ):
+        media = str(tmp_path / "frame.png")
+        _create_placeholder_png(media, 320, 180)
+        add_approved_take_on_timeline(
+            db_session, sample_project.id, sample_shot.id, media, duration=1.0
+        )
+
+        monkeypatch.setattr(
+            render_service, "write_render_provenance", lambda *a, **k: ""
+        )
+
+        result = render_service.render_review_video(db_session, sample_project.id)
+
+        assert result["rendered"] is False
+        assert result["provenance_path"] == ""
+        assert "provenance sidecar could not be written" in result["reason"]
+        assert result["output_path"] == ""
+        assert result["delivery_validation"] == {
+            "pipeline_pass": False,
+            "delivery_spec_pass": False,
+        }
+
+    def test_a_blocked_render_does_not_claim_a_pipeline_pass(
+        self, db_session, sample_project
+    ):
+        result = render_service.render_review_video(db_session, sample_project.id)
+
+        assert result["rendered"] is False
+        assert result["delivery_validation"] == {
+            "pipeline_pass": False,
+            "delivery_spec_pass": False,
+        }
+
+    def test_unwritable_render_directory_returns_structured_block(
+        self, db_session, sample_project, sample_shot, tmp_path, monkeypatch
+    ):
+        media = str(tmp_path / "frame.png")
+        _create_placeholder_png(media, 320, 180)
+        add_approved_take_on_timeline(
+            db_session, sample_project.id, sample_shot.id, media, duration=1.0
+        )
+        blocked_parent = tmp_path / "not-a-directory"
+        blocked_parent.write_text("file", encoding="utf-8")
+        monkeypatch.setattr(
+            render_service.paths,
+            "exports_dir",
+            lambda _id: str(blocked_parent / "child"),
+        )
+
+        result = render_service.render_review_video(db_session, sample_project.id)
+
+        assert result["rendered"] is False
+        assert "render directory" in result["reason"].lower()
+
+
+@ffmpeg_required
 class TestProvenanceSidecar:
     """Stripping the file must not lose the provenance - it moves beside it."""
+
+    def test_failed_provenance_publish_preserves_previous_sidecar(
+        self, db_session, sample_project, tmp_path, monkeypatch
+    ):
+        output = tmp_path / "review.mp4"
+        output.write_bytes(b"output")
+        sidecar = tmp_path / render_service.PROVENANCE_FILENAME
+        sidecar.write_text("previous", encoding="utf-8")
+        monkeypatch.setattr(
+            render_service.json,
+            "dump",
+            lambda *_args, **_kwargs: (_ for _ in ()).throw(OSError("disk full")),
+        )
+
+        result = render_service.write_render_provenance(
+            db_session, sample_project, [], str(output), {}
+        )
+
+        assert result == ""
+        assert sidecar.read_text(encoding="utf-8") == "previous"
+
+    def test_sidecar_separates_pipeline_pass_from_waived_delivery_spec(
+        self, db_session, sample_project, sample_shot, tmp_path
+    ):
+        media = tmp_path / "source.bin"
+        media.write_bytes(b"source")
+        output = tmp_path / "review.mp4"
+        output.write_bytes(b"output")
+        revisions.refresh_project(db_session, sample_project.id)
+        original = Take(
+            id=str(uuid.uuid4()), shot_id=sample_shot.id, file_path=str(media),
+            review_status="Rejected",
+        )
+        db_session.add(original)
+        db_session.commit()
+        take = add_approved_take_on_timeline(
+            db_session,
+            sample_project.id,
+            sample_shot.id,
+            str(media),
+            # sample_project targets 1920x1080 (16:9); this take is
+            # portrait, so the mismatch the waiver excuses is real.
+            width=1080, height=1920,
+            lineage={
+                "waived_from_take_id": original.id,
+                "waiver_reason": timeline_service.TRUSTED_WAIVER_REASON,
+            },
+        )
+        item = {
+            "order": 0,
+            "duration_sec": 1.0,
+            "take_id": take.id,
+            "shot_id": sample_shot.id,
+        }
+
+        sidecar = render_service.write_render_provenance(
+            db_session,
+            sample_project,
+            [(item, take)],
+            str(output),
+            {"width": 1920, "height": 1080},
+        )
+        with open(sidecar, encoding="utf-8") as f:
+            record = json.load(f)
+
+        assert record["delivery_validation"] == {
+            "pipeline_pass": True,
+            "delivery_spec_pass": False,
+        }
+        assert record["warnings"][0]["message"] == (
+            "E2E Override · Aspect mismatch accepted · user-approved test override"
+        )
+        assert record["segments"][0]["take"]["lineage"] == take.lineage
 
     def test_sidecar_is_written_next_to_the_video(
         self, db_session, sample_project, sample_shot, tmp_path

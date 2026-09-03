@@ -11,7 +11,8 @@ import uuid
 import pytest
 from sqlalchemy.orm import Session
 
-from app.models import Take
+from app.models import GenerationJob, Take, Workflow
+from app.services import job_payload, reference_bible, revisions, workflow_registry
 
 
 @pytest.fixture()
@@ -85,6 +86,31 @@ class TestApproveReject:
 
 
 class TestRegenerate:
+    def test_estimate_uses_current_plan_even_for_an_approved_take(
+        self, client, db_session, sample_shot, sample_take
+    ):
+        sample_take.review_status = "Approved"
+        sample_take.media_provider_id = "comfyui"
+        sample_take.media_model = "old-workflow"
+        sample_shot.status = "Approved"
+        sample_shot.image_provider_id = "openai"
+        sample_shot.image_model = "gpt-image-1-mini"
+        db_session.commit()
+
+        response = client.get(f"/api/shots/{sample_shot.id}/regenerate/estimate")
+
+        assert response.status_code == 200, response.text
+        estimate = response.json()
+        assert estimate["shot_count"] == 1
+        assert estimate["paid_shot_count"] == 1
+        assert estimate["requires_confirmation"] is True
+        assert estimate["shots"][0]["provider_id"] == "openai"
+        assert estimate["shots"][0]["model"] == "gpt-image-1-mini"
+        assert estimate["estimated_cost_usd"] is not None
+
+    def test_estimate_unknown_shot_is_404(self, client):
+        assert client.get("/api/shots/nope/regenerate/estimate").status_code == 404
+
     def test_creates_a_new_queued_job(self, client, sample_shot):
         resp = client.post(f"/api/shots/{sample_shot.id}/regenerate")
         assert resp.status_code == 200
@@ -92,10 +118,181 @@ class TestRegenerate:
         assert body["status"] == "Queued"
         assert body["shot_id"] == sample_shot.id
 
-    def test_regenerate_uses_a_fresh_seed(self, client, sample_shot):
+    def test_parameter_map_includes_the_project_aspect_ratio(
+        self, client, db_session, sample_project, sample_shot
+    ):
+        sample_project.aspect_ratio = "9:16"
+        sample_project.target_resolution = "1080x1920"
+        db_session.commit()
+
+        response = client.post(f"/api/shots/{sample_shot.id}/regenerate")
+
+        assert response.status_code == 200, response.text
+        assert response.json()["parameter_map"][job_payload.ASPECT_RATIO] == (
+            "9:16 (Portrait Widescreen)"
+        )
+
+    def test_regenerate_uses_a_fresh_seed(
+        self, client, db_session, sample_shot
+    ):
         first = client.post(f"/api/shots/{sample_shot.id}/regenerate").json()
+        # A second active job is intentionally refused; make the first request
+        # terminal before checking that a later regeneration gets a new seed.
+        job = db_session.query(GenerationJob).filter(GenerationJob.id == first["id"]).one()
+        job.status = "Completed"
+        db_session.commit()
         second = client.post(f"/api/shots/{sample_shot.id}/regenerate").json()
         assert first["seed"] != second["seed"]
 
     def test_unknown_shot_is_404(self, client):
         assert client.post("/api/shots/nope/regenerate").status_code == 404
+
+    def test_regenerate_snapshots_current_prompt_revision_and_references(
+        self,
+        client,
+        db_session,
+        sample_project,
+        sample_shot,
+        sample_workflow_json,
+        png_bytes,
+    ):
+        record = workflow_registry.import_workflow(
+            raw_bytes=sample_workflow_json,
+            name="Reference regeneration",
+            purpose="image",
+        )
+        workflow = Workflow(**record)
+        workflow.parameter_mapping = {
+            job_payload.POSITIVE_PROMPT: {"nodeId": "6", "field": "text"},
+            job_payload.SEED: {"nodeId": "3", "field": "seed"},
+            job_payload.REFERENCE_IMAGE: {"nodeId": "4", "field": "ckpt_name"},
+        }
+        workflow.output_mapping = [{"nodeId": "9", "type": "image"}]
+        workflow.validation_status = "valid"
+        db_session.add(workflow)
+        sample_project.default_image_workflow_id = workflow.id
+        revisions.refresh_project(db_session, sample_project.id)
+
+        historical_take = Take(
+            id=str(uuid.uuid4()),
+            shot_id=sample_shot.id,
+            file_path="C:/tmp/historical.png",
+            review_status="Approved",
+            prompt_revision=sample_shot.prompt_revision,
+            prompt_sha256=sample_shot.prompt_sha256,
+            content_sha256=sample_shot.content_sha256,
+            reference_image_ids=[],
+            reference_sha256s=[],
+        )
+        stale_job = GenerationJob(
+            id=str(uuid.uuid4()),
+            shot_id=sample_shot.id,
+            workflow_id=workflow.id,
+            parameter_map={job_payload.POSITIVE_PROMPT: "STALE PARAMETER MAP", job_payload.SEED: 7},
+            prompt_revision=sample_shot.prompt_revision,
+            content_sha256=sample_shot.content_sha256,
+            seed=7,
+            status="Completed",
+        )
+        db_session.add_all([historical_take, stale_job])
+
+        sheet = reference_bible.create_sheet(
+            db_session,
+            project_id=sample_project.id,
+            kind="character",
+            name="Alice",
+        )
+        image = reference_bible.store_image(
+            db_session,
+            sheet=sheet,
+            data=png_bytes(128, 160),
+            original_filename="alice-current.png",
+            content_type="image/png",
+        )
+        sample_shot.action = "raising the current silver lantern"
+        sample_shot.reference_asset_ids = [image.id]
+        db_session.commit()
+
+        response = client.post(f"/api/shots/{sample_shot.id}/regenerate")
+
+        assert response.status_code == 200
+        job = response.json()
+        assert "raising the current silver lantern" in job["parameter_map"][job_payload.POSITIVE_PROMPT]
+        assert "STALE PARAMETER MAP" not in job["parameter_map"][job_payload.POSITIVE_PROMPT]
+        assert job["prompt_revision"] == 2
+        assert job["prompt_sha256"]
+        assert job["content_sha256"]
+        assert job["reference_image_ids"] == [image.id]
+        assert job["reference_sha256s"] == [image.sha256]
+        assert job["reference_provenance"]["images"][0]["sha256"] == image.sha256
+        assert db_session.query(Take).filter(Take.id == historical_take.id).count() == 1
+
+    def test_regenerate_refuses_current_reference_without_workflow_mapping(
+        self,
+        client,
+        db_session,
+        sample_project,
+        sample_shot,
+        sample_workflow_json,
+        png_bytes,
+    ):
+        record = workflow_registry.import_workflow(
+            raw_bytes=sample_workflow_json,
+            name="No reference mapping",
+            purpose="image",
+        )
+        workflow = Workflow(**record)
+        workflow.parameter_mapping = {
+            job_payload.POSITIVE_PROMPT: {"nodeId": "6", "field": "text"},
+            job_payload.SEED: {"nodeId": "3", "field": "seed"},
+        }
+        workflow.output_mapping = [{"nodeId": "9", "type": "image"}]
+        db_session.add(workflow)
+        sample_project.default_image_workflow_id = workflow.id
+        sheet = reference_bible.create_sheet(
+            db_session, project_id=sample_project.id, kind="character", name="Alice"
+        )
+        image = reference_bible.store_image(
+            db_session,
+            sheet=sheet,
+            data=png_bytes(),
+            original_filename="alice.png",
+            content_type="image/png",
+        )
+        sample_shot.reference_asset_ids = [image.id]
+        db_session.commit()
+
+        response = client.post(f"/api/shots/{sample_shot.id}/regenerate")
+
+        assert response.status_code == 409
+        assert "referenceImage" in response.json()["detail"]
+        assert db_session.query(GenerationJob).count() == 0
+
+    def test_regenerate_refuses_a_workflow_mapping_that_no_longer_matches(
+        self,
+        client,
+        db_session,
+        sample_project,
+        sample_shot,
+        sample_workflow_json,
+    ):
+        record = workflow_registry.import_workflow(
+            raw_bytes=sample_workflow_json,
+            name="Stale mapping",
+            purpose="image",
+        )
+        workflow = Workflow(**record)
+        workflow.parameter_mapping = {
+            job_payload.POSITIVE_PROMPT: {"nodeId": "missing", "field": "text"},
+            job_payload.SEED: {"nodeId": "3", "field": "seed"},
+        }
+        workflow.output_mapping = [{"nodeId": "9", "type": "image"}]
+        db_session.add(workflow)
+        sample_project.default_image_workflow_id = workflow.id
+        db_session.commit()
+
+        response = client.post(f"/api/shots/{sample_shot.id}/regenerate")
+
+        assert response.status_code == 409
+        assert "mapping" in response.json()["detail"].lower()
+        assert db_session.query(GenerationJob).count() == 0

@@ -1,0 +1,40 @@
+{
+  "source_path": "image_boogu_image_0_1_edit_int8.json",
+  "source_sha256": "05d08b4b3485b4d8d20a5b575a492686efbf74cf7688a0d28e438ca604751a54",
+  "derived_path": "workflows/derived/image_boogu_image_0_1_edit_int8.reference.api.json",
+  "derived_sha256": "05d08b4b3485b4d8d20a5b575a492686efbf74cf7688a0d28e438ca604751a54",
+  "source_format": "api",
+  "transformations": [
+    "Copied the supplied API prompt graph byte-for-byte into the derived workflow area.",
+    "Kept node and model inputs unchanged; registration mappings are metadata and are not embedded in the graph."
+  ],
+  "registration": {
+    "name": "Boogu Image Edit INT8 (Reference Conditioned)",
+    "purpose": "image",
+    "version": "1.0-reference.1",
+    "parameter_mapping": {
+      "positivePrompt": {"nodeId": "45:36", "field": "prompt"},
+      "negativePrompt": {"nodeId": "45:36", "field": "negative_prompt"},
+      "seed": {"nodeId": "45:21", "field": "noise_seed"},
+      "width": {"nodeId": "45:8", "field": "width"},
+      "height": {"nodeId": "45:8", "field": "height"},
+      "referenceImage": {"nodeId": "32", "field": "image"},
+      "outputPrefix": {"nodeId": "55", "field": "filename_prefix"}
+    },
+    "output_mapping": [
+      {"nodeId": "55", "type": "image"}
+    ],
+    "required_models": [
+      "boogu_image_edit_int8_convrot.safetensors",
+      "qwen3vl_8b_fp8_scaled.safetensors",
+      "ae.safetensors"
+    ],
+    "required_custom_nodes": [
+      "ResizeImageMaskNode",
+      "ImageCompare",
+      "SaveImageAdvanced",
+      "TextEncodeBooguEdit"
+    ]
+  },
+  "verification_scope": "Graph format and registration mapping are covered by backend tests. No generation was submitted."
+}

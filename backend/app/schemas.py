@@ -8,15 +8,27 @@ Each ORM model has three schemas:
 """
 
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, computed_field, field_validator
 
 from app.services import media_providers
 
 #: Providers a shot may name for its stills. Kept in step with the media
 #: provider registry rather than restated, so adding a provider there is enough.
 KNOWN_IMAGE_PROVIDER_IDS = (media_providers.COMFYUI, media_providers.OPENAI)
+
+
+def _validated_resolution(value: str | None) -> str | None:
+    if value is None:
+        return None
+    parts = value.lower().split("x")
+    if len(parts) != 2 or not all(part.isdigit() for part in parts):
+        raise ValueError("target_resolution must use WIDTHxHEIGHT")
+    width, height = (int(part) for part in parts)
+    if width <= 0 or height <= 0 or width % 2 or height % 2:
+        raise ValueError("target_resolution dimensions must be positive even integers")
+    return f"{width}x{height}"
 
 
 def _validated_provider_id(value: str | None) -> str | None:
@@ -57,6 +69,11 @@ class ProjectCreate(BaseModel):
     brief_text: str = ""
     plot_text: str = ""
 
+    @field_validator("target_resolution")
+    @classmethod
+    def validate_target_resolution(cls, value: str) -> str:
+        return _validated_resolution(value) or "1920x1080"
+
 
 class ProjectUpdate(BaseModel):
     title: Optional[str] = None
@@ -73,6 +90,11 @@ class ProjectUpdate(BaseModel):
     status: Optional[str] = None
     brief_text: Optional[str] = None
     plot_text: Optional[str] = None
+
+    @field_validator("target_resolution")
+    @classmethod
+    def validate_target_resolution(cls, value: str | None) -> str | None:
+        return _validated_resolution(value)
 
 
 class ProjectResponse(BaseModel):
@@ -237,6 +259,113 @@ class StyleResponse(BaseModel):
 
 
 # ============================================================================
+# Visual Reference Bible
+# ============================================================================
+#
+# Kinds and roles are validated here rather than only in the service so an
+# unknown value is a 422 at the boundary, with the accepted set named, instead
+# of a 500 further in.
+
+#: Mirrors reference_bible.SHEET_KINDS; imported lazily to keep schemas free of
+#: a service-layer import cycle.
+REFERENCE_SHEET_KINDS = ("character", "prop", "location")
+REFERENCE_IMAGE_ROLES = ("canonical", "support")
+
+
+def _validated_reference_kind(value: str | None) -> str | None:
+    if value is None:
+        return None
+    normalised = value.strip().lower()
+    if normalised not in REFERENCE_SHEET_KINDS:
+        raise ValueError(
+            f"Unknown reference kind '{value}'. Use one of: "
+            f"{', '.join(REFERENCE_SHEET_KINDS)}."
+        )
+    return normalised
+
+
+class ReferenceSheetCreate(BaseModel):
+    kind: str = "character"
+    name: str
+    subject_ref_id: Optional[str] = None
+    canonical_description: str = ""
+    identity_tokens: str = ""
+    negative_tokens: str = ""
+    notes: str = ""
+
+    @field_validator("kind")
+    @classmethod
+    def _check_kind(cls, value):
+        return _validated_reference_kind(value)
+
+
+class ReferenceSheetUpdate(BaseModel):
+    kind: Optional[str] = None
+    name: Optional[str] = None
+    subject_ref_id: Optional[str] = None
+    canonical_description: Optional[str] = None
+    identity_tokens: Optional[str] = None
+    negative_tokens: Optional[str] = None
+    notes: Optional[str] = None
+
+    @field_validator("kind")
+    @classmethod
+    def _check_kind(cls, value):
+        return _validated_reference_kind(value)
+
+
+class ReferenceImageResponse(BaseModel):
+    """A stored canonical image.
+
+    The absolute ``file_path`` is deliberately absent: a browser cannot open it
+    and exposing the server's directory layout buys nothing. The ``url`` below
+    is the only way a client reaches the bytes.
+    """
+
+    model_config = {"from_attributes": True}
+
+    id: str
+    sheet_id: str
+    project_id: str
+    role: str
+    original_filename: str
+    stored_filename: str
+    mime_type: str
+    size_bytes: int
+    width: int
+    height: int
+    sha256: str
+    caption: str = ""
+    provenance: dict[str, Any] = Field(default_factory=dict)
+    created_at: datetime
+
+    @computed_field
+    @property
+    def url(self) -> str:
+        return f"/api/media/references/{self.id}/file"
+
+
+class ReferenceSheetResponse(BaseModel):
+    model_config = {"from_attributes": True}
+
+    id: str
+    project_id: str
+    kind: str
+    name: str
+    subject_ref_id: Optional[str] = None
+    canonical_description: str
+    identity_tokens: str
+    negative_tokens: str
+    notes: str
+    #: Advances whenever the sheet's identity or its image set changes.
+    revision: int
+    content_sha256: str
+    images: list[ReferenceImageResponse] = Field(default_factory=list)
+    created_at: datetime
+    updated_at: datetime
+
+
+# ============================================================================
 # Scene
 # ============================================================================
 
@@ -379,8 +508,39 @@ class ShotResponse(BaseModel):
     image_model: Optional[str] = "workflow"
     seed_policy: str
     status: str
+
+    #: Content revision tracking. ``is_stale`` is what the storyboard badges:
+    #: the shot has been generated, and something it depends on has changed
+    #: since. Defaulted so a row migrated from an older database still
+    #: serialises before its first revision refresh.
+    prompt_revision: int = 1
+    prompt_sha256: str = ""
+    content_sha256: str = ""
+    reference_sha256s: list[str] = Field(default_factory=list)
+    generated_revision: int = 0
+    is_stale: bool = False
+
     created_at: datetime
     updated_at: datetime
+
+    @field_validator(
+        "prompt_revision", "generated_revision", "is_stale",
+        "prompt_sha256", "content_sha256", "reference_sha256s",
+        mode="before",
+    )
+    @classmethod
+    def _default_when_migrated(cls, value, info):
+        """Columns added by migration backfill as NULL, not as their default.
+
+        Reading such a row before its first revision refresh would otherwise
+        fail validation, which would make an upgraded database unusable until
+        every shot had been touched.
+        """
+        if value is not None:
+            return value
+        field = cls.model_fields[info.field_name]
+        default = field.get_default(call_default_factory=True)
+        return default
 
 
 class ShotReorderItem(BaseModel):
@@ -524,6 +684,9 @@ class GenerationJobResponse(BaseModel):
 
     id: str
     shot_id: str
+    #: The batch this job was created in. Null only on jobs written before
+    #: runs existed and not yet reached by the backfill.
+    run_id: Optional[str] = None
     workflow_id: Optional[str]
     workflow_version: str
     workflow_snapshot_path: Optional[str] = None
@@ -535,6 +698,12 @@ class GenerationJobResponse(BaseModel):
     usage: Optional[dict[str, Any]] = None
     estimated_cost_usd: Optional[float] = None
     provenance: Optional[dict[str, Any]] = None
+    prompt_revision: int = 0
+    prompt_sha256: str = ""
+    content_sha256: str = ""
+    reference_image_ids: list[str] = Field(default_factory=list)
+    reference_sha256s: list[str] = Field(default_factory=list)
+    reference_provenance: dict[str, Any] = Field(default_factory=dict)
     seed: Optional[int]
     comfyui_prompt_id: Optional[str]
     status: str
@@ -558,6 +727,8 @@ class TakeResponse(BaseModel):
     id: str
     shot_id: str
     job_id: Optional[str]
+    #: Copied from the job, so Review can be scoped to one generation run.
+    run_id: Optional[str] = None
     file_path: str
     thumbnail_path: str
     duration_sec: float
@@ -588,8 +759,11 @@ class TakeReviewRequest(BaseModel):
 # ============================================================================
 
 class TimelineItemCreate(BaseModel):
-    shot_id: Optional[str] = None
-    take_id: Optional[str] = None
+    #: A placed clip always names both the shot it fills and the take that
+    #: fills it; neither may be submitted alone or omitted, or a partially
+    #: identified item would be committed before lineage can even be checked.
+    shot_id: str
+    take_id: str
     order: int = 0
     in_point_sec: float = 0.0
     out_point_sec: float = 0.0
@@ -622,8 +796,37 @@ class TimelineItemResponse(BaseModel):
     duration_sec: float
     transition_in: str
     transition_out: str
+    take_prompt_revision: int = 0
+    shot_prompt_revision: int = 0
     created_at: datetime
     updated_at: datetime
+    #: Display fields resolved from the referenced scene, shot and take, so a
+    #: timeline row can be read without looking anything up by id.
+    scene_id: Optional[str] = None
+    scene_title: str = ""
+    shot_name: str = ""
+    #: Only set when the take's media is really on disk and inside the runtime
+    #: data directory, i.e. when the browser can actually load it.
+    thumbnail_url: Optional[str] = None
+    #: This row's take was accepted under an explicit aspect waiver.
+    waived: bool = False
+
+
+class TimelineCoverageEntry(BaseModel):
+    """One shot that is not on the cut, and the next step for it."""
+
+    shot_id: str
+    scene_id: Optional[str] = None
+    scene_title: str = ""
+    shot_name: str = ""
+    shot_order: int = 0
+    reason: str
+
+
+class TimelineCoverage(BaseModel):
+    total_shots: int = 0
+    covered_shots: int = 0
+    missing: list[TimelineCoverageEntry] = Field(default_factory=list)
 
 
 class TimelineManifest(BaseModel):
@@ -631,6 +834,11 @@ class TimelineManifest(BaseModel):
     items: list[TimelineItemResponse]
     total_duration_sec: float
     item_count: int
+    warnings: list[dict[str, Any]] = Field(default_factory=list)
+    delivery_validation: dict[str, bool] = Field(default_factory=dict)
+    #: How much of the project the cut actually covers. A build that skipped
+    #: shots must say which, and why.
+    coverage: TimelineCoverage = Field(default_factory=TimelineCoverage)
 
 
 class TimelineUpdateRequest(BaseModel):
@@ -663,6 +871,14 @@ class RenderResult(BaseModel):
     #: the values are the embedded workflow graph this render exists to remove.
     #: A non-empty list means the strip did not fully take effect.
     embedded_metadata_keys: list[str] = Field(default_factory=list)
+    #: clean only after ffprobe succeeds; leaked/unverified outputs are blocked.
+    metadata_status: Literal["clean", "leaked", "unverified"] = "unverified"
+    #: Structured form of any delivery waiver carried by the rendered takes.
+    #: The human-readable message is also repeated in ``warnings``.
+    warning_metadata: list[dict[str, Any]] = Field(default_factory=list)
+    #: Separates "the pipeline ran correctly" from "the output meets the
+    #: delivery spec", which a waived render does not.
+    delivery_validation: dict[str, bool] = Field(default_factory=dict)
 
 
 class PreflightResult(BaseModel):
@@ -726,6 +942,63 @@ class QueueStatus(BaseModel):
     running: int
     completed: int
     failed: int
+    cancelled: int = 0
+
+
+# ============================================================================
+# Generation runs
+# ============================================================================
+#
+# A run is read-only over the API. Only Generate, Regenerate and the queue
+# write one, so there is no create/update/delete schema here on purpose.
+
+class GenerationRunJobSummary(BaseModel):
+    """One job of a run, described in the words the storyboard uses."""
+
+    job_id: str
+    run_id: str
+    shot_id: str
+    scene_id: Optional[str] = None
+    scene_name: str
+    shot_name: str
+    status: str
+    attempts: int = 0
+    error_message: Optional[str] = None
+    media_provider_id: str = "comfyui"
+    media_model: str = ""
+    seed: Optional[int] = None
+    created_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+    take_id: Optional[str] = None
+    take_review_status: Optional[str] = None
+    #: Only set when the take's media is really on disk inside the runtime data
+    #: directory. Null means "show a placeholder", never "try this link".
+    thumbnail_url: Optional[str] = None
+
+
+class GenerationRunSummary(BaseModel):
+    id: str
+    project_id: str
+    kind: str
+    sequence: int
+    label: str
+    created_at: datetime
+    requested_job_count: int = 0
+    shot_count: int = 0
+
+    # Counts scoped to this run, derived from its jobs rather than stored.
+    total_jobs: int = 0
+    queued: int = 0
+    running: int = 0
+    completed: int = 0
+    failed: int = 0
+    cancelled: int = 0
+
+    status: str
+    terminal: bool
+    pending_take_count: int = 0
+    ready_for_review: bool = False
+    jobs: list[GenerationRunJobSummary] = Field(default_factory=list)
 
 
 # ============================================================================
@@ -738,6 +1011,8 @@ class RenderPlan(BaseModel):
     ffmpeg_available: bool
     commands: list[str]
     warnings: list[str] = Field(default_factory=list)
+    warning_metadata: list[dict[str, Any]] = Field(default_factory=list)
+    delivery_validation: dict[str, bool] = Field(default_factory=dict)
 
 
 # ============================================================================

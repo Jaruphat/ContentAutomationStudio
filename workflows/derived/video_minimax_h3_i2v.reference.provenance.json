@@ -1,0 +1,33 @@
+{
+  "source_path": "workflows/source/api/video_minimax_h3_i2v.api.json",
+  "source_sha256": "a742c6de241bd77d540767cf0ec2ce4bc084d701eeae85faf925ec79ccf75601",
+  "source_format": "api",
+  "transformations": [
+    "No graph transformation was required.",
+    "Registered the application referenceImage logical field against the LoadImage input consumed as MiniMaxH3ImageToVideo.first_frame.",
+    "Mapped the application's aspectRatio field to ResolutionSelector so I2V jobs do not inherit the bundled square default."
+  ],
+  "registration": {
+    "name": "MiniMax H3 I2V (Reference Conditioned)",
+    "purpose": "image-to-video",
+    "version": "1.0-reference.2",
+    "parameter_mapping": {
+      "positivePrompt": {"nodeId": "105:104", "field": "prompt"},
+      "seed": {"nodeId": "105:15", "field": "noise_seed"},
+      "referenceImage": {"nodeId": "114", "field": "image"},
+      "aspectRatio": {"nodeId": "115", "field": "aspect_ratio"},
+      "outputPrefix": {"nodeId": "92", "field": "filename_prefix"}
+    },
+    "output_mapping": [
+      {"nodeId": "92", "type": "video"}
+    ],
+    "required_models": [
+      "minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+      "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors",
+      "minimax_h3_video_vae_fp16.safetensors",
+      "minimax_h3_audio_vae_fp32.safetensors",
+      "minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors"
+    ]
+  },
+  "verification_scope": "Reference upload and node 114 injection were proven through a real application-level ComfyUI run. Prompt id 78b1c6e7-0473-4de7-836c-791abbcbac6a completed with a persisted 5.167-second H.264/AAC take. The aspectRatio mapping was added after that smoke exposed the source graph's bundled square default; its regression is covered by backend tests."
+}

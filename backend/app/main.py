@@ -24,6 +24,7 @@ from app.routers import (
     generation,
     media,
     projects,
+    references,
     review,
     scenes,
     shots,
@@ -157,6 +158,7 @@ app.add_middleware(
 # ---------------------------------------------------------------------------
 app.include_router(projects.router)
 app.include_router(story.router)
+app.include_router(references.router)
 app.include_router(scenes.router)
 app.include_router(shots.router)
 app.include_router(workflows.router)

@@ -1,0 +1,164 @@
+{
+  "render": {
+    "codec": "h264",
+    "profile": "High",
+    "pixel_format": "yuv420p",
+    "width": 864,
+    "height": 480,
+    "sample_aspect_ratio": "1:1",
+    "display_aspect_ratio": "9:5",
+    "declared_project_aspect_ratio": "16:9",
+    "pixel_aspect_ratio_decimal": 1.8,
+    "sixteen_nine_decimal": 1.7777777777777777,
+    "relative_width_excess_vs_16_9_percent": 1.2500000000000178,
+    "r_frame_rate": "24/1",
+    "avg_frame_rate": "274432/11435",
+    "avg_frame_rate_decimal": 23.99930039352864,
+    "nb_frames": 268,
+    "video_start_sec": 0.020996,
+    "video_duration_sec": 11.166992,
+    "video_end_sec": 11.187988,
+    "audio_start_sec": 0.0,
+    "audio_duration_sec": 11.188333,
+    "audio_end_sec": 11.188333,
+    "format_duration_sec": 11.188333,
+    "timeline_expected_duration_sec": 11.167,
+    "format_minus_timeline_ms": 21.33300000000027,
+    "video_duration_minus_timeline_ms": -0.007999999999341867,
+    "audio_leads_video_start_ms": 20.996000000000002,
+    "audio_minus_video_end_ms": 0.3449999999993736,
+    "video_bitrate": 282572,
+    "audio_codec": "aac",
+    "audio_sample_rate": 48000,
+    "audio_channels": 2,
+    "audio_bitrate": 90534,
+    "container_bitrate": 379222,
+    "size_bytes": 530358,
+    "color_range": null,
+    "color_space": null,
+    "color_transfer": null,
+    "color_primaries": null,
+    "embedded_metadata": {
+      "format": {
+        "major_brand": "isom",
+        "minor_version": "512",
+        "compatible_brands": "isomiso2avc1mp41",
+        "encoder": "Lavf62.12.102"
+      },
+      "streams": [
+        {
+          "language": "und",
+          "handler_name": "VideoHandler"
+        },
+        {
+          "language": "und",
+          "handler_name": "SoundHandler"
+        }
+      ]
+    }
+  },
+  "frame_timestamps": {
+    "decoded_frame_count": 268,
+    "first_pts_sec": 0.020996,
+    "last_pts_sec": 11.146322,
+    "strictly_increasing": true,
+    "step_min_sec": 0.041665999999999315,
+    "step_max_sec": 0.04199200000000047,
+    "unique_rounded_steps_sec": [
+      0.041666,
+      0.041667,
+      0.041992
+    ],
+    "frames_near_boundary_3s": [
+      {
+        "index": 70,
+        "pts": 2.937663
+      },
+      {
+        "index": 71,
+        "pts": 2.979329
+      },
+      {
+        "index": 72,
+        "pts": 3.020996
+      },
+      {
+        "index": 73,
+        "pts": 3.062663
+      }
+    ],
+    "frames_near_boundary_8_167s": [
+      {
+        "index": 193,
+        "pts": 8.062663
+      },
+      {
+        "index": 194,
+        "pts": 8.104329
+      },
+      {
+        "index": 195,
+        "pts": 8.145996
+      },
+      {
+        "index": 196,
+        "pts": 8.187988
+      },
+      {
+        "index": 197,
+        "pts": 8.229655
+      },
+      {
+        "index": 198,
+        "pts": 8.271322
+      }
+    ]
+  },
+  "av_alignment": {
+    "method": "stream start/end plus silencedetect at -50 dB; no dialogue/lip-sync event exists",
+    "active_audio_start_sec": 3.053167,
+    "scene2_timeline_start_sec": 3.0,
+    "scene2_actual_first_video_pts_sec": 3.020996,
+    "active_audio_lag_vs_timeline_ms": 53.167000000000186,
+    "active_audio_lag_vs_actual_video_ms": 32.17100000000039,
+    "active_audio_end_sec": 8.139417,
+    "scene3_timeline_start_sec": 8.167,
+    "scene3_actual_first_video_pts_sec": 8.187988,
+    "active_audio_lead_vs_timeline_cut_ms": 27.582999999999913,
+    "active_audio_lead_vs_actual_scene3_frame_ms": 48.57100000000081
+  },
+  "leakage": {
+    "final_mp4": {
+      "size_bytes": 530358,
+      "raw_case_insensitive_hits": {}
+    },
+    "source_t2v_mp4": {
+      "size_bytes": 533836,
+      "raw_case_insensitive_hits": {
+        "prompt": 2,
+        "comfyui": 1,
+        ".safetensors": 5
+      }
+    },
+    "provenance_sidecar": {
+      "size_bytes": 9461,
+      "raw_case_insensitive_hits": {
+        "prompt": 14,
+        "workflow": 10,
+        "comfyui": 3,
+        "contentautomationstudio": 7,
+        "negative_prompt": 3
+      }
+    },
+    "media_phase_json": {
+      "size_bytes": 10874,
+      "raw_case_insensitive_hits": {
+        "prompt": 11,
+        "workflow": 4,
+        "comfyui": 9,
+        "contentautomationstudio": 6
+      }
+    },
+    "note": "ffprobe filename is supplied by the command and is not embedded metadata; embedded tags are listed separately"
+  }
+}

@@ -1,0 +1,8 @@
+ M backend/app/models.py
+ M backend/app/services/ai/prompts.py
+ M backend/app/services/render_service.py
+ M backend/tests/conftest.py
+ M backend/tests/test_ai_tasks.py
+ M backend/tests/test_render_service.py
+?? backend/tests/test_ai_authoring_revisions.py
+?? docs/release_evidence/2026-09-02/full-system-multiscene-e2e/

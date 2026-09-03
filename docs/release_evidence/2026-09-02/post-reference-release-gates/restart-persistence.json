@@ -1,0 +1,41 @@
+{
+  "result": "PASS",
+  "cases": [
+    {
+      "name": "boogu-image-edit",
+      "project_id": "482fa596-0139-4c83-902e-44a7a20cd4e8",
+      "reference_sheet_count": 1,
+      "job_count": 1,
+      "take_count": 1,
+      "timeline_item_count": 1,
+      "media_bytes": 283228,
+      "media_sha256": "ff479d031876fa2d224ec076778f79bd67d3d9baff630ecfc296193b02e10a47"
+    },
+    {
+      "name": "h3-i2v",
+      "project_id": "e6cdd637-17b5-43f5-9281-9834ef51a9b7",
+      "reference_sheet_count": 1,
+      "job_count": 1,
+      "take_count": 1,
+      "timeline_item_count": 1,
+      "media_bytes": 322634,
+      "media_sha256": "a65cda6364ee17b4eab0bbf67df83624c225261916560a5b1e43cbecc389a744"
+    },
+    {
+      "name": "multiscene-selective-regen",
+      "project_id": "db99b7fe-73a9-41ed-9922-018043fdbd12",
+      "reference_sheet_count": 1,
+      "job_count": 4,
+      "take_count": 4,
+      "timeline_item_count": 3,
+      "media_bytes": 636836,
+      "media_sha256": "aab3744800d78f329a135c24f5988b9af7586d9851596bdbc279b202dba7edeb"
+    }
+  ],
+  "health": {
+    "status": "ok",
+    "comfyui_online": true,
+    "comfyui_mock": false,
+    "queue_remaining": 0
+  }
+}

@@ -9,6 +9,7 @@ import uuid
 from datetime import datetime, timezone
 
 from sqlalchemy import (
+    Boolean,
     Column,
     DateTime,
     Float,
@@ -48,8 +49,12 @@ class Project(Base):
     target_duration_sec = Column(Float, default=180.0)
     frame_rate = Column(Float, default=24.0)
     language = Column(String, default="en")
+    # Additive JSON settings keep subtitle styling project-scoped and migration-safe.
+    subtitle_settings = Column(JSON, default=dict)
     default_image_workflow_id = Column(String, nullable=True)
     default_video_workflow_id = Column(String, nullable=True)
+    # Persisted safety gate: a backend restart must not silently resume queued work.
+    queue_paused = Column(Boolean, default=False, server_default="0", nullable=False)
     status = Column(String, default="Draft")  # Draft / Active / Completed / Archived
     brief_text = Column(Text, default="")
     plot_text = Column(Text, default="")
@@ -64,6 +69,9 @@ class Project(Base):
     timeline_items = relationship("TimelineItem", back_populates="project", cascade="all, delete-orphan")
     ai_authoring_revisions = relationship(
         "AIAuthoringRevision", back_populates="project", cascade="all, delete-orphan"
+    )
+    reference_sheets = relationship(
+        "ReferenceSheet", back_populates="project", cascade="all, delete-orphan"
     )
 
 
@@ -165,6 +173,88 @@ class Style(Base):
 
 
 # ---------------------------------------------------------------------------
+# Visual Reference Bible
+# ---------------------------------------------------------------------------
+
+class ReferenceSheet(Base):
+    """A project's canonical visual identity for one subject.
+
+    One sheet per character, recurring prop or location. It carries the prose
+    that must hold across every shot plus the canonical images a
+    reference-conditioned workflow is given. ``content_sha256`` covers the
+    identity fields *and* the hashes of the attached images, so any change that
+    would alter a generation is visible as one digest - which is what the
+    selective staleness pass compares against.
+    """
+
+    __tablename__ = "reference_sheets"
+
+    id = Column(String, primary_key=True, default=_uuid)
+    project_id = Column(
+        String, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False
+    )
+    #: character / prop / location
+    kind = Column(String, nullable=False, default="character")
+    name = Column(String, nullable=False)
+    #: Optional link to the Story Bible row this sheet depicts, so a character
+    #: and its reference sheet can be shown together without name matching.
+    subject_ref_id = Column(String, nullable=True)
+    canonical_description = Column(Text, default="")
+    identity_tokens = Column(Text, default="")
+    negative_tokens = Column(Text, default="")
+    notes = Column(Text, default="")
+    revision = Column(Integer, nullable=False, default=1)
+    content_sha256 = Column(String, default="")
+    created_at = Column(DateTime, default=_utcnow)
+    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
+
+    project = relationship("Project", back_populates="reference_sheets")
+    images = relationship(
+        "ReferenceImage",
+        back_populates="sheet",
+        cascade="all, delete-orphan",
+        order_by="ReferenceImage.created_at",
+    )
+
+
+class ReferenceImage(Base):
+    """One canonical image belonging to a reference sheet.
+
+    ``project_id`` is denormalised from the sheet on purpose: every read path
+    that serves or generates from an image checks project ownership, and doing
+    that with a single indexed column rather than a join keeps the check
+    impossible to forget.
+    """
+
+    __tablename__ = "reference_images"
+
+    id = Column(String, primary_key=True, default=_uuid)
+    sheet_id = Column(
+        String, ForeignKey("reference_sheets.id", ondelete="CASCADE"), nullable=False
+    )
+    project_id = Column(
+        String, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False
+    )
+    #: canonical / support
+    role = Column(String, default="canonical")
+    #: What the user called it. Display only; never part of a path.
+    original_filename = Column(String, default="")
+    #: What it is called on disk: "<id><ext>", derived from our own id.
+    stored_filename = Column(String, default="")
+    file_path = Column(String, default="")
+    mime_type = Column(String, default="")
+    size_bytes = Column(Integer, default=0)
+    width = Column(Integer, default=0)
+    height = Column(Integer, default=0)
+    sha256 = Column(String, default="", index=True)
+    caption = Column(Text, default="")
+    provenance = Column(JSON, default=dict)
+    created_at = Column(DateTime, default=_utcnow)
+
+    sheet = relationship("ReferenceSheet", back_populates="images")
+
+
+# ---------------------------------------------------------------------------
 # Scene and Shot
 # ---------------------------------------------------------------------------
 
@@ -215,6 +305,23 @@ class Shot(Base):
     image_model = Column(String, default="workflow")
     seed_policy = Column(String, default="random")
     status = Column(String, default="Draft")  # Draft / Ready / Generating / NeedsReview / Approved / Failed
+
+    # -- Content revision tracking -------------------------------------------
+    # Everything a generation depends on - the compiled prompt, the scene, the
+    # Story Bible entries that reach this shot, its reference images - folds
+    # into content_sha256. prompt_revision counts the times that digest moved;
+    # generated_revision records which revision the last job was built from.
+    # A shot is stale exactly when it has been generated and the two disagree,
+    # which is what keeps invalidation selective instead of project-wide.
+    prompt_revision = Column(Integer, nullable=False, default=1)
+    prompt_sha256 = Column(String, default="")
+    content_sha256 = Column(String, default="")
+    #: Hashes of the reference images this shot resolved to, in order.
+    reference_sha256s = Column(JSON, default=list)
+    generated_revision = Column(Integer, nullable=False, default=0)
+    generated_content_sha256 = Column(String, default="")
+    is_stale = Column(Boolean, nullable=False, default=False)
+
     created_at = Column(DateTime, default=_utcnow)
     updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
 
@@ -250,6 +357,42 @@ class Workflow(Base):
 
 
 # ---------------------------------------------------------------------------
+# Generation Run
+# ---------------------------------------------------------------------------
+
+class GenerationRun(Base):
+    """One press of Generate (or of Regenerate), as a persisted identity.
+
+    The row is written once and never rewritten: it records what was asked for,
+    when, and by which route. Everything that changes afterwards - queued,
+    running, failed, retried - lives on the jobs that point at it. That is what
+    lets the Generate page say "this run" and mean the same batch an hour
+    later, and what makes a retry an event *inside* a run rather than a new one.
+
+    ``sequence`` numbers the runs of one project from 1 so the UI has a name a
+    person can say out loud instead of a UUID.
+    """
+
+    __tablename__ = "generation_runs"
+
+    id = Column(String, primary_key=True, default=_uuid)
+    project_id = Column(
+        String, ForeignKey("projects.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    #: batch (a project Generate) / regeneration (one shot) / migrated
+    #: (reconstructed by the backfill for jobs that predate runs).
+    kind = Column(String, nullable=False, default="batch")
+    sequence = Column(Integer, nullable=False, default=1)
+    label = Column(String, default="")
+    #: How many jobs the run was created with. Never updated, so a run that
+    #: half-failed still shows what it set out to do.
+    requested_job_count = Column(Integer, nullable=False, default=0)
+    shot_ids = Column(JSON, default=list)
+    created_at = Column(DateTime, default=_utcnow, nullable=False)
+
+
+# ---------------------------------------------------------------------------
 # Generation Job
 # ---------------------------------------------------------------------------
 
@@ -258,6 +401,12 @@ class GenerationJob(Base):
 
     id = Column(String, primary_key=True, default=_uuid)
     shot_id = Column(String, ForeignKey("shots.id", ondelete="CASCADE"), nullable=False)
+    #: The batch this job belongs to. Nullable because a database written
+    #: before runs existed has jobs without one until the backfill runs; a
+    #: retry deliberately keeps the original value.
+    run_id = Column(
+        String, ForeignKey("generation_runs.id"), nullable=True, index=True
+    )
     workflow_id = Column(String, ForeignKey("workflows.id"), nullable=True)
     workflow_version = Column(String, default="")
     # Snapshot of the exact workflow JSON submitted for this job, plus the
@@ -273,6 +422,19 @@ class GenerationJob(Base):
     usage = Column(JSON, default=dict)
     estimated_cost_usd = Column(Float, nullable=True)
     provenance = Column(JSON, default=dict)
+
+    # Exactly which version of the shot this job was compiled from. Recorded on
+    # the job rather than recomputed later, so a take's origin survives any
+    # subsequent edit to the shot it came from.
+    prompt_revision = Column(Integer, default=0)
+    prompt_sha256 = Column(String, default="")
+    content_sha256 = Column(String, default="")
+    reference_image_ids = Column(JSON, default=list)
+    reference_sha256s = Column(JSON, default=list)
+    #: What was actually sent to the generation backend for the reference
+    #: media: uploaded name, hash, dimensions, and the node it was wired to.
+    reference_provenance = Column(JSON, default=dict)
+
     seed = Column(Integer, nullable=True)
     comfyui_prompt_id = Column(String, nullable=True)
     status = Column(String, default="Queued")  # Queued / Running / Completed / Failed / Cancelled
@@ -298,6 +460,12 @@ class Take(Base):
     id = Column(String, primary_key=True, default=_uuid)
     shot_id = Column(String, ForeignKey("shots.id", ondelete="CASCADE"), nullable=False)
     job_id = Column(String, ForeignKey("generation_jobs.id"), nullable=True)
+    #: Copied from the job when the take is created, so Review can be scoped to
+    #: one run without joining through a job row that may since have been
+    #: cascaded away with its shot.
+    run_id = Column(
+        String, ForeignKey("generation_runs.id"), nullable=True, index=True
+    )
     file_path = Column(String, default="")
     thumbnail_path = Column(String, default="")
     duration_sec = Column(Float, default=0.0)
@@ -311,6 +479,18 @@ class Take(Base):
     usage = Column(JSON, default=dict)
     estimated_cost_usd = Column(Float, nullable=True)
     provenance = Column(JSON, default=dict)
+
+    # The shot revision this take actually came from. Approved takes are kept
+    # from every revision as history, so the timeline needs this to tell an
+    # approved take that still matches the current shot from one that does not.
+    prompt_revision = Column(Integer, default=0)
+    prompt_sha256 = Column(String, default="")
+    content_sha256 = Column(String, default="")
+    reference_image_ids = Column(JSON, default=list)
+    reference_sha256s = Column(JSON, default=list)
+    #: job id, shot revision and the take a regeneration replaced, if any.
+    lineage = Column(JSON, default=dict)
+
     review_status = Column(String, default="Pending")  # Pending / Approved / Rejected
     rating = Column(Integer, nullable=True)
     notes = Column(Text, default="")
@@ -337,6 +517,10 @@ class TimelineItem(Base):
     duration_sec = Column(Float, default=0.0)
     transition_in = Column(String, default="cut")
     transition_out = Column(String, default="cut")
+    #: The revision the placed take came from, and the shot's revision when the
+    #: timeline was built. Equal means the cut matches the current brief.
+    take_prompt_revision = Column(Integer, default=0)
+    shot_prompt_revision = Column(Integer, default=0)
     created_at = Column(DateTime, default=_utcnow)
     updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
 

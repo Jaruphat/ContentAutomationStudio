@@ -1,0 +1,199 @@
+{
+  "result": "PASS",
+  "project_id": "db99b7fe-73a9-41ed-9922-018043fdbd12",
+  "changed_shot_id": "804aece3-e5c3-4d68-80f2-162abcaa5118",
+  "before_revisions": {
+    "0a68764d-10a1-48ea-959a-bfdfffceaf9d": 1,
+    "804aece3-e5c3-4d68-80f2-162abcaa5118": 1,
+    "03c0e7e1-346b-436c-bb88-74508539a626": 1
+  },
+  "after_update_revisions": {
+    "0a68764d-10a1-48ea-959a-bfdfffceaf9d": 1,
+    "804aece3-e5c3-4d68-80f2-162abcaa5118": 2,
+    "03c0e7e1-346b-436c-bb88-74508539a626": 1
+  },
+  "stale_shot_ids_after_update": [
+    "804aece3-e5c3-4d68-80f2-162abcaa5118"
+  ],
+  "stale_timeline_http_status": 409,
+  "regeneration_job_id": "b2c141ce-286c-4d99-9e2c-c741f8b937ab",
+  "regeneration_prompt_id": "c2d05f05-d681-4a90-97da-b41518df3b5f",
+  "new_take_id": "2ff0eb61-c047-4ff9-95ee-8ab5190dc265",
+  "old_take_ids": [
+    "8871cb3c-1e09-40da-9be8-2ffa53eab83e",
+    "0dd4e573-f3c7-451e-8dbb-a35910e448b5",
+    "6f28de40-2732-4fce-b6b4-8d4fe85deb38"
+  ],
+  "final_take_ids": [
+    "2ff0eb61-c047-4ff9-95ee-8ab5190dc265",
+    "8871cb3c-1e09-40da-9be8-2ffa53eab83e",
+    "0dd4e573-f3c7-451e-8dbb-a35910e448b5",
+    "6f28de40-2732-4fce-b6b4-8d4fe85deb38"
+  ],
+  "affected_take_count": 2,
+  "unaffected_take_count": 2,
+  "timeline_item_count": 3,
+  "render": {
+    "project_id": "db99b7fe-73a9-41ed-9922-018043fdbd12",
+    "rendered": true,
+    "output_path": "C:\\Users\\jongp\\Desktop\\Thinkpad_and_PC_Sync\\ContentAutomationStudio\\backend\\data\\exports\\db99b7fe-73a9-41ed-9922-018043fdbd12\\review.mp4",
+    "reason": "",
+    "warnings": [],
+    "segment_count": 3,
+    "width": 864,
+    "height": 480,
+    "duration_sec": 9.0,
+    "codec": "h264",
+    "size_bytes": 165924,
+    "has_audio": false,
+    "audio_codec": "",
+    "provenance_path": "C:\\Users\\jongp\\Desktop\\Thinkpad_and_PC_Sync\\ContentAutomationStudio\\backend\\data\\exports\\db99b7fe-73a9-41ed-9922-018043fdbd12\\review.provenance.json",
+    "embedded_metadata_keys": []
+  },
+  "updated_shot": {
+    "id": "804aece3-e5c3-4d68-80f2-162abcaa5118",
+    "scene_id": "95031e1a-85db-4b1c-8d2b-c3e8995989b9",
+    "order": 1,
+    "shot_type": "medium-wide",
+    "camera_angle": "eye level",
+    "camera_movement": "locked",
+    "lens_framing": "",
+    "subject": "same child and same single blue paper boat",
+    "action": "The same child raises one hand toward the same single boat.",
+    "environment": "same misty pond at dawn",
+    "dialogue": "",
+    "planned_duration_sec": 3.0,
+    "generation_mode": "image",
+    "image_prompt": "Preserve the exact supplied child, blue raincoat, one blue paper boat and pond. Change only the pose: the child clearly raises one hand toward the boat, with a warm sunbeam on the boat.",
+    "video_prompt": "",
+    "negative_prompt": "second boat, duplicate child, different raincoat, different boat color, text, logo, watermark",
+    "reference_asset_ids": [
+      "f9a8a931-b5a8-4788-86ff-3eca71003c37"
+    ],
+    "workflow_preset_id": null,
+    "image_provider_id": "comfyui",
+    "image_model": "workflow",
+    "seed_policy": "random",
+    "status": "Approved",
+    "prompt_revision": 2,
+    "prompt_sha256": "56afec1aa8f0ffb05d32d752a2fd67378c5c568da7c20a7eeab7545a11f056d1",
+    "content_sha256": "4ecdd2276c449285159ed08a8cc2c828538b40f0542f5fb3ebc137265a8bc9e8",
+    "reference_sha256s": [
+      "841ebf7cd1174f86c42f58839a79c1e140615125447d07eb97f228f66689d97e"
+    ],
+    "generated_revision": 1,
+    "is_stale": true,
+    "created_at": "2026-09-02T14:12:00.107165",
+    "updated_at": "2026-09-02T14:20:11.169753"
+  },
+  "after_regeneration": [
+    {
+      "id": "0a68764d-10a1-48ea-959a-bfdfffceaf9d",
+      "scene_id": "c8544b09-3b25-44cc-ad83-01137b2c2bd0",
+      "order": 1,
+      "shot_type": "medium-wide",
+      "camera_angle": "eye level",
+      "camera_movement": "locked",
+      "lens_framing": "",
+      "subject": "same child and same single blue paper boat",
+      "action": "The same child stands at the pond edge at dawn.",
+      "environment": "same misty pond at dawn",
+      "dialogue": "",
+      "planned_duration_sec": 3.0,
+      "generation_mode": "image",
+      "image_prompt": "Preserve the supplied child, blue raincoat, single blue paper boat, pond, composition and color identity. Dawn mist thickens slightly; medium-wide locked shot.",
+      "video_prompt": "",
+      "negative_prompt": "second boat, duplicate child, different raincoat, different boat color, text, logo, watermark",
+      "reference_asset_ids": [
+        "f9a8a931-b5a8-4788-86ff-3eca71003c37"
+      ],
+      "workflow_preset_id": null,
+      "image_provider_id": "comfyui",
+      "image_model": "workflow",
+      "seed_policy": "fixed",
+      "status": "Approved",
+      "prompt_revision": 1,
+      "prompt_sha256": "e344e3b1192d4578192cfc295cf3f28c84f8242770f5cf027f316b670508ec90",
+      "content_sha256": "6b381dc76083c02862bdf83408a4031aedef101daf6d983099ef0940fffac5db",
+      "reference_sha256s": [
+        "841ebf7cd1174f86c42f58839a79c1e140615125447d07eb97f228f66689d97e"
+      ],
+      "generated_revision": 1,
+      "is_stale": false,
+      "created_at": "2026-09-02T14:12:00.056119",
+      "updated_at": "2026-09-02T14:18:02.456682"
+    },
+    {
+      "id": "804aece3-e5c3-4d68-80f2-162abcaa5118",
+      "scene_id": "95031e1a-85db-4b1c-8d2b-c3e8995989b9",
+      "order": 1,
+      "shot_type": "medium-wide",
+      "camera_angle": "eye level",
+      "camera_movement": "locked",
+      "lens_framing": "",
+      "subject": "same child and same single blue paper boat",
+      "action": "The same child raises one hand toward the same single boat.",
+      "environment": "same misty pond at dawn",
+      "dialogue": "",
+      "planned_duration_sec": 3.0,
+      "generation_mode": "image",
+      "image_prompt": "Preserve the exact supplied child, blue raincoat, one blue paper boat and pond. Change only the pose: the child clearly raises one hand toward the boat, with a warm sunbeam on the boat.",
+      "video_prompt": "",
+      "negative_prompt": "second boat, duplicate child, different raincoat, different boat color, text, logo, watermark",
+      "reference_asset_ids": [
+        "f9a8a931-b5a8-4788-86ff-3eca71003c37"
+      ],
+      "workflow_preset_id": null,
+      "image_provider_id": "comfyui",
+      "image_model": "workflow",
+      "seed_policy": "random",
+      "status": "Approved",
+      "prompt_revision": 2,
+      "prompt_sha256": "56afec1aa8f0ffb05d32d752a2fd67378c5c568da7c20a7eeab7545a11f056d1",
+      "content_sha256": "4ecdd2276c449285159ed08a8cc2c828538b40f0542f5fb3ebc137265a8bc9e8",
+      "reference_sha256s": [
+        "841ebf7cd1174f86c42f58839a79c1e140615125447d07eb97f228f66689d97e"
+      ],
+      "generated_revision": 2,
+      "is_stale": false,
+      "created_at": "2026-09-02T14:12:00.107165",
+      "updated_at": "2026-09-02T14:22:10.732677"
+    },
+    {
+      "id": "03c0e7e1-346b-436c-bb88-74508539a626",
+      "scene_id": "97cc72a1-fb11-4b7d-8c82-b5b0b43319ac",
+      "order": 1,
+      "shot_type": "medium-wide",
+      "camera_angle": "eye level",
+      "camera_movement": "locked",
+      "lens_framing": "",
+      "subject": "same child and same single blue paper boat",
+      "action": "The same boat reaches a narrow band of warm light.",
+      "environment": "same misty pond at dawn",
+      "dialogue": "",
+      "planned_duration_sec": 3.0,
+      "generation_mode": "image",
+      "image_prompt": "Preserve the supplied child, blue raincoat, exactly one blue paper boat and same pond. The same boat drifts into warm sunlight while the child watches; wide locked shot.",
+      "video_prompt": "",
+      "negative_prompt": "second boat, duplicate child, different raincoat, different boat color, text, logo, watermark",
+      "reference_asset_ids": [
+        "f9a8a931-b5a8-4788-86ff-3eca71003c37"
+      ],
+      "workflow_preset_id": null,
+      "image_provider_id": "comfyui",
+      "image_model": "workflow",
+      "seed_policy": "fixed",
+      "status": "Approved",
+      "prompt_revision": 1,
+      "prompt_sha256": "3d086b994c4ff4f715f848bbf2e3c98fc8bcff9011521ced49e8f244bf94be0f",
+      "content_sha256": "b39ff3d7aeaad02296a1cbe1645466148f227e0f9f4a853dce0ee3429b98cdf3",
+      "reference_sha256s": [
+        "841ebf7cd1174f86c42f58839a79c1e140615125447d07eb97f228f66689d97e"
+      ],
+      "generated_revision": 1,
+      "is_stale": false,
+      "created_at": "2026-09-02T14:12:00.165265",
+      "updated_at": "2026-09-02T14:18:02.385051"
+    }
+  ]
+}

@@ -1,0 +1,42 @@
+{
+  "id": "549c9d69-efff-4bae-88bd-15e913e80949",
+  "project_id": "db99b7fe-73a9-41ed-9922-018043fdbd12",
+  "kind": "character",
+  "name": "Child and single blue paper boat continuity lock",
+  "subject_ref_id": null,
+  "canonical_description": "",
+  "identity_tokens": "",
+  "negative_tokens": "",
+  "notes": "",
+  "revision": 2,
+  "content_sha256": "066b17341205daa6a0738b99e1995ec915a5254806b6d2aef308fba385609200",
+  "images": [
+    {
+      "id": "f9a8a931-b5a8-4788-86ff-3eca71003c37",
+      "sheet_id": "549c9d69-efff-4bae-88bd-15e913e80949",
+      "project_id": "db99b7fe-73a9-41ed-9922-018043fdbd12",
+      "role": "canonical",
+      "original_filename": "canonical-child-blue-boat.png",
+      "stored_filename": "f9a8a931-b5a8-4788-86ff-3eca71003c37.png",
+      "mime_type": "image/png",
+      "size_bytes": 480719,
+      "width": 864,
+      "height": 480,
+      "sha256": "841ebf7cd1174f86c42f58839a79c1e140615125447d07eb97f228f66689d97e",
+      "caption": "",
+      "provenance": {
+        "source": "upload",
+        "sha256": "841ebf7cd1174f86c42f58839a79c1e140615125447d07eb97f228f66689d97e",
+        "mime_type": "image/png",
+        "width": 864,
+        "height": 480,
+        "size_bytes": 480719,
+        "original_filename": "canonical-child-blue-boat.png"
+      },
+      "created_at": "2026-09-02T14:12:00.004014",
+      "url": "/api/media/references/f9a8a931-b5a8-4788-86ff-3eca71003c37/file"
+    }
+  ],
+  "created_at": "2026-09-02T14:11:59.978963",
+  "updated_at": "2026-09-02T14:12:00.009515"
+}

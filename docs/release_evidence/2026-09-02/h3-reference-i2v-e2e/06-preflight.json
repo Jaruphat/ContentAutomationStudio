@@ -1,0 +1,19 @@
+{
+  "ready": true,
+  "total_shots": 1,
+  "ready_shots": 1,
+  "issues": [],
+  "workflow_checks": [
+    {
+      "workflow_id": "711d55b8-fc50-41b3-92eb-d706653fde4f",
+      "name": "H3 Video - I2V (API)",
+      "valid": true,
+      "source_format": "api",
+      "errors": [],
+      "warnings": []
+    }
+  ],
+  "warnings": [],
+  "comfyui_online": true,
+  "comfyui_mock": false
+}

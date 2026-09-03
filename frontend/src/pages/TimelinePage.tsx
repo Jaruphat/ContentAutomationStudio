@@ -3,8 +3,9 @@
    actual FFmpeg review render.
    ────────────────────────────────────────────────────────────────────────── */
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
 import {
   Film,
   Loader2,
@@ -19,9 +20,16 @@ import {
   CheckCircle2,
   XCircle,
 } from "lucide-react";
-import api from "../api/client";
+import api, { toAIError } from "../api/client";
+import ActionError from "../components/ActionError";
+import AspectOverrideBanner from "../components/AspectOverrideBanner";
 import { useAppState } from "../store/useProjectStore";
-import type { RenderPlan, RenderResult, TimelineItem } from "../types";
+import type {
+  RenderPlan,
+  RenderResult,
+  TimelineCoverage,
+  TimelineItem,
+} from "../types";
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -29,52 +37,128 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+type ProjectScoped<T> = { projectId: string; data: T } | null;
+
+export function currentProjectValue<T>(
+  value: ProjectScoped<T>,
+  currentProjectId: string | null,
+): T | null {
+  return value?.projectId === currentProjectId ? value.data : null;
+}
+
 // ── Timeline item row ────────────────────────────────────────────────────
 
+/**
+ * One clip in the cut, identified the way a person identifies it: the scene it
+ * belongs to, what the shot is of, and the frame itself. The ids are still
+ * available as a tooltip for anyone reconciling against an export.
+ */
 function TimelineRow({ item, index }: { item: TimelineItem; index: number }) {
   return (
-    <div className="flex items-center gap-3 rounded-lg border border-zinc-800 bg-zinc-900/60 px-4 py-3">
+    <div className="flex items-center gap-3 rounded-lg border border-zinc-800 bg-zinc-900/60 px-3 py-2.5">
       {/* Order indicator */}
       <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-zinc-800 text-xs font-bold text-zinc-300">
         {index + 1}
       </div>
 
-      {/* Transition in */}
-      <div className="flex items-center gap-1 text-[10px] text-zinc-500 min-w-[60px]">
-        <ArrowRight size={10} />
-        <span className="uppercase">{item.transition_in}</span>
+      {/* The frame this position places */}
+      <div className="hidden h-12 w-[86px] shrink-0 overflow-hidden rounded bg-zinc-950 sm:block">
+        {item.thumbnail_url ? (
+          <img
+            src={item.thumbnail_url}
+            alt={`Frame for ${item.shot_name || "this shot"}`}
+            className="h-full w-full object-cover"
+          />
+        ) : (
+          <div className="flex h-full items-center justify-center text-[10px] text-zinc-600">
+            No preview
+          </div>
+        )}
       </div>
 
       {/* Main info */}
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-medium text-zinc-300">
-            Shot: <span className="font-mono">{item.shot_id?.slice(0, 8) ?? "--"}</span>
-          </span>
-          <span className="text-xs text-zinc-500">|</span>
-          <span className="text-xs text-zinc-400">
-            Take: <span className="font-mono">{item.take_id?.slice(0, 8) ?? "--"}</span>
-          </span>
-        </div>
+      <div
+        className="min-w-0 flex-1"
+        title={`Shot ${item.shot_id ?? "--"} · Take ${item.take_id ?? "--"}`}
+      >
+        <p className="truncate text-[11px] text-zinc-500">
+          {item.scene_title || "Unassigned scene"}
+        </p>
+        <p className="truncate text-sm font-medium text-zinc-200">
+          {item.shot_name || `Shot ${item.shot_id?.slice(0, 8) ?? "--"}`}
+        </p>
       </div>
 
+      {item.waived && (
+        <span className="shrink-0 rounded-full bg-amber-900/40 px-2 py-0.5 text-[10px] font-medium text-amber-300">
+          Waived
+        </span>
+      )}
+
       {/* Duration */}
-      <div className="flex items-center gap-1 text-xs text-zinc-400">
+      <div className="flex shrink-0 items-center gap-1 text-xs text-zinc-400">
         <Clock size={12} />
         <span>{item.duration_sec.toFixed(1)}s</span>
       </div>
 
       {/* Time range */}
-      <div className="text-[10px] text-zinc-500 min-w-[80px] text-right">
+      <div className="hidden min-w-[80px] text-right text-[10px] text-zinc-500 md:block">
         {item.in_point_sec.toFixed(1)}s - {item.out_point_sec.toFixed(1)}s
       </div>
 
-      {/* Transition out */}
-      <div className="flex items-center gap-1 text-[10px] text-zinc-500 min-w-[60px]">
-        <span className="uppercase">{item.transition_out}</span>
+      {/* Transitions */}
+      <div className="hidden shrink-0 items-center gap-1 text-[10px] text-zinc-500 lg:flex">
+        <span className="uppercase">{item.transition_in}</span>
         <ArrowRight size={10} />
+        <span className="uppercase">{item.transition_out}</span>
       </div>
     </div>
+  );
+}
+
+// ── Coverage: what the build left out ────────────────────────────────────
+
+/**
+ * A build that places 13 of 18 shots and says nothing about the other five
+ * reads as a complete cut. This is the difference between the two.
+ */
+function CoveragePanel({ coverage }: { coverage: TimelineCoverage }) {
+  if (coverage.missing.length === 0) return null;
+
+  return (
+    <section
+      aria-label="Shots not on the timeline"
+      className="rounded-lg border border-amber-800/60 bg-amber-900/15 p-4"
+    >
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <AlertTriangle size={15} className="shrink-0 text-amber-400" />
+          <h3 className="text-sm font-semibold text-amber-200">
+            {coverage.covered_shots} of {coverage.total_shots} shots are on the
+            timeline
+          </h3>
+        </div>
+        <Link
+          to="/review"
+          className="rounded-md border border-amber-700 px-3 py-1.5 text-xs font-medium text-amber-200 hover:bg-amber-900/40"
+        >
+          Go to Review
+        </Link>
+      </div>
+
+      <ul className="mt-3 space-y-1.5">
+        {coverage.missing.map((entry) => (
+          <li
+            key={entry.shot_id}
+            className="rounded-md bg-zinc-900/60 px-3 py-2 text-xs"
+          >
+            <p className="text-zinc-500">{entry.scene_title}</p>
+            <p className="font-medium text-zinc-200">{entry.shot_name}</p>
+            <p className="mt-0.5 text-amber-200/90">{entry.reason}</p>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 
@@ -189,6 +273,13 @@ function RenderResultPanel({ result }: { result: RenderResult }) {
         <h3 className="text-sm font-semibold text-zinc-200">Review Render</h3>
       </div>
 
+      {/* What was delivered, and whether it met the spec it was delivered
+          under. The same waiver the manifest carries. */}
+      <AspectOverrideBanner
+        warnings={result.warning_metadata}
+        validation={result.delivery_validation}
+      />
+
       <div
         className={`flex items-start gap-2 rounded-md px-3 py-2 text-sm font-medium ${
           result.rendered
@@ -257,9 +348,13 @@ function RenderResultPanel({ result }: { result: RenderResult }) {
 
 export default function TimelinePage() {
   const { currentProjectId } = useAppState();
+  const currentProjectRef = useRef(currentProjectId);
+  currentProjectRef.current = currentProjectId;
   const qc = useQueryClient();
-  const [renderPlan, setRenderPlan] = useState<RenderPlan | null>(null);
-  const [renderResult, setRenderResult] = useState<RenderResult | null>(null);
+  const [scopedRenderPlan, setScopedRenderPlan] = useState<ProjectScoped<RenderPlan>>(null);
+  const [scopedRenderResult, setScopedRenderResult] = useState<ProjectScoped<RenderResult>>(null);
+  const renderPlan = currentProjectValue(scopedRenderPlan, currentProjectId);
+  const renderResult = currentProjectValue(scopedRenderResult, currentProjectId);
 
   const timelineQ = useQuery({
     queryKey: ["timeline", currentProjectId],
@@ -268,19 +363,33 @@ export default function TimelinePage() {
   });
 
   const buildMut = useMutation({
-    mutationFn: () => api.timeline.build(currentProjectId!),
-    onSuccess: () =>
-      qc.invalidateQueries({ queryKey: ["timeline", currentProjectId] }),
+    mutationFn: (projectId: string) => api.timeline.build(projectId),
+    onSuccess: (_data, projectId) => {
+      qc.invalidateQueries({ queryKey: ["timeline", projectId] });
+      // A rebuilt cut can place different takes at different durations; a
+      // render plan or result computed from the old cut must not linger and
+      // be mistaken for a description of the new one.
+      setScopedRenderPlan((value) => value?.projectId === projectId ? null : value);
+      setScopedRenderResult((value) => value?.projectId === projectId ? null : value);
+    },
   });
 
   const renderPlanMut = useMutation({
-    mutationFn: () => api.timeline.renderPlan(currentProjectId!),
-    onSuccess: (data) => setRenderPlan(data),
+    mutationFn: (projectId: string) => api.timeline.renderPlan(projectId),
+    onSuccess: (data, projectId) => {
+      if (currentProjectRef.current === projectId) {
+        setScopedRenderPlan({ projectId, data });
+      }
+    },
   });
 
   const renderMut = useMutation({
-    mutationFn: () => api.timeline.render(currentProjectId!),
-    onSuccess: (data) => setRenderResult(data),
+    mutationFn: (projectId: string) => api.timeline.render(projectId),
+    onSuccess: (data, projectId) => {
+      if (currentProjectRef.current === projectId) {
+        setScopedRenderResult({ projectId, data });
+      }
+    },
   });
 
   if (!currentProjectId) {
@@ -297,6 +406,11 @@ export default function TimelinePage() {
 
   const items = timelineQ.data?.items ?? [];
   const totalDuration = timelineQ.data?.total_duration_sec ?? 0;
+  const coverage = timelineQ.data?.coverage;
+  const loadError = timelineQ.isError ? toAIError(timelineQ.error).detail : null;
+  // The one refusal the user can clear from this page: the cut references
+  // takes that no longer match their shots, so it has to be rebuilt.
+  const staleLineage = !!loadError && loadError.includes("lineage");
 
   return (
     <div className="mx-auto max-w-5xl px-6 py-6 space-y-6">
@@ -315,7 +429,7 @@ export default function TimelinePage() {
 
         <div className="flex gap-2">
           <button
-            onClick={() => buildMut.mutate()}
+            onClick={() => buildMut.mutate(currentProjectId)}
             disabled={buildMut.isPending}
             className="flex items-center gap-1.5 rounded-md bg-indigo-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
           >
@@ -327,7 +441,7 @@ export default function TimelinePage() {
             Build Timeline
           </button>
           <button
-            onClick={() => renderPlanMut.mutate()}
+            onClick={() => renderPlanMut.mutate(currentProjectId)}
             disabled={renderPlanMut.isPending}
             className="flex items-center gap-1.5 rounded-md border border-zinc-700 px-4 py-1.5 text-sm font-medium text-zinc-300 hover:bg-zinc-800 disabled:opacity-50"
           >
@@ -339,7 +453,7 @@ export default function TimelinePage() {
             Render Plan
           </button>
           <button
-            onClick={() => renderMut.mutate()}
+            onClick={() => renderMut.mutate(currentProjectId)}
             disabled={renderMut.isPending || items.length === 0}
             title={
               items.length === 0
@@ -358,17 +472,55 @@ export default function TimelinePage() {
         </div>
       </div>
 
-      {/* Errors */}
-      {buildMut.isError && (
-        <div className="flex items-center gap-2 rounded-md border border-red-800 bg-red-900/30 px-4 py-2 text-sm text-red-300">
-          <AlertCircle size={14} /> Failed to build timeline.
-        </div>
+      {timelineQ.data && (
+        <AspectOverrideBanner
+          warnings={timelineQ.data.warnings}
+          validation={timelineQ.data.delivery_validation}
+        />
       )}
-      {renderMut.isError && (
-        <div className="flex items-center gap-2 rounded-md border border-red-800 bg-red-900/30 px-4 py-2 text-sm text-red-300">
-          <AlertCircle size={14} /> Render request failed. Is the backend running?
-        </div>
+
+      {/* A refused read must never look like an empty cut. */}
+      {loadError && (
+        <section
+          role="alert"
+          aria-label="Timeline unavailable"
+          className="rounded-lg border border-red-800 bg-red-900/25 p-4"
+        >
+          <div className="flex items-start gap-2">
+            <AlertCircle size={16} className="mt-0.5 shrink-0 text-red-400" />
+            <div className="space-y-2">
+              <h2 className="text-sm font-semibold text-red-200">
+                The timeline could not be loaded
+              </h2>
+              <p className="text-sm text-red-200/90">{loadError}</p>
+              {staleLineage && (
+                <p className="text-xs text-red-200/70">
+                  The stored cut points at takes that no longer match their
+                  shots. Rebuilding replaces it with the takes that are
+                  approved and current right now; nothing else is changed.
+                </p>
+              )}
+              <button
+                onClick={() => buildMut.mutate(currentProjectId)}
+                disabled={buildMut.isPending}
+                className="flex items-center gap-1.5 rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
+              >
+                {buildMut.isPending ? (
+                  <Loader2 size={14} className="animate-spin" />
+                ) : (
+                  <ListOrdered size={14} />
+                )}
+                Rebuild timeline
+              </button>
+            </div>
+          </div>
+        </section>
       )}
+
+      {/* Action failures, with the reason the backend gave. */}
+      <ActionError label="Build timeline" error={buildMut.error} />
+      <ActionError label="Render plan" error={renderPlanMut.error} />
+      <ActionError label="Render review" error={renderMut.error} />
 
       {/* Loading */}
       {timelineQ.isLoading && (
@@ -377,26 +529,46 @@ export default function TimelinePage() {
         </div>
       )}
 
+      {coverage && <CoveragePanel coverage={coverage} />}
+
       {/* Empty */}
       {timelineQ.data && items.length === 0 && (
         <div className="flex flex-col items-center py-16 text-center">
           <Film size={28} className="mb-2 text-zinc-600" />
           <p className="text-sm text-zinc-500">
-            No timeline items yet. Approve takes in Review, then click "Build Timeline"
-            to assemble the sequence.
+            {buildMut.isSuccess
+              ? "The build ran and found no shot with a current approved take, so the timeline is empty."
+              : "No timeline items yet. Approve takes in Review, then click \"Build Timeline\" to assemble the sequence."}
           </p>
         </div>
       )}
 
       {/* Timeline list */}
       {items.length > 0 && (
-        <div className="space-y-2">
-          {[...items]
-            .sort((a, b) => a.order - b.order)
-            .map((item, i) => (
-              <TimelineRow key={item.id} item={item} index={i} />
-            ))}
-        </div>
+        <>
+          <div className="space-y-2">
+            {[...items]
+              .sort((a, b) => a.order - b.order)
+              .map((item, i) => (
+                <TimelineRow key={item.id} item={item} index={i} />
+              ))}
+          </div>
+
+          {/* Where this stage leads. */}
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-zinc-800 bg-zinc-900/40 px-4 py-3">
+            <p className="text-xs text-zinc-500">
+              Render a review video from these {items.length} clip
+              {items.length === 1 ? "" : "s"}, or take the manifest and
+              storyboard to Export.
+            </p>
+            <Link
+              to="/export"
+              className="rounded-md border border-zinc-700 px-3 py-1.5 text-xs font-medium text-zinc-300 hover:bg-zinc-800"
+            >
+              Go to Export
+            </Link>
+          </div>
+        </>
       )}
 
       {/* Render output */}

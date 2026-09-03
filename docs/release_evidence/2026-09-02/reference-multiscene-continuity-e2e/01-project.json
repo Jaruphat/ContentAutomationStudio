@@ -1,0 +1,19 @@
+{
+  "id": "db99b7fe-73a9-41ed-9922-018043fdbd12",
+  "title": "Reference Bible Real Multiscene Continuity E2E",
+  "objective": "Prove one canonical child and boat remain stable across three scenes",
+  "audience": "release audit",
+  "content_type": "short film",
+  "aspect_ratio": "9:5",
+  "target_resolution": "864x480",
+  "target_duration_sec": 9.0,
+  "frame_rate": 24.0,
+  "language": "en",
+  "default_image_workflow_id": "75a73b44-5c6f-4661-87f6-26e66a639efd",
+  "default_video_workflow_id": null,
+  "status": "Draft",
+  "brief_text": "Exactly one child in a blue raincoat and one blue paper boat at the same misty pond.",
+  "plot_text": "",
+  "created_at": "2026-09-02T14:11:59.946387",
+  "updated_at": "2026-09-02T14:11:59.946387"
+}

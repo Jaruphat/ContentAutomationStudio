@@ -10,6 +10,7 @@
 
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
   CheckCircle,
   ThumbsUp,
@@ -29,9 +30,6 @@ import type { MediaProviderId, Take } from "../types";
 
 type FilterMode = "all" | "Pending" | "Approved" | "Rejected";
 
-/** Providers that meter generation, and so must be confirmed before a rerun. */
-const METERED_PROVIDERS: MediaProviderId[] = ["openai"];
-
 function formatUsd(amount: number): string {
   return amount.toLocaleString(undefined, {
     style: "currency",
@@ -39,6 +37,10 @@ function formatUsd(amount: number): string {
     minimumFractionDigits: 2,
     maximumFractionDigits: 4,
   });
+}
+
+export function reviewRunPath(runId: string): string {
+  return `/review?run=${encodeURIComponent(runId)}`;
 }
 
 // ── Take card ────────────────────────────────────────────────────────────
@@ -57,9 +59,9 @@ function TakeCard({
   onSelect: () => void;
 }) {
   const qc = useQueryClient();
+  const navigate = useNavigate();
   const [confirmOpen, setConfirmOpen] = useState(false);
-
-  const paid = METERED_PROVIDERS.includes(take.media_provider_id);
+  const [checkingEstimate, setCheckingEstimate] = useState(false);
 
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ["takes", projectId] });
@@ -79,9 +81,10 @@ function TakeCard({
   const regenMut = useMutation({
     mutationFn: (confirmPaid: boolean) =>
       api.review.regenerate(take.shot_id, confirmPaid),
-    onSuccess: () => {
+    onSuccess: (job) => {
       setConfirmOpen(false);
       invalidate();
+      if (job.run_id) navigate(reviewRunPath(job.run_id));
     },
   });
 
@@ -92,8 +95,8 @@ function TakeCard({
    */
   const estimateQ = useQuery({
     queryKey: ["regenerate-estimate", take.shot_id],
-    queryFn: () => api.generation.estimate(projectId, [take.shot_id]),
-    enabled: confirmOpen,
+    queryFn: () => api.review.regenerationEstimate(take.shot_id),
+    enabled: false,
   });
 
   const estimate = estimateQ.data;
@@ -105,13 +108,19 @@ function TakeCard({
     ? toAIError(approveMut.error).detail
     : rejectMut.isError
       ? toAIError(rejectMut.error).detail
-      : regenMut.isError && !confirmOpen
-        ? toAIError(regenMut.error).detail
-        : null;
+      : estimateQ.isError && !confirmOpen
+        ? toAIError(estimateQ.error).detail
+        : regenMut.isError && !confirmOpen
+          ? toAIError(regenMut.error).detail
+          : null;
 
-  const onRegenerateClick = () => {
+  const onRegenerateClick = async () => {
     regenMut.reset();
-    if (paid) {
+    setCheckingEstimate(true);
+    const result = await estimateQ.refetch();
+    setCheckingEstimate(false);
+    if (!result.data || result.error) return;
+    if (result.data.requires_confirmation) {
       setConfirmOpen(true);
       return;
     }
@@ -140,6 +149,17 @@ function TakeCard({
   return (
     <div
       onClick={onSelect}
+      onKeyDown={(event) => {
+        if (event.target !== event.currentTarget) return;
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onSelect();
+        }
+      }}
+      role="button"
+      tabIndex={0}
+      aria-pressed={isSelected}
+      aria-label={`Select take ${take.id}`}
       className={`cursor-pointer overflow-hidden rounded-lg border bg-zinc-900/70 transition-colors ${
         isSelected
           ? "border-indigo-500 ring-1 ring-indigo-500/30"
@@ -237,15 +257,15 @@ function TakeCard({
               e.stopPropagation();
               onRegenerateClick();
             }}
-            disabled={regenMut.isPending || confirmOpen}
+            disabled={regenMut.isPending || confirmOpen || checkingEstimate}
             className="flex h-8 items-center justify-center gap-1 rounded-md border border-zinc-700 px-2.5 text-xs font-medium text-zinc-400 hover:bg-zinc-800 disabled:opacity-50"
             title={
-              paid
+              estimate?.requires_confirmation
                 ? "Regenerate on a metered provider -- asks for confirmation"
                 : "Regenerate"
             }
           >
-            {regenMut.isPending ? (
+            {regenMut.isPending || checkingEstimate ? (
               <Loader2 size={12} className="animate-spin" />
             ) : (
               <RefreshCw size={12} />
@@ -280,9 +300,9 @@ function TakeCard({
           notes={dialogNotes}
           confirmLabel="Regenerate"
           acknowledgement={`I understand this starts one paid generation on ${providerLabel(
-            take.media_provider_id,
+            shotPlan?.provider_id ?? take.media_provider_id,
           )}, billed to the account configured on this machine.`}
-          busy={regenMut.isPending || estimateQ.isLoading}
+          busy={regenMut.isPending || estimateQ.isFetching}
           confirmDisabled={estimateQ.isError}
           error={
             regenMut.isError
@@ -307,12 +327,20 @@ export default function ReviewPage() {
   const { currentProjectId, selectedTakeId } = useAppState();
   const dispatch = useAppDispatch();
   const [filter, setFilter] = useState<FilterMode>("all");
+  const [searchParams] = useSearchParams();
+  const runId = searchParams.get("run");
 
   const takesQ = useQuery({
-    queryKey: ["takes", currentProjectId],
-    queryFn: () => api.review.listTakes(currentProjectId!),
+    queryKey: ["takes", currentProjectId, runId],
+    queryFn: () => api.review.listTakes(currentProjectId!, runId),
     enabled: !!currentProjectId,
     refetchInterval: 3000,
+  });
+
+  const runQ = useQuery({
+    queryKey: ["generation-run", runId],
+    queryFn: () => api.generation.getRun(runId!),
+    enabled: !!runId,
   });
 
   // Only used to turn a provider id into the label the catalogue publishes.
@@ -366,6 +394,57 @@ export default function ReviewPage() {
         </div>
       </div>
 
+      {runId && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-indigo-800/60 bg-indigo-950/30 px-4 py-3">
+          <div>
+            <p className="text-sm font-semibold text-indigo-200">
+              Reviewing {runQ.data?.label ?? runId}
+            </p>
+            <p className="mt-0.5 text-xs text-indigo-300/70">
+              Only takes produced by this generation run are shown.
+            </p>
+          </div>
+          <Link
+            to="/review"
+            className="rounded-md border border-indigo-700 px-3 py-1.5 text-xs font-medium text-indigo-200 hover:bg-indigo-900/50"
+          >
+            Show all takes
+          </Link>
+        </div>
+      )}
+
+      {/* Hand-off to Timeline: once anything is approved, that is the next
+          stage, and "everything reviewed" should not read like a dead end. */}
+      {(() => {
+        const approvedCount =
+          takesQ.data?.filter((t) => t.review_status === "Approved").length ?? 0;
+        const pendingCount =
+          takesQ.data?.filter((t) => t.review_status === "Pending").length ?? 0;
+        if (approvedCount === 0) return null;
+        const done = pendingCount === 0;
+        // Under a run filter, "done" only means this run has nothing left
+        // pending - the rest of the project may still have takes to review,
+        // so the message must not claim more than this scoped list showed.
+        const doneMessage = runId
+          ? "This run is fully reviewed. Build the timeline to assemble your approved takes."
+          : "Every take has been reviewed. Build the timeline to assemble your approved takes.";
+        return (
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-emerald-800/50 bg-emerald-950/20 px-4 py-3">
+            <p className="text-sm text-emerald-200">
+              {done
+                ? doneMessage
+                : `${approvedCount} approved, ${pendingCount} still ${pendingCount === 1 ? "needs" : "need"} review.`}
+            </p>
+            <Link
+              to="/timeline"
+              className="rounded-md bg-emerald-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-600"
+            >
+              {done ? "Build the timeline" : "Go to Timeline"}
+            </Link>
+          </div>
+        );
+      })()}
+
       {/* Filters + stats */}
       <div className="flex flex-wrap items-center gap-3">
         <Filter size={14} className="text-zinc-500" />
@@ -380,6 +459,7 @@ export default function ReviewPage() {
           <button
             key={key}
             onClick={() => setFilter(key)}
+            aria-pressed={filter === key}
             className={`h-8 rounded-full px-3.5 text-xs font-medium transition-colors ${
               filter === key
                 ? "bg-indigo-600 text-white"
@@ -420,7 +500,9 @@ export default function ReviewPage() {
           <Image size={28} className="mb-2 text-zinc-600" />
           <p className="text-sm text-zinc-500">
             {filter === "all"
-              ? "No takes generated yet. Go to Generate to create them."
+              ? runId
+                ? `No takes are available for ${runQ.data?.label ?? runId}.`
+                : "No takes generated yet. Go to Generate to create them."
               : `No ${filter.toLowerCase()} takes found.`}
           </p>
         </div>

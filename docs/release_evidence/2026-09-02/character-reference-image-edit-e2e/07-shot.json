@@ -1,0 +1,36 @@
+{
+  "id": "8502453b-1a67-4416-a494-1534e3ff0f66",
+  "scene_id": "2bbe070b-dba8-484a-82a6-7e22b484c81c",
+  "order": 1,
+  "shot_type": "medium wide",
+  "camera_angle": "eye level",
+  "camera_movement": "static",
+  "lens_framing": "",
+  "subject": "exactly one blue paper boat",
+  "action": "the same boat floats gently toward warm light",
+  "environment": "quiet pond, soft reeds, late afternoon",
+  "dialogue": "",
+  "planned_duration_sec": 3.0,
+  "generation_mode": "image",
+  "image_prompt": "Edit the supplied reference frame. Keep the existing child, yellow raincoat, pond, composition, and exactly one paper boat. Make that single boat medium blue while preserving its folds and scale. Remove any additional boats. Natural warm late-afternoon light.",
+  "video_prompt": "",
+  "negative_prompt": "duplicate boat, two boats, white boat, dark navy boat, changed child, extra limbs, text, watermark",
+  "reference_asset_ids": [
+    "d2ecd06d-6c69-460d-8c0c-d4eaff1a97ff"
+  ],
+  "workflow_preset_id": "75a73b44-5c6f-4661-87f6-26e66a639efd",
+  "image_provider_id": "comfyui",
+  "image_model": "workflow",
+  "seed_policy": "fixed",
+  "status": "Ready",
+  "prompt_revision": 1,
+  "prompt_sha256": "dc71b236a02a46f83e3c561a41f2755baf8ed64816bb005022d3b340b9b0dc64",
+  "content_sha256": "ddccd086a693b429bebe52f14b6099ce8d63358868e400b99d45b700c737c8fb",
+  "reference_sha256s": [
+    "841ebf7cd1174f86c42f58839a79c1e140615125447d07eb97f228f66689d97e"
+  ],
+  "generated_revision": 0,
+  "is_stale": false,
+  "created_at": "2026-09-02T13:41:05.936665",
+  "updated_at": "2026-09-02T13:41:05.947665"
+}

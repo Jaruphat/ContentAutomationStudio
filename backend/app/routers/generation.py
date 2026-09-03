@@ -7,7 +7,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -25,14 +25,18 @@ from app.schemas import (
     GenerateRequest,
     GenerationEstimate,
     GenerationJobResponse,
+    GenerationRunSummary,
     PreflightResult,
     QueueStatus,
 )
 from app.services import (
     continuity,
     generation_planning,
+    generation_runs,
     job_payload,
     media_providers,
+    reference_bible,
+    revisions,
     workflow_registry,
 )
 from app.services.workflow_format import WorkflowFormat
@@ -70,12 +74,8 @@ def _get_project_shots(db: Session, project_id: str) -> list[Shot]:
 
 
 def _parse_resolution(value: str) -> tuple[int, int]:
-    """Parse a 'WIDTHxHEIGHT' project resolution, falling back to 1920x1080."""
-    try:
-        width_str, height_str = str(value).lower().split("x", 1)
-        return int(width_str), int(height_str)
-    except (ValueError, AttributeError):
-        return 1920, 1080
+    """Compatibility wrapper around the canonical project parser."""
+    return generation_planning.parse_resolution(value)
 
 
 # ---------------------------------------------------------------------------
@@ -98,6 +98,7 @@ async def preflight_validation(project_id: str, db: Session = Depends(get_db)):
     Plus: whether the configured ComfyUI provider is reachable.
     """
     project = _get_project_or_404(db, project_id)
+    revisions.refresh_project(db, project_id)
     shots = _get_project_shots(db, project_id)
 
     issues: list[dict[str, Any]] = []
@@ -252,9 +253,25 @@ async def preflight_validation(project_id: str, db: Session = Depends(get_db)):
     db.commit()
 
     # -- Per-shot checks -------------------------------------------------
+    project_format_issue = generation_planning.aspect_resolution_issue(
+        project.aspect_ratio, project.target_resolution
+    )
     for shot in shots:
         shot_issues: list[str] = []
+        if project_format_issue:
+            shot_issues.append(project_format_issue)
         plan = plans[shot.id]
+
+        _resolved_references, reference_problems = reference_bible.resolve_images(
+            db, project_id, list(shot.reference_asset_ids or [])
+        )
+        shot_issues.extend(problem.message for problem in reference_problems)
+        if shot.generation_mode == "image-to-video" and not shot.reference_asset_ids:
+            shot_issues.append("Image-to-video requires a reference image")
+        if shot.is_stale:
+            shot_issues.append(
+                "Shot is stale: its generated take predates the current content revision"
+            )
 
         finding = continuity_by_shot.get(shot.id)
         if finding:
@@ -284,6 +301,15 @@ async def preflight_validation(project_id: str, db: Session = Depends(get_db)):
                 shot_issues.append(
                     f"Assigned workflow '{workflow_id}' failed mapping validation"
                 )
+            elif shot.reference_asset_ids:
+                workflow = db.query(Workflow).filter(Workflow.id == workflow_id).first()
+                if workflow and job_payload.REFERENCE_IMAGE not in (
+                    workflow.parameter_mapping or {}
+                ):
+                    shot_issues.append(
+                        "Reference-conditioned generation requires the "
+                        "referenceImage workflow mapping"
+                    )
 
         if shot.status not in ("Ready", "Draft", "Failed"):
             shot_issues.append(
@@ -343,6 +369,12 @@ def start_generation(
     those shots are queued. Otherwise all eligible shots are queued.
     """
     project = _get_project_or_404(db, project_id)
+    project_format_issue = generation_planning.aspect_resolution_issue(
+        project.aspect_ratio, project.target_resolution
+    )
+    if project_format_issue:
+        raise HTTPException(status_code=409, detail=project_format_issue)
+    revisions.refresh_project(db, project_id)
     all_shots = _get_project_shots(db, project_id)
 
     # Load Story Bible
@@ -382,6 +414,24 @@ def start_generation(
         if not (target_ids and shot.id not in target_ids)
         and shot.status in eligible_statuses
     ]
+
+    # A shot that is already Queued or Running must not be queued again: that
+    # would produce two takes for one request, and two charges for it on a
+    # metered provider. Shot status alone is not enough, because it can drift
+    # (a manual edit, a status reset) while the job is still in flight.
+    busy = generation_runs.shots_with_active_jobs(db, [shot.id for shot in selected])
+    if busy:
+        remaining = [shot for shot in selected if shot.id not in busy]
+        if not remaining:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"{len(busy)} selected shot(s) already have a queued or "
+                    f"running generation job. Wait for the current run to "
+                    f"finish, or cancel those jobs first."
+                ),
+            )
+        selected = remaining
 
     # Nothing is queued until every metered shot in the selection has been
     # authorised. Confirming is one explicit flag on the request, not a
@@ -424,10 +474,56 @@ def start_generation(
 
     created_jobs: list[GenerationJob] = []
 
+    if not selected:
+        # Nothing was eligible. A run that generated nothing is not a run, and
+        # recording one would clutter the history with empty batches.
+        return created_jobs
+
+    # One press of Generate is one run, created before the first job so every
+    # job it produces carries the same batch identity. It is flushed rather
+    # than committed with the jobs below, so a shot that fails validation
+    # cannot leave an empty run behind in the history.
+    run = generation_runs.create_run(
+        db,
+        project_id,
+        kind=generation_runs.KIND_BATCH,
+        shot_ids=[shot.id for shot in selected],
+    )
+
     for shot in selected:
         plan = plans[shot.id]
         workflow_id = plan.workflow_id
         workflow_version = plan.workflow_version
+        resolved_references, reference_problems = reference_bible.resolve_images(
+            db, project_id, list(shot.reference_asset_ids or [])
+        )
+        if reference_problems:
+            raise HTTPException(
+                status_code=409,
+                detail=" ".join(problem.message for problem in reference_problems),
+            )
+        if shot.generation_mode == "image-to-video" and not resolved_references:
+            raise HTTPException(
+                status_code=409,
+                detail="Image-to-video requires a reference image.",
+            )
+        if resolved_references and plan.provider_id == media_providers.COMFYUI:
+            workflow = db.query(Workflow).filter(Workflow.id == workflow_id).first()
+            if not workflow or job_payload.REFERENCE_IMAGE not in (
+                workflow.parameter_mapping or {}
+            ):
+                raise HTTPException(
+                    status_code=409,
+                    detail=(
+                        "Reference-conditioned generation requires the "
+                        "referenceImage workflow mapping."
+                    ),
+                )
+            if len(resolved_references) != 1:
+                raise HTTPException(
+                    status_code=409,
+                    detail="The selected workflow accepts exactly one reference image.",
+                )
 
         # Compile prompt
         scene = db.query(Scene).filter(Scene.id == shot.scene_id).first()
@@ -477,6 +573,9 @@ def start_generation(
             job_payload.SEED: seed,
             job_payload.WIDTH: width,
             job_payload.HEIGHT: height,
+            job_payload.ASPECT_RATIO: generation_planning.comfyui_aspect_ratio(
+                project.aspect_ratio
+            ),
             job_payload.OUTPUT_PREFIX: f"{project_id[:8]}_{shot.id[:8]}",
         }
         if shot.generation_mode in ("video", "image-to-video"):
@@ -495,6 +594,7 @@ def start_generation(
         job = GenerationJob(
             id=str(uuid.uuid4()),
             shot_id=shot.id,
+            run_id=run.id,
             workflow_id=workflow_id,
             workflow_version=workflow_version,
             parameter_map=parameter_map,
@@ -504,6 +604,25 @@ def start_generation(
             usage={},
             estimated_cost_usd=plan.estimated_cost_usd,
             provenance={},
+            prompt_revision=shot.prompt_revision,
+            prompt_sha256=shot.prompt_sha256,
+            content_sha256=shot.content_sha256,
+            reference_image_ids=[image.id for image in resolved_references],
+            reference_sha256s=[image.sha256 for image in resolved_references],
+            reference_provenance={
+                "images": [
+                    {
+                        "image_id": image.id,
+                        "sheet_id": image.sheet_id,
+                        "file_path": image.file_path,
+                        "sha256": image.sha256,
+                        "mime_type": image.mime_type,
+                        "width": image.width,
+                        "height": image.height,
+                    }
+                    for image in resolved_references
+                ]
+            },
             seed=seed,
             status="Queued",
             attempts=0,
@@ -560,18 +679,90 @@ def estimate_generation(
     "/api/projects/{project_id}/jobs",
     response_model=list[GenerationJobResponse],
 )
-def list_jobs(project_id: str, db: Session = Depends(get_db)):
+def list_jobs(
+    project_id: str,
+    run_id: str | None = Query(default=None),
+    status: str | None = Query(default=None),
+    db: Session = Depends(get_db),
+):
+    """Every job of a project, newest first.
+
+    ``run_id`` and ``status`` narrow the list without changing its shape, so a
+    client that knows nothing about runs keeps the response it always had.
+    """
     _get_project_or_404(db, project_id)
     shots = _get_project_shots(db, project_id)
     shot_ids = [s.id for s in shots]
     if not shot_ids:
         return []
-    return (
-        db.query(GenerationJob)
-        .filter(GenerationJob.shot_id.in_(shot_ids))
-        .order_by(GenerationJob.created_at.desc())
-        .all()
-    )
+    query = db.query(GenerationJob).filter(GenerationJob.shot_id.in_(shot_ids))
+    if run_id:
+        query = query.filter(GenerationJob.run_id == run_id)
+    if status:
+        query = query.filter(GenerationJob.status == status)
+    return query.order_by(GenerationJob.created_at.desc()).all()
+
+
+# ---------------------------------------------------------------------------
+# Generation runs
+# ---------------------------------------------------------------------------
+
+@router.get(
+    "/api/projects/{project_id}/runs",
+    response_model=list[GenerationRunSummary],
+)
+def list_generation_runs(
+    project_id: str,
+    status: str | None = Query(
+        default=None,
+        description=(
+            "active | terminal | queued | running | completed | failed | cancelled"
+        ),
+    ),
+    limit: int = Query(default=50, ge=1),
+    db: Session = Depends(get_db),
+):
+    """Run history, newest first, with run-scoped counts on each entry."""
+    _get_project_or_404(db, project_id)
+    summaries = [
+        generation_runs.summarise_run(db, run)
+        for run in generation_runs.list_runs(db, project_id)
+    ]
+    if status:
+        summaries = [
+            summary
+            for summary in summaries
+            if generation_runs.matches_status_filter(summary, status)
+        ]
+    return summaries[:limit]
+
+
+@router.get(
+    "/api/projects/{project_id}/runs/current",
+    response_model=GenerationRunSummary | None,
+)
+def get_current_generation_run(project_id: str, db: Session = Depends(get_db)):
+    """The run the Generate page is about, or null before the first one."""
+    _get_project_or_404(db, project_id)
+    run = generation_runs.current_run(db, project_id)
+    if run is None:
+        return None
+    return generation_runs.summarise_run(db, run)
+
+
+@router.get("/api/runs/{run_id}", response_model=GenerationRunSummary)
+def get_generation_run(
+    run_id: str,
+    status: str | None = Query(
+        default=None, description="Include only jobs in this job status."
+    ),
+    db: Session = Depends(get_db),
+):
+    """One run. ``status`` filters the job list, never the counts."""
+    run = generation_runs.get_run(db, run_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="Generation run not found")
+    return generation_runs.summarise_run(db, run, job_status=status)
 
 
 @router.get("/api/jobs/{job_id}", response_model=GenerationJobResponse)
@@ -612,6 +803,17 @@ def retry_job(job_id: str, db: Session = Depends(get_db)):
             detail=f"Can only retry Failed or Cancelled jobs, current: '{job.status}'",
         )
 
+    if generation_runs.shots_with_active_jobs(
+        db, [job.shot_id], exclude_job_id=job.id
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Cannot retry this job while another queued or running job "
+                "exists for the same shot. Wait for it to finish, or cancel it first."
+            ),
+        )
+
     job.status = "Queued"
     job.error_code = None
     job.error_message = None
@@ -634,15 +836,26 @@ def retry_job(job_id: str, db: Session = Depends(get_db)):
 # Queue control
 # ---------------------------------------------------------------------------
 
+@router.get("/api/projects/{project_id}/queue/status", response_model=QueueStatus)
+def get_queue_status(project_id: str, db: Session = Depends(get_db)):
+    """Return the backend's authoritative project queue state without changing it."""
+    _get_project_or_404(db, project_id)
+    return queue_manager.get_queue_status(project_id)
+
+
 @router.post("/api/projects/{project_id}/queue/pause", response_model=QueueStatus)
 def pause_queue(project_id: str, db: Session = Depends(get_db)):
-    _get_project_or_404(db, project_id)
+    project = _get_project_or_404(db, project_id)
+    project.queue_paused = True
+    db.commit()
     queue_manager.pause(project_id)
     return queue_manager.get_queue_status(project_id)
 
 
 @router.post("/api/projects/{project_id}/queue/resume", response_model=QueueStatus)
 def resume_queue(project_id: str, db: Session = Depends(get_db)):
-    _get_project_or_404(db, project_id)
+    project = _get_project_or_404(db, project_id)
+    project.queue_paused = False
+    db.commit()
     queue_manager.resume(project_id)
     return queue_manager.get_queue_status(project_id)

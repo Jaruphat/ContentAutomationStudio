@@ -12,6 +12,7 @@ Manages the lifecycle of generation jobs:
 
 import asyncio
 import logging
+import os
 import uuid
 from datetime import datetime, timezone
 from typing import Any
@@ -19,8 +20,8 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from app.database import SessionLocal
-from app.models import GenerationJob, Project, Scene, Shot, Take
-from app.services import error_classifier, media_providers
+from app.models import GenerationJob, Project, Scene, Shot, Take, Workflow
+from app.services import error_classifier, job_payload, media_providers, revisions
 from app.services.comfyui_adapter import ComfyUIProvider, JobStatusEnum, MediaProvider
 from app.services.job_payload import WorkflowValidationError, build_payload
 from app.services.mock_provider import MockComfyUIProvider
@@ -102,6 +103,12 @@ class QueueManager:
         """
         db: Session = SessionLocal()
         try:
+            self._paused_projects = {
+                project.id
+                for project in db.query(Project)
+                .filter(Project.queue_paused.is_(True))
+                .all()
+            }
             running_jobs = (
                 db.query(GenerationJob)
                 .filter(GenerationJob.status == "Running")
@@ -194,6 +201,13 @@ class QueueManager:
             return
 
         try:
+            if (
+                provider_id == media_providers.COMFYUI
+                and provider.requires_workflow_payload
+                and job.reference_image_ids
+            ):
+                await self._prepare_reference_inputs(db, job, provider)
+
             # Resolve the registered workflow JSON and inject this job's
             # logical parameter values through the workflow's node mapping.
             # No H3 node ID ever reaches this module.
@@ -253,6 +267,7 @@ class QueueManager:
                             id=str(uuid.uuid4()),
                             shot_id=job.shot_id,
                             job_id=job.id,
+                            run_id=job.run_id,
                             file_path=o.file_path,
                             thumbnail_path="",
                             duration_sec=o.duration_sec,
@@ -266,7 +281,16 @@ class QueueManager:
                             request_params=dict(job.request_params or {}),
                             usage=dict(job.usage or {}),
                             estimated_cost_usd=job.estimated_cost_usd,
-                            provenance=dict(provenance),
+                            provenance={
+                                **dict(provenance),
+                                "references": dict(job.reference_provenance or {}),
+                            },
+                            prompt_revision=job.prompt_revision,
+                            prompt_sha256=job.prompt_sha256,
+                            content_sha256=job.content_sha256,
+                            reference_image_ids=list(job.reference_image_ids or []),
+                            reference_sha256s=list(job.reference_sha256s or []),
+                            lineage={"job_id": job.id},
                             review_status="Pending",
                         )
                         db.add(take)
@@ -274,6 +298,7 @@ class QueueManager:
                     # Update shot status
                     if shot:
                         shot.status = "NeedsReview"
+                        revisions.mark_generated(db, shot)
                     db.commit()
                     logger.info(f"Job {job.id} completed with {len(outputs)} output(s)")
                     return
@@ -292,6 +317,51 @@ class QueueManager:
         except Exception as exc:
             logger.exception("Error executing job %s", job.id)
             self._handle_failure(db, job, shot, message=str(exc), exception=exc)
+
+    async def _prepare_reference_inputs(
+        self, db: Session, job: GenerationJob, provider: Any
+    ) -> None:
+        """Upload a job's reference image and bind its returned ComfyUI name."""
+        images = list((job.reference_provenance or {}).get("images") or [])
+        if not images:
+            raise WorkflowValidationError(
+                "Reference image provenance is missing from the generation job"
+            )
+        if len(images) != 1:
+            raise WorkflowValidationError(
+                "This workflow mapping accepts exactly one reference image"
+            )
+        workflow = db.query(Workflow).filter(Workflow.id == job.workflow_id).first()
+        mapping = (workflow.parameter_mapping or {}).get(
+            job_payload.REFERENCE_IMAGE
+        ) if workflow else None
+        if not mapping:
+            raise WorkflowValidationError(
+                "Workflow is missing the referenceImage mapping"
+            )
+        image = dict(images[0])
+        file_path = str(image.get("file_path") or "")
+        if not file_path or not os.path.isfile(file_path):
+            raise WorkflowValidationError(
+                f"Reference image file is missing: {file_path or image.get('image_id')}"
+            )
+        extension = os.path.splitext(file_path)[1].lower()
+        upload_name = f"cas/{job.id}/{image.get('image_id')}{extension}"
+        uploaded = await provider.upload_reference_image(
+            file_path,
+            upload_name=upload_name,
+            mime_type=str(image.get("mime_type") or "application/octet-stream"),
+        )
+        uploaded = {**uploaded, "mapping": dict(mapping)}
+        image["comfyui"] = uploaded
+        provenance = dict(job.reference_provenance or {})
+        provenance["images"] = [image]
+        job.reference_provenance = provenance
+        job.parameter_map = {
+            **dict(job.parameter_map or {}),
+            job_payload.REFERENCE_IMAGE: uploaded["workflow_value"],
+        }
+        db.commit()
 
     def _handle_failure(
         self,
@@ -490,6 +560,7 @@ class QueueManager:
                         "running": 0,
                         "completed": 0,
                         "failed": 0,
+                        "cancelled": 0,
                     }
 
             all_jobs = query.all()
@@ -504,6 +575,7 @@ class QueueManager:
                 "running": counts["Running"],
                 "completed": counts["Completed"],
                 "failed": counts["Failed"],
+                "cancelled": counts["Cancelled"],
             }
         finally:
             db.close()

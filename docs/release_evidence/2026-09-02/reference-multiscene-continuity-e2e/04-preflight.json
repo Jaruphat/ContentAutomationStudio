@@ -1,0 +1,19 @@
+{
+  "ready": true,
+  "total_shots": 3,
+  "ready_shots": 3,
+  "issues": [],
+  "workflow_checks": [
+    {
+      "workflow_id": "75a73b44-5c6f-4661-87f6-26e66a639efd",
+      "name": "Boogu Image Edit INT8 (Reference Conditioned)",
+      "valid": true,
+      "source_format": "api",
+      "errors": [],
+      "warnings": []
+    }
+  ],
+  "warnings": [],
+  "comfyui_online": true,
+  "comfyui_mock": false
+}

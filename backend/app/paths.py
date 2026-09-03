@@ -42,6 +42,25 @@ def db_path() -> str:
     return os.path.join(data_dir(), "cas.db")
 
 
+def is_within_data_dir(file_path: str) -> bool:
+    """Whether a stored path really lives inside the runtime data directory.
+
+    A database row could in principle hold any absolute path - a re-imported
+    project, a hand-edited database - so this is what stands between a stored
+    string and an arbitrary file read. The comparison is done on the resolved
+    real paths so a symlink cannot step outside, and ``commonpath`` raising on
+    differing Windows drive letters is itself proof the target is outside.
+    """
+    if not file_path:
+        return False
+    base = os.path.realpath(data_dir())
+    target = os.path.realpath(file_path)
+    try:
+        return os.path.commonpath([base, target]) == base
+    except ValueError:
+        return False
+
+
 def workflows_dir() -> str:
     """Directory holding imported ComfyUI workflow source JSON."""
     path = os.path.join(data_dir(), "workflows")
@@ -61,6 +80,32 @@ def generated_dir() -> str:
     path = os.path.join(data_dir(), "generated")
     os.makedirs(path, exist_ok=True)
     return path
+
+
+def references_dir(project_id: str) -> str:
+    """Directory holding a project's Visual Reference Bible images.
+
+    Per project rather than shared: an image is owned by exactly one project,
+    and keeping the trees separate means a path check can also serve as an
+    ownership check.
+
+    Project ids are server-generated UUIDs, so a separator here would mean a
+    caller passed something else entirely; that is refused rather than
+    sanitised, because quietly rewriting it would hide the bug.
+    """
+    path = references_root(project_id)
+    os.makedirs(path, exist_ok=True)
+    return path
+
+
+def references_root(project_id: str) -> str:
+    """The reference directory's path without creating it.
+
+    Used by deletion, which wants to remove the tree rather than make one.
+    """
+    if not project_id or {"/", "\\"} & set(project_id) or project_id in (".", ".."):
+        raise ValueError(f"Refusing to build a reference directory for {project_id!r}")
+    return os.path.join(data_dir(), "references", project_id)
 
 
 def exports_dir(project_id: str | None = None) -> str:

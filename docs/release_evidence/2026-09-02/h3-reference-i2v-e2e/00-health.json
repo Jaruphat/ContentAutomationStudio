@@ -1,0 +1,48 @@
+{
+  "status": "ok",
+  "service": "Content Automation Studio",
+  "version": "0.1.0",
+  "ai": {
+    "default_provider_id": "openai",
+    "mock": false,
+    "providers": [
+      {
+        "id": "mock",
+        "label": "Deterministic mock (offline)",
+        "configured": true,
+        "mock": true
+      },
+      {
+        "id": "openai",
+        "label": "OpenAI",
+        "configured": true,
+        "mock": false
+      }
+    ]
+  },
+  "comfyui": {
+    "online": true,
+    "mock": false,
+    "version": "0.34.0",
+    "gpu_info": "cuda:0 NVIDIA GeForce RTX 5080 : cudaMallocAsync (7.9/15.9 GB VRAM free)",
+    "queue_remaining": 0,
+    "error": null
+  },
+  "queue": {
+    "paused": false,
+    "total_jobs": 10,
+    "queued": 0,
+    "running": 0,
+    "completed": 9,
+    "failed": 1
+  },
+  "workflows": {
+    "total": 9,
+    "by_format": {
+      "ui": 3,
+      "api": 6
+    },
+    "submittable": 5
+  },
+  "blockers": []
+}

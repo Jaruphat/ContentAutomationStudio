@@ -1,0 +1,38 @@
+[
+  {
+    "take_id": "19ccc0f0-41ad-433e-8cbc-09dcabc7f76d",
+    "job_id": "632308c1-0d0c-4c4a-8d92-97f0abce86e6",
+    "shot_id": "fef81802-ceb3-4982-8034-6d31de8cf5fe",
+    "review_status": "Approved",
+    "filename": "32c1fc90-9a42-426a-97cc-9f205a1897e1_5df52248_fef81802_00002_.png",
+    "sha256": "9d23ca02badfb7e6a1e36d33a625d09728f6f7763eea95a23348f1adb33a35d6",
+    "bytes": 525689
+  },
+  {
+    "take_id": "7bcdcf55-5efe-42c8-9dba-43d8aa456cc4",
+    "job_id": "fa0d526e-dbb2-48eb-9b07-8ede292c1b30",
+    "shot_id": "fef81802-ceb3-4982-8034-6d31de8cf5fe",
+    "review_status": "Rejected",
+    "filename": "9dd9a330-2ff8-4c91-93c3-2b1e76a08e54_5df52248_fef81802_00001_.png",
+    "sha256": "841ebf7cd1174f86c42f58839a79c1e140615125447d07eb97f228f66689d97e",
+    "bytes": 480719
+  },
+  {
+    "take_id": "aad3ebf0-db64-426c-9077-7777040fe938",
+    "job_id": "308b224a-513b-4774-93be-7ef227505a34",
+    "shot_id": "9b56cb9b-6218-4d9c-9d72-886828e20655",
+    "review_status": "Approved",
+    "filename": "87f6aff0-a2ef-46e9-8956-7418d9fa26a0_5df52248_9b56cb9b_00001_.mp4",
+    "sha256": "9000a9ae3bec795c3b45d62825d8e641610eefc2d3f317b7630a7de02437e59a",
+    "bytes": 533836
+  },
+  {
+    "take_id": "1a1bb03e-4e3b-49e3-bc47-2417ebd9522e",
+    "job_id": "39310ea1-4822-472c-aae5-37cc60ad3705",
+    "shot_id": "add1126f-1103-47bb-b89e-ac8a3cff7ae0",
+    "review_status": "Approved",
+    "filename": "e909fb3a-00b8-490b-aaa0-a9bab4f8873a_5df52248_add1126f_00001_.png",
+    "sha256": "969ff8cda54b4a7d36f9ac15b4a1ec2efca00fcc206e58e009cd9b912b2756cd",
+    "bytes": 552235
+  }
+]

@@ -1,0 +1,178 @@
+{
+  "workflow_id": "711d55b8-fc50-41b3-92eb-d706653fde4f",
+  "name": "H3 Video - I2V (API)",
+  "format": "api",
+  "format_confidence": 1.0,
+  "format_reasons": [
+    "All 26 top-level entries carry 'class_type', which is the API prompt format.",
+    "This shape can be submitted to /prompt."
+  ],
+  "submittable": true,
+  "blocking_reason": "",
+  "node_count": 26,
+  "subgraphs": [],
+  "required_node_classes": [
+    "BasicGuider",
+    "BasicScheduler",
+    "CLIPLoader",
+    "ComfyMathExpression",
+    "ComfySwitchNode",
+    "CreateVideo",
+    "GetImageSize",
+    "ImageScaleToTotalPixels",
+    "KSamplerSelect",
+    "LoadImage",
+    "LoraLoaderModelOnly",
+    "MiniMaxH3ImageToVideo",
+    "PrimitiveBoolean",
+    "PrimitiveFloat",
+    "PrimitiveInt",
+    "RandomNoise",
+    "ResolutionSelector",
+    "SamplerCustomAdvanced",
+    "SaveVideo",
+    "UNETLoader",
+    "VAEDecode",
+    "VAEDecodeAudio",
+    "VAELoader"
+  ],
+  "frontend_only_node_classes": [],
+  "required_models": [
+    "minimax_h3_audio_vae_fp32.safetensors",
+    "minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors",
+    "minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+    "minimax_h3_video_vae_fp16.safetensors",
+    "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors"
+  ],
+  "mapping_candidates": [
+    {
+      "logical_field": "outputPrefix",
+      "node_class": "SaveVideo",
+      "input_name": "filename_prefix",
+      "node_id": "92",
+      "match_kind": "exact-name",
+      "confidence": 1.0,
+      "note": "SaveVideo node 92, input 'filename_prefix'.",
+      "exposed": true,
+      "auto_applicable": true
+    },
+    {
+      "logical_field": "positivePrompt",
+      "node_class": "MiniMaxH3ImageToVideo",
+      "input_name": "prompt",
+      "node_id": "105:104",
+      "match_kind": "exact-name",
+      "confidence": 1.0,
+      "note": "MiniMaxH3ImageToVideo node 105:104, input 'prompt'.",
+      "exposed": true,
+      "auto_applicable": true
+    },
+    {
+      "logical_field": "seed",
+      "node_class": "RandomNoise",
+      "input_name": "noise_seed",
+      "node_id": "105:15",
+      "match_kind": "exact-name",
+      "confidence": 0.95,
+      "note": "RandomNoise node 105:15, input 'noise_seed'.",
+      "exposed": true,
+      "auto_applicable": true
+    },
+    {
+      "logical_field": "frames",
+      "node_class": "ComfyMathExpression",
+      "input_name": "expression",
+      "node_id": "105:107",
+      "match_kind": "upstream-widget",
+      "confidence": 0.35,
+      "note": "MiniMaxH3ImageToVideo node 105:104 has 'length' wired from ComfyMathExpression node 105:107, so it cannot be set directly. Set 'expression' on that node instead, or detach the link in ComfyUI and re-export.",
+      "exposed": false,
+      "auto_applicable": false
+    },
+    {
+      "logical_field": "referenceImage",
+      "node_class": "LoadImage",
+      "input_name": "image",
+      "node_id": "114",
+      "match_kind": "upstream-widget",
+      "confidence": 0.35,
+      "note": "MiniMaxH3ImageToVideo node 105:104 has 'first_frame' wired from LoadImage node 114, so it cannot be set directly. Set 'image' on that node instead, or detach the link in ComfyUI and re-export.",
+      "exposed": false,
+      "auto_applicable": true
+    }
+  ],
+  "alternate_candidates": [],
+  "unmapped_logical_fields": [
+    "negativePrompt",
+    "width",
+    "height",
+    "aspectRatio"
+  ],
+  "suggested_parameter_mapping": {
+    "outputPrefix": {
+      "nodeId": "92",
+      "field": "filename_prefix"
+    },
+    "positivePrompt": {
+      "nodeId": "105:104",
+      "field": "prompt"
+    },
+    "seed": {
+      "nodeId": "105:15",
+      "field": "noise_seed"
+    },
+    "referenceImage": {
+      "nodeId": "114",
+      "field": "image"
+    }
+  },
+  "dependencies": {
+    "checked": true,
+    "reason": "",
+    "satisfied": true,
+    "summary": "All 23 node class(es) and 5 model file(s) are available.",
+    "node_classes_present": [
+      "BasicGuider",
+      "BasicScheduler",
+      "CLIPLoader",
+      "ComfyMathExpression",
+      "ComfySwitchNode",
+      "CreateVideo",
+      "GetImageSize",
+      "ImageScaleToTotalPixels",
+      "KSamplerSelect",
+      "LoadImage",
+      "LoraLoaderModelOnly",
+      "MiniMaxH3ImageToVideo",
+      "PrimitiveBoolean",
+      "PrimitiveFloat",
+      "PrimitiveInt",
+      "RandomNoise",
+      "ResolutionSelector",
+      "SamplerCustomAdvanced",
+      "SaveVideo",
+      "UNETLoader",
+      "VAEDecode",
+      "VAEDecodeAudio",
+      "VAELoader"
+    ],
+    "node_classes_missing": [],
+    "node_classes_frontend_only": [],
+    "models_present": [
+      "minimax_h3_audio_vae_fp32.safetensors",
+      "minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors",
+      "minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+      "minimax_h3_video_vae_fp16.safetensors",
+      "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors"
+    ],
+    "models_missing": [],
+    "catalogue_size": 1800
+  },
+  "warnings": [
+    "Candidate(s) for frames, referenceImage target an input that is wired from another node, so the proposal drives the upstream node's widget instead. Confirm each one before generating.",
+    "Candidate(s) for frames would overwrite a value the graph computes, so they are excluded from the ready-to-apply mapping. Apply them by hand only if a constant is genuinely what you want there.",
+    "'referenceImage' would map to GetImageSize node 120 input 'image', but that input is wired from ImageScaleToTotalPixels node 119, which exposes no matching widget (has: megapixels, resolution_steps, upscale_method). Drive it from that node, or detach the link in ComfyUI and re-export.",
+    "'width' would map to MiniMaxH3ImageToVideo node 105:104 input 'width', but that input is wired from ResolutionSelector node 115, which exposes no matching widget (has: aspect_ratio, megapixels, multiple). Drive it from that node, or detach the link in ComfyUI and re-export.",
+    "'height' would map to MiniMaxH3ImageToVideo node 105:104 input 'height', but that input is wired from ResolutionSelector node 115, which exposes no matching widget (has: aspect_ratio, megapixels, multiple). Drive it from that node, or detach the link in ComfyUI and re-export."
+  ]
+}

@@ -8,7 +8,13 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models import Project
-from app.services import export_service
+from app.services import export_service, generation_planning, timeline_service
+from app.services.subtitle_service import (
+    build_subtitle_cues,
+    render_ass,
+    render_srt,
+    settings_for_project,
+)
 from app.services.ai.authoring_revisions import project_audit
 
 router = APIRouter(prefix="/api/projects/{project_id}/export", tags=["exports"])
@@ -19,6 +25,33 @@ def _get_project_or_404(db: Session, project_id: str) -> Project:
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     return project
+
+
+@router.get("/subtitles")
+def export_subtitles(
+    project_id: str,
+    format: str = Query("srt", pattern="^(srt|ass)$"),
+    db: Session = Depends(get_db),
+):
+    """Export dialogue cues from the current strict timeline as SRT or ASS."""
+    project = _get_project_or_404(db, project_id)
+    settings = settings_for_project(project)
+    try:
+        cues = build_subtitle_cues(db, project_id, settings.max_chars_per_line)
+    except timeline_service.StaleTimelineError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    if format == "srt":
+        content = render_srt(cues, settings.max_chars_per_line)
+        media_type = "application/x-subrip"
+    else:
+        width, height = generation_planning.parse_resolution(project.target_resolution)
+        content = render_ass(cues, settings, width, height)
+        media_type = "text/x-ssa"
+    return PlainTextResponse(
+        content=content,
+        media_type=media_type,
+        headers={"Content-Disposition": f'attachment; filename="subtitles_{project_id}.{format}"'},
+    )
 
 
 @router.get("/storyboard")
@@ -86,7 +119,10 @@ def export_timeline_manifest(project_id: str, db: Session = Depends(get_db)):
     Export the timeline manifest.
     """
     _get_project_or_404(db, project_id)
-    data = export_service.export_timeline_manifest(db, project_id)
+    try:
+        data = export_service.export_timeline_manifest(db, project_id)
+    except timeline_service.StaleTimelineError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     return JSONResponse(
         content=data,
         headers={"Content-Disposition": f'attachment; filename="timeline_{project_id}.json"'},

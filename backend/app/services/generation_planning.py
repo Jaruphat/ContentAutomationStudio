@@ -12,6 +12,7 @@ provider registry, which only checks that an environment variable is set.
 """
 
 import os
+from math import gcd
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -21,13 +22,70 @@ from app.models import Project, Shot, Workflow
 from app.services import media_providers
 
 
-def _parse_resolution(value: str) -> tuple[int, int]:
-    """Parse a 'WIDTHxHEIGHT' project resolution, falling back to 1920x1080."""
+def parse_resolution(value: str) -> tuple[int, int]:
+    """Parse positive H.264-safe dimensions, falling back to 1920x1080."""
     try:
         width_str, height_str = str(value).lower().split("x", 1)
-        return int(width_str), int(height_str)
+        width, height = int(width_str), int(height_str)
+        if width <= 0 or height <= 0:
+            raise ValueError
+        width, height = width - (width % 2), height - (height % 2)
+        if width <= 0 or height <= 0:
+            raise ValueError
+        return width, height
     except (ValueError, AttributeError):
         return 1920, 1080
+
+
+def comfyui_aspect_ratio(value: str) -> str:
+    """Map project ratios to labels accepted by ComfyUI ResolutionSelector."""
+    labels = {
+        "1:1": "1:1 (Square)",
+        "2:3": "2:3 (Portrait Photo)",
+        "3:2": "3:2 (Photo)",
+        "3:4": "3:4 (Portrait Standard)",
+        "4:3": "4:3 (Standard)",
+        "9:16": "9:16 (Portrait Widescreen)",
+        # ResolutionSelector has no 9:5 entry. Its 16:9 preset rounds the
+        # 0.4 MP result to the requested 864x480 integer dimensions.
+        "9:5": "16:9 (Widescreen)",
+        "16:9": "16:9 (Widescreen)",
+        "21:9": "21:9 (Ultrawide)",
+    }
+    return labels.get(value, "16:9 (Widescreen)")
+
+
+def aspect_resolution_issue(aspect_ratio: str, resolution: str) -> str | None:
+    """Return a blocking explanation when project framing contradicts pixels."""
+    try:
+        aspect_text = str(aspect_ratio).split(" ", 1)[0]
+        aspect_w, aspect_h = (int(part) for part in aspect_text.split(":", 1))
+        width, height = (int(part) for part in str(resolution).lower().split("x", 1))
+        aspect_divisor = gcd(aspect_w, aspect_h)
+        resolution_divisor = gcd(width, height)
+        expected = (aspect_w // aspect_divisor, aspect_h // aspect_divisor)
+        actual = (width // resolution_divisor, height // resolution_divisor)
+    except (TypeError, ValueError, ZeroDivisionError):
+        return (
+            f"Project aspect ratio '{aspect_ratio}' or target resolution "
+            f"'{resolution}' is invalid"
+        )
+    if expected == actual:
+        return None
+    actual_text = f"{actual[0]}:{actual[1]}"
+    return (
+        f"Project aspect ratio {aspect_ratio} does not match target resolution "
+        f"{resolution} ({actual_text})"
+    )
+
+
+def default_resolution(aspect_ratio: str) -> str:
+    """Return the project's normal full-HD canvas for a supported aspect."""
+    return {
+        "9:16": "1080x1920",
+        "1:1": "1080x1080",
+        "9:5": "864x480",
+    }.get(aspect_ratio, "1920x1080")
 
 
 def default_image_quality() -> str:
@@ -87,7 +145,7 @@ def plan_shot(db: Session, project: Project, shot: Shot) -> ShotPlan:
         blockers.append(str(exc))
 
     model = media_providers.resolve_model(provider_id, shot.image_model)
-    width, height = _parse_resolution(project.target_resolution)
+    width, height = parse_resolution(project.target_resolution)
 
     workflow_id: str | None = None
     workflow_version = ""

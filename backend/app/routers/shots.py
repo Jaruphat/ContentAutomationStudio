@@ -11,11 +11,33 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import Project, Scene, Shot
 from app.schemas import ShotCreate, ShotReorderRequest, ShotResponse, ShotUpdate
+from app.services import reference_bible, revisions
 
 router = APIRouter(
     prefix="/api/projects/{project_id}/scenes/{scene_id}/shots",
     tags=["shots"],
 )
+
+
+def _check_references(
+    db: Session, project_id: str, reference_asset_ids: list[str] | None
+) -> None:
+    """Refuse a shot that names a reference it cannot actually be generated from.
+
+    Catching this at the write boundary is what keeps the failure cheap: an
+    unknown or foreign reference id saved here would only surface at generation
+    time, after a batch had already been authorised.
+    """
+    if not reference_asset_ids:
+        return
+    _resolved, problems = reference_bible.resolve_images(
+        db, project_id, list(reference_asset_ids)
+    )
+    if problems:
+        raise HTTPException(
+            status_code=400,
+            detail=" ".join(problem.message for problem in problems),
+        )
 
 
 def _get_scene_or_404(
@@ -42,6 +64,7 @@ def create_shot(
     db: Session = Depends(get_db),
 ):
     _get_scene_or_404(db, project_id, scene_id)
+    _check_references(db, project_id, payload.reference_asset_ids)
 
     # Auto-assign order if not provided or zero
     if payload.order == 0:
@@ -63,6 +86,7 @@ def create_shot(
     )
     db.add(shot)
     db.commit()
+    revisions.refresh_project(db, project_id)
     db.refresh(shot)
     return shot
 
@@ -115,10 +139,15 @@ def update_shot(
     if not shot:
         raise HTTPException(status_code=404, detail="Shot not found")
 
-    for key, value in payload.model_dump(exclude_unset=True).items():
+    changes = payload.model_dump(exclude_unset=True)
+    if "reference_asset_ids" in changes:
+        _check_references(db, project_id, changes["reference_asset_ids"])
+
+    for key, value in changes.items():
         setattr(shot, key, value)
     shot.updated_at = datetime.now(timezone.utc)
     db.commit()
+    revisions.refresh_project(db, project_id)
     db.refresh(shot)
     return shot
 

@@ -1,0 +1,179 @@
+[
+  {
+    "id": "8871cb3c-1e09-40da-9be8-2ffa53eab83e",
+    "shot_id": "03c0e7e1-346b-436c-bb88-74508539a626",
+    "job_id": "9d1bcc74-bd0e-4ebd-b2be-682e565cf1bd",
+    "file_path": "C:\\Users\\jongp\\Desktop\\Thinkpad_and_PC_Sync\\ContentAutomationStudio\\backend\\data\\generated\\2bc16b95-833c-49a1-b690-3d70dfabc703_db99b7fe_03c0e7e1_00001.png",
+    "thumbnail_path": "",
+    "duration_sec": 0.0,
+    "width": 864,
+    "height": 480,
+    "frame_rate": 25.0,
+    "codec": "png",
+    "media_provider_id": "comfyui",
+    "media_model": "workflow",
+    "request_params": {
+      "width": 864,
+      "height": 480
+    },
+    "usage": {},
+    "estimated_cost_usd": null,
+    "provenance": {
+      "provider_id": "comfyui",
+      "model": "workflow",
+      "prompt_id": "2bc16b95-833c-49a1-b690-3d70dfabc703",
+      "workflow_id": "75a73b44-5c6f-4661-87f6-26e66a639efd",
+      "workflow_version": "1.0-reference.1",
+      "workflow_sha256": "05d08b4b3485b4d8d20a5b575a492686efbf74cf7688a0d28e438ca604751a54",
+      "workflow_snapshot_path": "C:\\Users\\jongp\\Desktop\\Thinkpad_and_PC_Sync\\ContentAutomationStudio\\backend\\data\\snapshots\\9d1bcc74-bd0e-4ebd-b2be-682e565cf1bd.json",
+      "seed": 42,
+      "generated_at": "2026-09-02T14:18:01.450703+00:00",
+      "references": {
+        "images": [
+          {
+            "image_id": "f9a8a931-b5a8-4788-86ff-3eca71003c37",
+            "sheet_id": "549c9d69-efff-4bae-88bd-15e913e80949",
+            "file_path": "C:\\Users\\jongp\\Desktop\\Thinkpad_and_PC_Sync\\ContentAutomationStudio\\backend\\data\\references\\db99b7fe-73a9-41ed-9922-018043fdbd12\\f9a8a931-b5a8-4788-86ff-3eca71003c37.png",
+            "sha256": "841ebf7cd1174f86c42f58839a79c1e140615125447d07eb97f228f66689d97e",
+            "mime_type": "image/png",
+            "width": 864,
+            "height": 480,
+            "comfyui": {
+              "name": "f9a8a931-b5a8-4788-86ff-3eca71003c37.png",
+              "subfolder": "cas/9d1bcc74-bd0e-4ebd-b2be-682e565cf1bd",
+              "type": "input",
+              "workflow_value": "cas/9d1bcc74-bd0e-4ebd-b2be-682e565cf1bd/f9a8a931-b5a8-4788-86ff-3eca71003c37.png",
+              "mapping": {
+                "nodeId": "32",
+                "field": "image"
+              }
+            }
+          }
+        ]
+      }
+    },
+    "review_status": "Approved",
+    "rating": null,
+    "notes": "Reference continuity QC",
+    "approved_at": "2026-09-02T14:18:02.376043",
+    "created_at": "2026-09-02T14:18:01.459211"
+  },
+  {
+    "id": "0dd4e573-f3c7-451e-8dbb-a35910e448b5",
+    "shot_id": "804aece3-e5c3-4d68-80f2-162abcaa5118",
+    "job_id": "4e274cf6-9561-43a2-86f1-59a87ea0047f",
+    "file_path": "C:\\Users\\jongp\\Desktop\\Thinkpad_and_PC_Sync\\ContentAutomationStudio\\backend\\data\\generated\\4a6790f5-3d87-4a39-bd17-9f35ebb6196b_db99b7fe_804aece3_00001.png",
+    "thumbnail_path": "",
+    "duration_sec": 0.0,
+    "width": 864,
+    "height": 480,
+    "frame_rate": 25.0,
+    "codec": "png",
+    "media_provider_id": "comfyui",
+    "media_model": "workflow",
+    "request_params": {
+      "width": 864,
+      "height": 480
+    },
+    "usage": {},
+    "estimated_cost_usd": null,
+    "provenance": {
+      "provider_id": "comfyui",
+      "model": "workflow",
+      "prompt_id": "4a6790f5-3d87-4a39-bd17-9f35ebb6196b",
+      "workflow_id": "75a73b44-5c6f-4661-87f6-26e66a639efd",
+      "workflow_version": "1.0-reference.1",
+      "workflow_sha256": "05d08b4b3485b4d8d20a5b575a492686efbf74cf7688a0d28e438ca604751a54",
+      "workflow_snapshot_path": "C:\\Users\\jongp\\Desktop\\Thinkpad_and_PC_Sync\\ContentAutomationStudio\\backend\\data\\snapshots\\4e274cf6-9561-43a2-86f1-59a87ea0047f.json",
+      "seed": 42,
+      "generated_at": "2026-09-02T14:16:03.270986+00:00",
+      "references": {
+        "images": [
+          {
+            "image_id": "f9a8a931-b5a8-4788-86ff-3eca71003c37",
+            "sheet_id": "549c9d69-efff-4bae-88bd-15e913e80949",
+            "file_path": "C:\\Users\\jongp\\Desktop\\Thinkpad_and_PC_Sync\\ContentAutomationStudio\\backend\\data\\references\\db99b7fe-73a9-41ed-9922-018043fdbd12\\f9a8a931-b5a8-4788-86ff-3eca71003c37.png",
+            "sha256": "841ebf7cd1174f86c42f58839a79c1e140615125447d07eb97f228f66689d97e",
+            "mime_type": "image/png",
+            "width": 864,
+            "height": 480,
+            "comfyui": {
+              "name": "f9a8a931-b5a8-4788-86ff-3eca71003c37.png",
+              "subfolder": "cas/4e274cf6-9561-43a2-86f1-59a87ea0047f",
+              "type": "input",
+              "workflow_value": "cas/4e274cf6-9561-43a2-86f1-59a87ea0047f/f9a8a931-b5a8-4788-86ff-3eca71003c37.png",
+              "mapping": {
+                "nodeId": "32",
+                "field": "image"
+              }
+            }
+          }
+        ]
+      }
+    },
+    "review_status": "Approved",
+    "rating": null,
+    "notes": "Reference continuity QC",
+    "approved_at": "2026-09-02T14:18:02.411585",
+    "created_at": "2026-09-02T14:16:03.280522"
+  },
+  {
+    "id": "6f28de40-2732-4fce-b6b4-8d4fe85deb38",
+    "shot_id": "0a68764d-10a1-48ea-959a-bfdfffceaf9d",
+    "job_id": "c59813fd-5999-4e88-9a35-24986d855915",
+    "file_path": "C:\\Users\\jongp\\Desktop\\Thinkpad_and_PC_Sync\\ContentAutomationStudio\\backend\\data\\generated\\c98a79f0-8478-4486-9415-c27c6c5a0a77_db99b7fe_0a68764d_00001.png",
+    "thumbnail_path": "",
+    "duration_sec": 0.0,
+    "width": 864,
+    "height": 480,
+    "frame_rate": 25.0,
+    "codec": "png",
+    "media_provider_id": "comfyui",
+    "media_model": "workflow",
+    "request_params": {
+      "width": 864,
+      "height": 480
+    },
+    "usage": {},
+    "estimated_cost_usd": null,
+    "provenance": {
+      "provider_id": "comfyui",
+      "model": "workflow",
+      "prompt_id": "c98a79f0-8478-4486-9415-c27c6c5a0a77",
+      "workflow_id": "75a73b44-5c6f-4661-87f6-26e66a639efd",
+      "workflow_version": "1.0-reference.1",
+      "workflow_sha256": "05d08b4b3485b4d8d20a5b575a492686efbf74cf7688a0d28e438ca604751a54",
+      "workflow_snapshot_path": "C:\\Users\\jongp\\Desktop\\Thinkpad_and_PC_Sync\\ContentAutomationStudio\\backend\\data\\snapshots\\c59813fd-5999-4e88-9a35-24986d855915.json",
+      "seed": 42,
+      "generated_at": "2026-09-02T14:14:04.251404+00:00",
+      "references": {
+        "images": [
+          {
+            "image_id": "f9a8a931-b5a8-4788-86ff-3eca71003c37",
+            "sheet_id": "549c9d69-efff-4bae-88bd-15e913e80949",
+            "file_path": "C:\\Users\\jongp\\Desktop\\Thinkpad_and_PC_Sync\\ContentAutomationStudio\\backend\\data\\references\\db99b7fe-73a9-41ed-9922-018043fdbd12\\f9a8a931-b5a8-4788-86ff-3eca71003c37.png",
+            "sha256": "841ebf7cd1174f86c42f58839a79c1e140615125447d07eb97f228f66689d97e",
+            "mime_type": "image/png",
+            "width": 864,
+            "height": 480,
+            "comfyui": {
+              "name": "f9a8a931-b5a8-4788-86ff-3eca71003c37.png",
+              "subfolder": "cas/c59813fd-5999-4e88-9a35-24986d855915",
+              "type": "input",
+              "workflow_value": "cas/c59813fd-5999-4e88-9a35-24986d855915/f9a8a931-b5a8-4788-86ff-3eca71003c37.png",
+              "mapping": {
+                "nodeId": "32",
+                "field": "image"
+              }
+            }
+          }
+        ]
+      }
+    },
+    "review_status": "Approved",
+    "rating": null,
+    "notes": "Reference continuity QC",
+    "approved_at": "2026-09-02T14:18:02.444672",
+    "created_at": "2026-09-02T14:14:04.265446"
+  }
+]

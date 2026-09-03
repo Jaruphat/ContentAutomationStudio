@@ -1,0 +1,41 @@
+Input #0, mov,mp4,m4a,3gp,3g2,mj2, from 'C:/Users/jongp/Desktop/Thinkpad_and_PC_Sync/ContentAutomationStudio/backend/data/exports/5df52248-ce4b-4a76-8c81-a436b21b6b46/review.mp4':
+  Metadata:
+    major_brand     : isom
+    minor_version   : 512
+    compatible_brands: isomiso2avc1mp41
+    encoder         : Lavf62.12.102
+  Duration: 00:00:11.19, start: 0.000000, bitrate: 379 kb/s
+  Stream #0:0[0x1](und): Video: h264 (High) (avc1 / 0x31637661), yuv420p(progressive), 864x480 [SAR 1:1 DAR 9:5], 282 kb/s, 24 fps, 24 tbr, 12288 tbn, start 0.020996 (default)
+    Metadata:
+      handler_name    : VideoHandler
+  Stream #0:1[0x2](und): Audio: aac (LC) (mp4a / 0x6134706D), 48000 Hz, stereo, fltp, 90 kb/s (default)
+    Metadata:
+      handler_name    : SoundHandler
+Stream mapping:
+  Stream #0:1 -> #0:0 (aac (native) -> pcm_s16le (native))
+Press [q] to stop, [?] for help
+Output #0, null, to 'pipe:':
+  Metadata:
+    major_brand     : isom
+    minor_version   : 512
+    compatible_brands: isomiso2avc1mp41
+    encoder         : Lavf62.12.102
+  Stream #0:0(und): Audio: pcm_s16le, 192000 Hz, stereo, s16, 6144 kb/s (default)
+    Metadata:
+      encoder         : Lavc62.28.102 pcm_s16le
+      handler_name    : SoundHandler
+[Parsed_loudnorm_0 @ 000001ec4405de80] 
+{
+	"input_i" : "-52.14",
+	"input_tp" : "-29.21",
+	"input_lra" : "0.40",
+	"input_thresh" : "-62.14",
+	"output_i" : "-16.58",
+	"output_tp" : "-1.50",
+	"output_lra" : "1.10",
+	"output_thresh" : "-26.58",
+	"normalization_type" : "dynamic",
+	"target_offset" : "0.58"
+}
+[out#0/null @ 000001ec43fc7280] video:0KiB audio:3897KiB subtitle:0KiB other streams:0KiB global headers:0KiB muxing overhead: unknown
+size=N/A time=00:00:05.20 bitrate=N/A speed=60.4x elapsed=0:00:00.08    

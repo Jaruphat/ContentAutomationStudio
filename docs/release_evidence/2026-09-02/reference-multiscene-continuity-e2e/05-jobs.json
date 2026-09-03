@@ -1,0 +1,263 @@
+[
+  {
+    "id": "c59813fd-5999-4e88-9a35-24986d855915",
+    "shot_id": "0a68764d-10a1-48ea-959a-bfdfffceaf9d",
+    "workflow_id": "75a73b44-5c6f-4661-87f6-26e66a639efd",
+    "workflow_version": "1.0-reference.1",
+    "workflow_snapshot_path": "C:\\Users\\jongp\\Desktop\\Thinkpad_and_PC_Sync\\ContentAutomationStudio\\backend\\data\\snapshots\\c59813fd-5999-4e88-9a35-24986d855915.json",
+    "workflow_sha256": "05d08b4b3485b4d8d20a5b575a492686efbf74cf7688a0d28e438ca604751a54",
+    "parameter_map": {
+      "positivePrompt": "The same child stands at the pond edge at dawn., dawn, medium-wide, eye level, locked, same child and same single blue paper boat, same misty pond at dawn, Preserve the supplied child, blue raincoat, single blue paper boat, pond, composition and color identity. Dawn mist thickens slightly, medium-wide locked shot.",
+      "negativePrompt": "second boat, duplicate child, different raincoat, different boat color, text, logo, watermark",
+      "seed": 42,
+      "width": 864,
+      "height": 480,
+      "aspectRatio": "16:9 (Widescreen)",
+      "outputPrefix": "db99b7fe_0a68764d",
+      "referenceImage": "cas/c59813fd-5999-4e88-9a35-24986d855915/f9a8a931-b5a8-4788-86ff-3eca71003c37.png"
+    },
+    "media_provider_id": "comfyui",
+    "media_model": "workflow",
+    "request_params": {
+      "width": 864,
+      "height": 480
+    },
+    "usage": {},
+    "estimated_cost_usd": null,
+    "provenance": {
+      "provider_id": "comfyui",
+      "model": "workflow",
+      "prompt_id": "c98a79f0-8478-4486-9415-c27c6c5a0a77",
+      "workflow_id": "75a73b44-5c6f-4661-87f6-26e66a639efd",
+      "workflow_version": "1.0-reference.1",
+      "workflow_sha256": "05d08b4b3485b4d8d20a5b575a492686efbf74cf7688a0d28e438ca604751a54",
+      "workflow_snapshot_path": "C:\\Users\\jongp\\Desktop\\Thinkpad_and_PC_Sync\\ContentAutomationStudio\\backend\\data\\snapshots\\c59813fd-5999-4e88-9a35-24986d855915.json",
+      "seed": 42,
+      "generated_at": "2026-09-02T14:14:04.251404+00:00"
+    },
+    "prompt_revision": 1,
+    "prompt_sha256": "e344e3b1192d4578192cfc295cf3f28c84f8242770f5cf027f316b670508ec90",
+    "content_sha256": "6b381dc76083c02862bdf83408a4031aedef101daf6d983099ef0940fffac5db",
+    "reference_image_ids": [
+      "f9a8a931-b5a8-4788-86ff-3eca71003c37"
+    ],
+    "reference_sha256s": [
+      "841ebf7cd1174f86c42f58839a79c1e140615125447d07eb97f228f66689d97e"
+    ],
+    "reference_provenance": {
+      "images": [
+        {
+          "image_id": "f9a8a931-b5a8-4788-86ff-3eca71003c37",
+          "sheet_id": "549c9d69-efff-4bae-88bd-15e913e80949",
+          "file_path": "C:\\Users\\jongp\\Desktop\\Thinkpad_and_PC_Sync\\ContentAutomationStudio\\backend\\data\\references\\db99b7fe-73a9-41ed-9922-018043fdbd12\\f9a8a931-b5a8-4788-86ff-3eca71003c37.png",
+          "sha256": "841ebf7cd1174f86c42f58839a79c1e140615125447d07eb97f228f66689d97e",
+          "mime_type": "image/png",
+          "width": 864,
+          "height": 480,
+          "comfyui": {
+            "name": "f9a8a931-b5a8-4788-86ff-3eca71003c37.png",
+            "subfolder": "cas/c59813fd-5999-4e88-9a35-24986d855915",
+            "type": "input",
+            "workflow_value": "cas/c59813fd-5999-4e88-9a35-24986d855915/f9a8a931-b5a8-4788-86ff-3eca71003c37.png",
+            "mapping": {
+              "nodeId": "32",
+              "field": "image"
+            }
+          }
+        }
+      ]
+    },
+    "seed": 42,
+    "comfyui_prompt_id": "c98a79f0-8478-4486-9415-c27c6c5a0a77",
+    "status": "Completed",
+    "attempts": 1,
+    "error_code": null,
+    "error_message": null,
+    "outputs": [
+      {
+        "file_path": "C:\\Users\\jongp\\Desktop\\Thinkpad_and_PC_Sync\\ContentAutomationStudio\\backend\\data\\generated\\c98a79f0-8478-4486-9415-c27c6c5a0a77_db99b7fe_0a68764d_00001.png",
+        "type": "image",
+        "width": 864,
+        "height": 480
+      }
+    ],
+    "submitted_at": "2026-09-02T14:12:01.168160",
+    "started_at": "2026-09-02T14:12:01.082677",
+    "completed_at": "2026-09-02T14:14:04.251404",
+    "created_at": "2026-09-02T14:12:00.277435"
+  },
+  {
+    "id": "4e274cf6-9561-43a2-86f1-59a87ea0047f",
+    "shot_id": "804aece3-e5c3-4d68-80f2-162abcaa5118",
+    "workflow_id": "75a73b44-5c6f-4661-87f6-26e66a639efd",
+    "workflow_version": "1.0-reference.1",
+    "workflow_snapshot_path": "C:\\Users\\jongp\\Desktop\\Thinkpad_and_PC_Sync\\ContentAutomationStudio\\backend\\data\\snapshots\\4e274cf6-9561-43a2-86f1-59a87ea0047f.json",
+    "workflow_sha256": "05d08b4b3485b4d8d20a5b575a492686efbf74cf7688a0d28e438ca604751a54",
+    "parameter_map": {
+      "positivePrompt": "The same child gently reaches toward the same boat., dawn, medium-wide, eye level, locked, same child and same single blue paper boat, same misty pond at dawn, Preserve the supplied child, blue raincoat, exactly one blue paper boat and pond. The child kneels and reaches one hand toward the same boat, soft dawn light, medium locked shot.",
+      "negativePrompt": "second boat, duplicate child, different raincoat, different boat color, text, logo, watermark",
+      "seed": 42,
+      "width": 864,
+      "height": 480,
+      "aspectRatio": "16:9 (Widescreen)",
+      "outputPrefix": "db99b7fe_804aece3",
+      "referenceImage": "cas/4e274cf6-9561-43a2-86f1-59a87ea0047f/f9a8a931-b5a8-4788-86ff-3eca71003c37.png"
+    },
+    "media_provider_id": "comfyui",
+    "media_model": "workflow",
+    "request_params": {
+      "width": 864,
+      "height": 480
+    },
+    "usage": {},
+    "estimated_cost_usd": null,
+    "provenance": {
+      "provider_id": "comfyui",
+      "model": "workflow",
+      "prompt_id": "4a6790f5-3d87-4a39-bd17-9f35ebb6196b",
+      "workflow_id": "75a73b44-5c6f-4661-87f6-26e66a639efd",
+      "workflow_version": "1.0-reference.1",
+      "workflow_sha256": "05d08b4b3485b4d8d20a5b575a492686efbf74cf7688a0d28e438ca604751a54",
+      "workflow_snapshot_path": "C:\\Users\\jongp\\Desktop\\Thinkpad_and_PC_Sync\\ContentAutomationStudio\\backend\\data\\snapshots\\4e274cf6-9561-43a2-86f1-59a87ea0047f.json",
+      "seed": 42,
+      "generated_at": "2026-09-02T14:16:03.270986+00:00"
+    },
+    "prompt_revision": 1,
+    "prompt_sha256": "f4b7760f696f8d65b527acbc9d725c19b95fa2799d627bfdec86e340fbfb6a42",
+    "content_sha256": "4fb4094047aa9690a4ca911945802c7f5b28670eea41200206590ea53546a20c",
+    "reference_image_ids": [
+      "f9a8a931-b5a8-4788-86ff-3eca71003c37"
+    ],
+    "reference_sha256s": [
+      "841ebf7cd1174f86c42f58839a79c1e140615125447d07eb97f228f66689d97e"
+    ],
+    "reference_provenance": {
+      "images": [
+        {
+          "image_id": "f9a8a931-b5a8-4788-86ff-3eca71003c37",
+          "sheet_id": "549c9d69-efff-4bae-88bd-15e913e80949",
+          "file_path": "C:\\Users\\jongp\\Desktop\\Thinkpad_and_PC_Sync\\ContentAutomationStudio\\backend\\data\\references\\db99b7fe-73a9-41ed-9922-018043fdbd12\\f9a8a931-b5a8-4788-86ff-3eca71003c37.png",
+          "sha256": "841ebf7cd1174f86c42f58839a79c1e140615125447d07eb97f228f66689d97e",
+          "mime_type": "image/png",
+          "width": 864,
+          "height": 480,
+          "comfyui": {
+            "name": "f9a8a931-b5a8-4788-86ff-3eca71003c37.png",
+            "subfolder": "cas/4e274cf6-9561-43a2-86f1-59a87ea0047f",
+            "type": "input",
+            "workflow_value": "cas/4e274cf6-9561-43a2-86f1-59a87ea0047f/f9a8a931-b5a8-4788-86ff-3eca71003c37.png",
+            "mapping": {
+              "nodeId": "32",
+              "field": "image"
+            }
+          }
+        }
+      ]
+    },
+    "seed": 42,
+    "comfyui_prompt_id": "4a6790f5-3d87-4a39-bd17-9f35ebb6196b",
+    "status": "Completed",
+    "attempts": 1,
+    "error_code": null,
+    "error_message": null,
+    "outputs": [
+      {
+        "file_path": "C:\\Users\\jongp\\Desktop\\Thinkpad_and_PC_Sync\\ContentAutomationStudio\\backend\\data\\generated\\4a6790f5-3d87-4a39-bd17-9f35ebb6196b_db99b7fe_804aece3_00001.png",
+        "type": "image",
+        "width": 864,
+        "height": 480
+      }
+    ],
+    "submitted_at": "2026-09-02T14:14:04.441221",
+    "started_at": "2026-09-02T14:14:04.374595",
+    "completed_at": "2026-09-02T14:16:03.270986",
+    "created_at": "2026-09-02T14:12:00.277435"
+  },
+  {
+    "id": "9d1bcc74-bd0e-4ebd-b2be-682e565cf1bd",
+    "shot_id": "03c0e7e1-346b-436c-bb88-74508539a626",
+    "workflow_id": "75a73b44-5c6f-4661-87f6-26e66a639efd",
+    "workflow_version": "1.0-reference.1",
+    "workflow_snapshot_path": "C:\\Users\\jongp\\Desktop\\Thinkpad_and_PC_Sync\\ContentAutomationStudio\\backend\\data\\snapshots\\9d1bcc74-bd0e-4ebd-b2be-682e565cf1bd.json",
+    "workflow_sha256": "05d08b4b3485b4d8d20a5b575a492686efbf74cf7688a0d28e438ca604751a54",
+    "parameter_map": {
+      "positivePrompt": "The same boat reaches a narrow band of warm light., dawn, medium-wide, eye level, locked, same child and same single blue paper boat, same misty pond at dawn, Preserve the supplied child, blue raincoat, exactly one blue paper boat and same pond. The same boat drifts into warm sunlight while the child watches, wide locked shot.",
+      "negativePrompt": "second boat, duplicate child, different raincoat, different boat color, text, logo, watermark",
+      "seed": 42,
+      "width": 864,
+      "height": 480,
+      "aspectRatio": "16:9 (Widescreen)",
+      "outputPrefix": "db99b7fe_03c0e7e1",
+      "referenceImage": "cas/9d1bcc74-bd0e-4ebd-b2be-682e565cf1bd/f9a8a931-b5a8-4788-86ff-3eca71003c37.png"
+    },
+    "media_provider_id": "comfyui",
+    "media_model": "workflow",
+    "request_params": {
+      "width": 864,
+      "height": 480
+    },
+    "usage": {},
+    "estimated_cost_usd": null,
+    "provenance": {
+      "provider_id": "comfyui",
+      "model": "workflow",
+      "prompt_id": "2bc16b95-833c-49a1-b690-3d70dfabc703",
+      "workflow_id": "75a73b44-5c6f-4661-87f6-26e66a639efd",
+      "workflow_version": "1.0-reference.1",
+      "workflow_sha256": "05d08b4b3485b4d8d20a5b575a492686efbf74cf7688a0d28e438ca604751a54",
+      "workflow_snapshot_path": "C:\\Users\\jongp\\Desktop\\Thinkpad_and_PC_Sync\\ContentAutomationStudio\\backend\\data\\snapshots\\9d1bcc74-bd0e-4ebd-b2be-682e565cf1bd.json",
+      "seed": 42,
+      "generated_at": "2026-09-02T14:18:01.450703+00:00"
+    },
+    "prompt_revision": 1,
+    "prompt_sha256": "3d086b994c4ff4f715f848bbf2e3c98fc8bcff9011521ced49e8f244bf94be0f",
+    "content_sha256": "b39ff3d7aeaad02296a1cbe1645466148f227e0f9f4a853dce0ee3429b98cdf3",
+    "reference_image_ids": [
+      "f9a8a931-b5a8-4788-86ff-3eca71003c37"
+    ],
+    "reference_sha256s": [
+      "841ebf7cd1174f86c42f58839a79c1e140615125447d07eb97f228f66689d97e"
+    ],
+    "reference_provenance": {
+      "images": [
+        {
+          "image_id": "f9a8a931-b5a8-4788-86ff-3eca71003c37",
+          "sheet_id": "549c9d69-efff-4bae-88bd-15e913e80949",
+          "file_path": "C:\\Users\\jongp\\Desktop\\Thinkpad_and_PC_Sync\\ContentAutomationStudio\\backend\\data\\references\\db99b7fe-73a9-41ed-9922-018043fdbd12\\f9a8a931-b5a8-4788-86ff-3eca71003c37.png",
+          "sha256": "841ebf7cd1174f86c42f58839a79c1e140615125447d07eb97f228f66689d97e",
+          "mime_type": "image/png",
+          "width": 864,
+          "height": 480,
+          "comfyui": {
+            "name": "f9a8a931-b5a8-4788-86ff-3eca71003c37.png",
+            "subfolder": "cas/9d1bcc74-bd0e-4ebd-b2be-682e565cf1bd",
+            "type": "input",
+            "workflow_value": "cas/9d1bcc74-bd0e-4ebd-b2be-682e565cf1bd/f9a8a931-b5a8-4788-86ff-3eca71003c37.png",
+            "mapping": {
+              "nodeId": "32",
+              "field": "image"
+            }
+          }
+        }
+      ]
+    },
+    "seed": 42,
+    "comfyui_prompt_id": "2bc16b95-833c-49a1-b690-3d70dfabc703",
+    "status": "Completed",
+    "attempts": 1,
+    "error_code": null,
+    "error_message": null,
+    "outputs": [
+      {
+        "file_path": "C:\\Users\\jongp\\Desktop\\Thinkpad_and_PC_Sync\\ContentAutomationStudio\\backend\\data\\generated\\2bc16b95-833c-49a1-b690-3d70dfabc703_db99b7fe_03c0e7e1_00001.png",
+        "type": "image",
+        "width": 864,
+        "height": 480
+      }
+    ],
+    "submitted_at": "2026-09-02T14:16:03.433877",
+    "started_at": "2026-09-02T14:16:03.378771",
+    "completed_at": "2026-09-02T14:18:01.450703",
+    "created_at": "2026-09-02T14:12:00.277435"
+  }
+]

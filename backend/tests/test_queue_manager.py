@@ -62,6 +62,16 @@ def make_job(db: Session, shot_id: str, status: str = "Queued", **kwargs) -> Gen
 # ---------------------------------------------------------------------------
 
 class TestReconcileOnStartup:
+    def test_restores_persisted_project_pause(
+        self, db_session, sample_project, manager, patched_sessions
+    ):
+        sample_project.queue_paused = True
+        db_session.commit()
+
+        manager.reconcile_on_startup()
+
+        assert manager.is_project_paused(sample_project.id) is True
+
     def test_running_job_is_requeued(
         self, db_session, sample_shot, manager, patched_sessions
     ):
@@ -160,6 +170,33 @@ class TestExecuteJob:
 
         db_session.refresh(sample_shot)
         assert sample_shot.status == "NeedsReview"
+
+    @pytest.mark.asyncio
+    async def test_take_inherits_revision_and_reference_provenance(
+        self, db_session, sample_shot, manager, patched_sessions, monkeypatch
+    ):
+        monkeypatch.setattr(qm_module, "POLL_INTERVAL_SEC", 0.01)
+        monkeypatch.setattr(mock_provider_module, "QUEUED_SEC", 0.0)
+        monkeypatch.setattr(mock_provider_module, "RUNNING_SEC", 0.0)
+        job = make_job(
+            db_session, sample_shot.id,
+            prompt_revision=3, prompt_sha256="b" * 64,
+            content_sha256="c" * 64,
+            reference_image_ids=["image-1"],
+            reference_sha256s=["d" * 64],
+            reference_provenance={"images": [{"image_id": "image-1"}]},
+        )
+        manager._running = True
+
+        await manager._execute_job(db_session, job)
+
+        take = db_session.query(Take).filter(Take.job_id == job.id).one()
+        assert take.prompt_revision == 3
+        assert take.prompt_sha256 == "b" * 64
+        assert take.content_sha256 == "c" * 64
+        assert take.reference_image_ids == ["image-1"]
+        assert take.reference_sha256s == ["d" * 64]
+        assert take.provenance["references"] == job.reference_provenance
 
     @pytest.mark.asyncio
     async def test_cancel_during_poll_stops_the_job(

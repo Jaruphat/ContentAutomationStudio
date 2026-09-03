@@ -35,6 +35,7 @@ import json
 import logging
 import math
 import os
+import tempfile
 from datetime import datetime, timezone
 from typing import Any
 
@@ -47,13 +48,15 @@ from app.models import GenerationJob, Project, Scene, Shot, Take, Workflow
 from app.services.media_probe import (  # noqa: F401
     VIDEO_EXTENSIONS,
     embedded_metadata_keys,
+    embedded_metadata_keys_from_tags,
     ffmpeg_path,
     ffprobe_path,
     probe_media_file,
     read_container_tags,
     run_captured,
 )
-from app.services.timeline_service import get_timeline_manifest
+from app.services.timeline_service import aspect_override_warnings, get_timeline_manifest
+from app.services import generation_planning, subtitle_service
 
 logger = logging.getLogger("cas.render_service")
 
@@ -65,6 +68,7 @@ AUDIO_BITRATE = "192k"
 AUDIO_TARGET_LUFS = -16.0
 AUDIO_TRUE_PEAK_DBTP = -1.5
 AUDIO_LOUDNESS_RANGE = 11.0
+AUDIO_LIMIT_LINEAR = 0.79
 
 #: Drop every tag and chapter the input carried. Applied to each segment and
 #: again to the concat output, because either stage would otherwise inherit
@@ -76,14 +80,8 @@ PROVENANCE_FILENAME = "review.provenance.json"
 
 
 def parse_resolution(value: str) -> tuple[int, int]:
-    """Parse a 'WIDTHxHEIGHT' string, falling back to 1920x1080."""
-    try:
-        width_str, height_str = str(value).lower().split("x", 1)
-        width, height = int(width_str), int(height_str)
-    except (ValueError, AttributeError):
-        return 1920, 1080
-    # H.264 requires even dimensions.
-    return max(2, width - (width % 2)), max(2, height - (height % 2))
+    """Compatibility wrapper around the canonical project parser."""
+    return generation_planning.parse_resolution(value)
 
 
 def _run(cmd: list[str], timeout: int = 300) -> tuple[bool, str]:
@@ -92,6 +90,32 @@ def _run(cmd: list[str], timeout: int = 300) -> tuple[bool, str]:
     if returncode != 0:
         return False, (stderr or "")[-800:]
     return True, ""
+
+
+def _measure_loudness(ffmpeg: str, file_path: str) -> dict[str, float] | None:
+    """Measure EBU R128 integrated loudness and true peak."""
+    returncode, _stdout, stderr = run_captured([
+        ffmpeg, "-hide_banner", "-nostats", "-i", file_path,
+        "-af",
+        f"loudnorm=I={AUDIO_TARGET_LUFS:g}:TP={AUDIO_TRUE_PEAK_DBTP:g}:"
+        f"LRA={AUDIO_LOUDNESS_RANGE:g}:print_format=json",
+        "-f", "null", "-",
+    ], timeout=300)
+    if returncode != 0:
+        return None
+    start = stderr.rfind("{")
+    end = stderr.rfind("}")
+    if start < 0 or end <= start:
+        return None
+    try:
+        payload = json.loads(stderr[start:end + 1])
+        measured = {
+            "integrated_lufs": float(payload["input_i"]),
+            "true_peak_dbtp": float(payload["input_tp"]),
+        }
+    except (KeyError, TypeError, ValueError, json.JSONDecodeError):
+        return None
+    return measured if all(math.isfinite(value) for value in measured.values()) else None
 
 
 def probe_media(file_path: str) -> dict[str, Any]:
@@ -111,7 +135,13 @@ def _source_has_audio(file_path: str) -> bool | None:
     return bool(probe.get("has_audio"))
 
 
-def _blocked(project_id: str, reason: str) -> dict[str, Any]:
+def _blocked(
+    project_id: str,
+    reason: str,
+    *,
+    metadata_status: str = "unverified",
+    leaked_metadata_keys: list[str] | None = None,
+) -> dict[str, Any]:
     """Uniform 'the render did not run' result."""
     return {
         "project_id": project_id,
@@ -128,8 +158,28 @@ def _blocked(project_id: str, reason: str) -> dict[str, Any]:
         "has_audio": False,
         "audio_codec": "",
         "provenance_path": "",
-        "embedded_metadata_keys": [],
+        "embedded_metadata_keys": leaked_metadata_keys or [],
+        "metadata_status": metadata_status,
+        "warning_metadata": [],
+        # Nothing was produced, so neither claim can be made.
+        "delivery_validation": {
+            "pipeline_pass": False,
+            "delivery_spec_pass": False,
+        },
     }
+
+
+def _discard_delivery(path: str) -> None:
+    """Delete a rejected output, or quarantine it if deletion is unavailable."""
+    try:
+        os.remove(path)
+    except FileNotFoundError:
+        pass
+    except OSError:
+        try:
+            os.replace(path, f"{path}.quarantined")
+        except OSError:
+            logger.exception("Could not delete or quarantine rejected render %s", path)
 
 
 def _sha256(file_path: str) -> str:
@@ -173,6 +223,7 @@ def _segment_provenance(
             "probe": probe_media_file(take.file_path),
             # What the source file carried before the render stripped it.
             "embedded_metadata_keys": embedded_metadata_keys(take.file_path),
+            "lineage": take.lineage or {},
         },
     }
     if scene is not None:
@@ -215,6 +266,7 @@ def write_render_provenance(
     sources: list[tuple[dict[str, Any], Take]],
     output_path: str,
     render_settings: dict[str, Any],
+    container_tags: dict[str, Any] | None = None,
 ) -> str:
     """
     Write the sidecar recording what went into the review video.
@@ -237,6 +289,9 @@ def write_render_provenance(
         f"{output_width // divisor}:{output_height // divisor}"
         if divisor else project.aspect_ratio
     )
+    override_warnings = aspect_override_warnings(
+        db, project, [take for _item, take in sources]
+    )
 
     payload = {
         "kind": "cas.review_render.provenance",
@@ -257,9 +312,18 @@ def write_render_provenance(
                 os.path.getsize(output_path) if os.path.isfile(output_path) else 0
             ),
             "probe": output_probe,
-            "container_tags": read_container_tags(output_path),
+            "container_tags": (
+                container_tags
+                if container_tags is not None
+                else read_container_tags(output_path)
+            ),
         },
         "render_settings": render_settings,
+        "warnings": override_warnings,
+        "delivery_validation": {
+            "pipeline_pass": True,
+            "delivery_spec_pass": not override_warnings,
+        },
         "segments": [
             _segment_provenance(db, index, item, take)
             for index, (item, take) in enumerate(sources)
@@ -273,12 +337,27 @@ def write_render_provenance(
     }
 
     sidecar = os.path.join(os.path.dirname(output_path), PROVENANCE_FILENAME)
+    temporary = ""
     try:
-        with open(sidecar, "w", encoding="utf-8") as f:
+        descriptor, temporary = tempfile.mkstemp(
+            prefix=f".{PROVENANCE_FILENAME}.",
+            suffix=".tmp",
+            dir=os.path.dirname(sidecar),
+        )
+        with os.fdopen(descriptor, "w", encoding="utf-8") as f:
             json.dump(payload, f, indent=2, ensure_ascii=False, default=str)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(temporary, sidecar)
     except OSError as exc:
         logger.warning("Could not write render provenance to %s: %s", sidecar, exc)
         return ""
+    finally:
+        if temporary:
+            try:
+                os.remove(temporary)
+            except OSError:
+                pass
     return sidecar
 
 
@@ -296,7 +375,7 @@ def render_review_video(db: Session, project_id: str) -> dict[str, Any]:
             "produced. The render plan endpoint still returns the commands.",
         )
 
-    manifest = get_timeline_manifest(db, project_id)
+    manifest = get_timeline_manifest(db, project_id, strict_lineage=True)
     items = manifest.get("items", [])
     if not items:
         return _blocked(
@@ -331,11 +410,70 @@ def render_review_video(db: Session, project_id: str) -> dict[str, Any]:
 
     width, height = parse_resolution(project.target_resolution)
     frame_rate = project.frame_rate or 24.0
-    warnings: list[str] = []
+
+    # A waiver that only reaches the sidecar leaves whoever is looking at the
+    # render result believing the delivery passed. It is repeated here, scoped
+    # to the takes this render actually assembles.
+    override_warnings = aspect_override_warnings(
+        db, project, [take for _item, take in sources]
+    )
+    warnings: list[str] = [warning["message"] for warning in override_warnings]
 
     out_dir = paths.exports_dir(project_id)
     segments_dir = os.path.join(out_dir, "segments")
-    os.makedirs(segments_dir, exist_ok=True)
+    try:
+        os.makedirs(segments_dir, exist_ok=True)
+    except OSError as exc:
+        return _blocked(
+            project_id,
+            f"Could not prepare the render directory: {exc}",
+        )
+
+    subtitle_settings = subtitle_service.settings_for_project(project)
+    subtitle_record: dict[str, Any] = {
+        "settings": subtitle_settings.model_dump(),
+        "cue_count": 0,
+        "ass_sidecar": {"path": "", "sha256": ""},
+        "srt_sidecar": {"path": "", "sha256": ""},
+        "burned_in": False,
+    }
+    keep_sidecars = {
+        "off": set(),
+        "soft": {"subtitles.ass", "subtitles.srt"},
+        "burn_in": {"subtitles.ass"},
+    }[subtitle_settings.mode]
+    try:
+        subtitle_service.remove_stale_sidecars(project_id, keep_sidecars)
+        if subtitle_settings.mode != "off":
+            ass = subtitle_service.write_ass_sidecar(db, project)
+            subtitle_record["cue_count"] = ass["cue_count"]
+            subtitle_record["ass_sidecar"] = {
+                "path": ass["path"], "sha256": ass["sha256"],
+            }
+            if subtitle_settings.mode == "soft":
+                srt = subtitle_service.write_srt_sidecar(db, project)
+                subtitle_record["srt_sidecar"] = {
+                    "path": srt["path"], "sha256": srt["sha256"],
+                }
+            elif not ass["cue_count"]:
+                warnings.append(
+                    "Subtitle burn-in is enabled, but the current timeline has no "
+                    "non-blank Shot dialogue. The review was rendered without subtitles."
+                )
+    except subtitle_service.SubtitleSidecarError as exc:
+        return _blocked(project_id, f"Subtitle sidecar publication failed: {exc}")
+    except ValueError as exc:
+        return _blocked(project_id, f"Subtitle timing or text validation failed: {exc}")
+
+    burn_subtitles = bool(
+        subtitle_settings.mode == "burn_in" and subtitle_record["cue_count"]
+    )
+    subtitle_filter = (
+        subtitle_service.ffmpeg_subtitles_filter(
+            subtitle_record["ass_sidecar"]["path"]
+        )
+        if burn_subtitles else ""
+    )
 
     scale_filter = (
         f"scale={width}:{height}:force_original_aspect_ratio=decrease,"
@@ -346,11 +484,11 @@ def render_review_video(db: Session, project_id: str) -> dict[str, Any]:
     # to agree, because the concat step stream-copies them.
     source_audio = [_source_has_audio(take.file_path) for _item, take in sources]
     if any(flag is None for flag in source_audio):
-        warnings.append(
-            "ffprobe is unavailable, so source audio could not be detected. "
-            "The review video was rendered without audio."
+        return _blocked(
+            project_id,
+            "Source audio could not be detected because ffprobe was unavailable "
+            "or could not read the media. Rendering is blocked to prevent audio loss.",
         )
-        source_audio = [False] * len(source_audio)
     keep_audio = any(source_audio)
 
     segment_paths: list[str] = []
@@ -420,53 +558,148 @@ def render_review_video(db: Session, project_id: str) -> dict[str, Any]:
             f.write("file '" + escaped + "'\n")
 
     output_path = os.path.join(out_dir, "review.mp4")
+    loudness_input: float | None = None
+    loudness_output: float | None = None
+    output_true_peak: float | None = None
+    loudness_target_achieved: bool | None = None
+    loudness_gain_db: float | None = None
+    concat_output = (
+        os.path.join(out_dir, "review.pre-normalized.mp4")
+        if keep_audio or burn_subtitles else output_path
+    )
     concat_cmd = [
         ffmpeg, "-y", "-loglevel", "error",
         "-f", "concat", "-safe", "0", "-i", concat_file,
         *STRIP_METADATA_ARGS,
-        "-c:v", "copy",
+        "-c", "copy", concat_output,
     ]
+    ok, err = _run(concat_cmd)
+    if not ok:
+        return _blocked(project_id, f"FFmpeg concat failed: {err}")
+
     if keep_audio:
-        concat_cmd += [
+        input_measurement = _measure_loudness(ffmpeg, concat_output)
+        if input_measurement is None:
+            loudness_gain_db = 0.0
+            warnings.append(
+                "The assembled audio was silent or its loudness could not be "
+                "measured, so no delivery gain was applied."
+            )
+        else:
+            loudness_input = input_measurement["integrated_lufs"]
+            loudness_gain_db = AUDIO_TARGET_LUFS - loudness_input
+        final_cmd = [
+            ffmpeg, "-y", "-loglevel", "error", "-i", concat_output,
+            *STRIP_METADATA_ARGS,
+        ]
+        if burn_subtitles:
+            final_cmd += [
+                "-vf", subtitle_filter, "-c:v", "libx264",
+                "-preset", "veryfast", "-crf", "23", "-pix_fmt", "yuv420p",
+            ]
+        else:
+            final_cmd += ["-c:v", "copy"]
+        final_cmd += [
             "-af",
-            f"loudnorm=I={AUDIO_TARGET_LUFS:g}:TP={AUDIO_TRUE_PEAK_DBTP:g}:"
-            f"LRA={AUDIO_LOUDNESS_RANGE:g}",
+            f"volume={loudness_gain_db:g}dB,"
+            f"alimiter=limit={AUDIO_LIMIT_LINEAR:g}:attack=5:release=50:level=false",
             "-c:a", "aac",
             "-ar", str(AUDIO_SAMPLE_RATE),
             "-ac", str(AUDIO_CHANNELS),
             "-b:a", AUDIO_BITRATE,
+            output_path,
         ]
-    else:
-        concat_cmd += ["-an"]
-    concat_cmd.append(output_path)
-    ok, err = _run(concat_cmd)
-    if not ok:
-        return _blocked(project_id, f"FFmpeg concat failed: {err}")
+        ok, err = _run(final_cmd)
+        try:
+            os.remove(concat_output)
+        except OSError:
+            pass
+        if not ok:
+            if burn_subtitles:
+                return _blocked(project_id, f"FFmpeg subtitle burn-in failed: {err}")
+            return _blocked(project_id, f"FFmpeg audio normalisation failed: {err}")
+        output_measurement = _measure_loudness(ffmpeg, output_path)
+        if output_measurement is not None:
+            loudness_output = output_measurement["integrated_lufs"]
+            output_true_peak = output_measurement["true_peak_dbtp"]
+            loudness_target_achieved = (
+                abs(loudness_output - AUDIO_TARGET_LUFS) <= 1.0
+                and output_true_peak <= AUDIO_TRUE_PEAK_DBTP
+            )
+        if loudness_target_achieved is False:
+            warnings.append(
+                f"Audio could not reach {AUDIO_TARGET_LUFS:g} LUFS without "
+                f"exceeding the true-peak ceiling; measured {loudness_output:.2f} "
+                f"LUFS and {output_true_peak:.2f} dBTP."
+            )
+
+    elif burn_subtitles:
+        ok, err = _run([
+            ffmpeg, "-y", "-loglevel", "error", "-i", concat_output,
+            *STRIP_METADATA_ARGS,
+            "-vf", subtitle_filter,
+            "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
+            "-pix_fmt", "yuv420p", "-an", output_path,
+        ])
+        try:
+            os.remove(concat_output)
+        except OSError:
+            pass
+        if not ok:
+            return _blocked(project_id, f"FFmpeg subtitle burn-in failed: {err}")
+
+    subtitle_record["burned_in"] = burn_subtitles
+
+    # Warnings that describe an accepted exception (the aspect waiver) are
+    # tracked separately from warnings that describe an actual defect in this
+    # delivery: a waiver explains a failure, it does not erase the others.
+    material_warnings: list[str] = []
 
     probe = probe_media(output_path)
     expected = float(manifest.get("total_duration_sec") or 0.0)
     actual = probe.get("duration_sec", 0.0)
     if probe and expected and abs(actual - expected) > 1.0:
-        warnings.append(
+        message = (
             f"Rendered duration {actual:.2f}s differs from the manifest total "
             f"{expected:.2f}s by more than one second."
         )
+        warnings.append(message)
+        material_warnings.append(message)
     if keep_audio and probe and not probe.get("has_audio"):
         # The sources had audio but the assembled file does not - report it
         # rather than let a silent review video pass as correct.
-        warnings.append(
+        message = (
             "Source takes carry audio but the assembled review video has no "
             "audio stream."
         )
+        warnings.append(message)
+        material_warnings.append(message)
 
-    # The deliverable must not carry the generator's embedded workflow graph.
-    # Only key names are surfaced; the values are the payload being excluded.
-    leaked = embedded_metadata_keys(output_path)
-    if leaked:
-        warnings.append(
-            "The review video still carries container metadata that did not "
-            "come from the muxer: " + ", ".join(leaked) + ". Provenance belongs "
-            "in the sidecar, not in the delivered file."
+    # An empty ffprobe result is unknown, not clean. Only a successful probe
+    # with no non-structural keys is allowed to become a deliverable.
+    container_tags = read_container_tags(output_path)
+    leaked = embedded_metadata_keys_from_tags(container_tags)
+    metadata_status = (
+        "unverified" if not container_tags else ("leaked" if leaked else "clean")
+    )
+    if metadata_status != "clean":
+        if leaked:
+            reason = (
+                "Rendered output carried disallowed container metadata keys: "
+                + ", ".join(leaked)
+                + ". The rejected deliverable was removed."
+            )
+        else:
+            reason = (
+                "Rendered output metadata could not be verified with ffprobe. "
+                "The rejected deliverable was removed."
+            )
+        _discard_delivery(output_path)
+        return _blocked(
+            project_id,
+            reason,
+            metadata_status=metadata_status,
+            leaked_metadata_keys=leaked,
         )
 
     provenance_path = write_render_provenance(
@@ -484,14 +717,24 @@ def render_review_video(db: Session, project_id: str) -> dict[str, Any]:
                 "target_lufs": AUDIO_TARGET_LUFS if keep_audio else None,
                 "true_peak_dbtp": AUDIO_TRUE_PEAK_DBTP if keep_audio else None,
                 "loudness_range_lu": AUDIO_LOUDNESS_RANGE if keep_audio else None,
+                "measured_input_lufs": loudness_input,
+                "measured_output_lufs": loudness_output,
+                "measured_output_true_peak_dbtp": output_true_peak,
+                "target_achieved": loudness_target_achieved,
+                "applied_gain_db": loudness_gain_db,
             },
             "container_metadata_stripped": True,
+            "subtitles": subtitle_record,
         },
+        container_tags=container_tags,
     )
     if not provenance_path:
-        warnings.append(
-            "The review video was rendered but its provenance sidecar could "
-            "not be written."
+        _discard_delivery(output_path)
+        return _blocked(
+            project_id,
+            "The rendered output was removed because its provenance sidecar "
+            "could not be written.",
+            metadata_status=metadata_status,
         )
 
     logger.info(
@@ -515,4 +758,12 @@ def render_review_video(db: Session, project_id: str) -> dict[str, Any]:
         "audio_codec": probe.get("audio_codec", "aac" if keep_audio else ""),
         "provenance_path": provenance_path,
         "embedded_metadata_keys": leaked,
+        "metadata_status": metadata_status,
+        "warning_metadata": override_warnings,
+        "delivery_validation": {
+            # The timeline lineage was already verified strictly above, so
+            # reaching here means the pipeline itself ran clean.
+            "pipeline_pass": True,
+            "delivery_spec_pass": not override_warnings and not material_warnings,
+        },
     }

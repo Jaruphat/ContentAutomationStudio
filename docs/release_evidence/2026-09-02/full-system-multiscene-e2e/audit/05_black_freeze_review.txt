@@ -1,0 +1,31 @@
+Input #0, mov,mp4,m4a,3gp,3g2,mj2, from 'C:/Users/jongp/Desktop/Thinkpad_and_PC_Sync/ContentAutomationStudio/backend/data/exports/5df52248-ce4b-4a76-8c81-a436b21b6b46/review.mp4':
+  Metadata:
+    major_brand     : isom
+    minor_version   : 512
+    compatible_brands: isomiso2avc1mp41
+    encoder         : Lavf62.12.102
+  Duration: 00:00:11.19, start: 0.000000, bitrate: 379 kb/s
+  Stream #0:0[0x1](und): Video: h264 (High) (avc1 / 0x31637661), yuv420p(progressive), 864x480 [SAR 1:1 DAR 9:5], 282 kb/s, 24 fps, 24 tbr, 12288 tbn, start 0.020996 (default)
+    Metadata:
+      handler_name    : VideoHandler
+  Stream #0:1[0x2](und): Audio: aac (LC) (mp4a / 0x6134706D), 48000 Hz, stereo, fltp, 90 kb/s (default)
+    Metadata:
+      handler_name    : SoundHandler
+Stream mapping:
+  Stream #0:0 -> #0:0 (h264 (native) -> wrapped_avframe (native))
+Press [q] to stop, [?] for help
+Output #0, null, to 'pipe:':
+  Metadata:
+    major_brand     : isom
+    minor_version   : 512
+    compatible_brands: isomiso2avc1mp41
+    encoder         : Lavf62.12.102
+  Stream #0:0(und): Video: wrapped_avframe, yuv420p(progressive), 864x480 [SAR 1:1 DAR 9:5], q=2-31, 200 kb/s, 24 fps, 24 tbn (default)
+    Metadata:
+      encoder         : Lavc62.28.102 wrapped_avframe
+      handler_name    : VideoHandler
+[Parsed_freezedetect_1 @ 0000027305922000] lavfi.freezedetect.freeze_start: 0.0209961
+[vf#0:0 @ 00000273051d9180] Reconfiguring filter graph because video parameters changed to yuv420p(tv, bt709), 864x480, unspecified alph
+[Parsed_freezedetect_1 @ 0000027305921e00] lavfi.freezedetect.freeze_start: 8.187988
+[out#0/null @ 00000273030a7d80] video:111KiB audio:0KiB subtitle:0KiB other streams:0KiB global headers:0KiB muxing overhead: unknown
+frame=  268 fps=0.0 q=-0.0 Lsize=N/A time=00:00:11.20 bitrate=N/A speed= 292x elapsed=0:00:00.03    

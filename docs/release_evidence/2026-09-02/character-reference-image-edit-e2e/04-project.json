@@ -1,0 +1,19 @@
+{
+  "id": "482fa596-0139-4c83-902e-44a7a20cd4e8",
+  "title": "Reference Bible Real Boogu E2E",
+  "objective": "Prove canonical reference upload and real local image editing",
+  "audience": "release audit",
+  "content_type": "image",
+  "aspect_ratio": "1:1",
+  "target_resolution": "512x512",
+  "target_duration_sec": 3.0,
+  "frame_rate": 24.0,
+  "language": "en",
+  "default_image_workflow_id": "75a73b44-5c6f-4661-87f6-26e66a639efd",
+  "default_video_workflow_id": null,
+  "status": "Draft",
+  "brief_text": "Keep one recurring blue paper boat visually identical.",
+  "plot_text": "",
+  "created_at": "2026-09-02T13:41:05.883133",
+  "updated_at": "2026-09-02T13:41:05.883133"
+}

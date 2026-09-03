@@ -182,6 +182,49 @@ class RealComfyUIProvider(ComfyUIProvider):
         except Exception as exc:
             raise RuntimeError(f"Failed to submit job to ComfyUI: {exc}") from exc
 
+    async def upload_reference_image(
+        self,
+        file_path: str,
+        *,
+        upload_name: str,
+        mime_type: str,
+    ) -> dict[str, Any]:
+        """Upload one validated reference into ComfyUI's input directory."""
+        normalized_name = upload_name.replace("\\", "/").strip("/")
+        parts = normalized_name.split("/")
+        if not normalized_name or any(part in ("", ".", "..") for part in parts):
+            raise RuntimeError("ComfyUI upload name must be a safe relative path")
+        filename = parts[-1]
+        subfolder = "/".join(parts[:-1])
+        try:
+            with open(file_path, "rb") as source:
+                files = {"image": (filename, source, mime_type)}
+                data = {
+                    "type": "input",
+                    "subfolder": subfolder,
+                    "overwrite": "true",
+                }
+                async with httpx.AsyncClient(timeout=30.0) as client:
+                    response = await client.post(
+                        f"{self._base_url}/upload/image", files=files, data=data
+                    )
+                    response.raise_for_status()
+                    uploaded = response.json()
+        except Exception as exc:
+            raise RuntimeError(f"Failed to upload reference image to ComfyUI: {exc}") from exc
+
+        name = str(uploaded.get("name") or "")
+        subfolder = str(uploaded.get("subfolder") or "").strip("/\\")
+        if not name:
+            raise RuntimeError(f"ComfyUI upload response has no image name: {uploaded}")
+        workflow_value = f"{subfolder}/{name}" if subfolder else name
+        return {
+            "name": name,
+            "subfolder": subfolder,
+            "type": str(uploaded.get("type") or "input"),
+            "workflow_value": workflow_value.replace("\\", "/"),
+        }
+
     async def get_job_status(self, prompt_id: str) -> JobStatus:
         """
         Poll ComfyUI /history/{prompt_id} for job status.

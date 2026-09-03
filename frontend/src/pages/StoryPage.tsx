@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import api from "../api/client";
 import AIGenerationPanel from "../components/AIGenerationPanel";
+import VisualReferenceBible from "../components/VisualReferenceBible";
 import { useAppState, useAppDispatch } from "../store/useProjectStore";
 import type {
   Project,
@@ -742,6 +743,8 @@ export default function StoryPage() {
           }}
         />
       )}
+
+      {currentProjectId && <VisualReferenceBible projectId={currentProjectId} />}
 
       {currentProjectId && (
         <Section

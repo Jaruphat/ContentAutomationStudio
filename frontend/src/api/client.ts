@@ -24,6 +24,9 @@ import type {
   LocationCreate,
   Style,
   StyleCreate,
+  ReferenceImage,
+  ReferenceSheet,
+  ReferenceSheetCreate,
   Scene,
   SceneCreate,
   Shot,
@@ -31,6 +34,7 @@ import type {
   Workflow,
   WorkflowAnalysis,
   GenerationJob,
+  GenerationRun,
   Take,
   TimelineItem,
   PreflightResult,
@@ -38,6 +42,7 @@ import type {
   RenderPlan,
   RenderResult,
   TimelineManifest,
+  SubtitleSettings,
   HealthStatus,
 } from "../types";
 
@@ -150,6 +155,29 @@ export const styles = {
 
   delete: (projectId: string, id: string) =>
     http.delete(`/projects/${projectId}/styles/${id}`).then((r) => r.data),
+};
+
+export const references = {
+  list: (projectId: string) =>
+    http.get<ReferenceSheet[]>(`/projects/${projectId}/references`).then((r) => r.data),
+  create: (projectId: string, data: ReferenceSheetCreate) =>
+    http.post<ReferenceSheet>(`/projects/${projectId}/references`, data).then((r) => r.data),
+  update: (projectId: string, sheetId: string, data: Partial<ReferenceSheetCreate>) =>
+    http.put<ReferenceSheet>(`/projects/${projectId}/references/${sheetId}`, data).then((r) => r.data),
+  delete: (projectId: string, sheetId: string, force = false) =>
+    http.delete(`/projects/${projectId}/references/${sheetId}`, { params: { force } }).then((r) => r.data),
+  uploadImage: (projectId: string, sheetId: string, file: File, role: "canonical" | "support" = "canonical", caption = "") => {
+    const body = new FormData();
+    body.append("file", file);
+    body.append("role", role);
+    body.append("caption", caption);
+    return http.post<ReferenceImage>(`/projects/${projectId}/references/${sheetId}/images`, body, {
+      headers: { "Content-Type": "multipart/form-data" },
+    }).then((r) => r.data);
+  },
+  deleteImage: (projectId: string, sheetId: string, imageId: string, force = false) =>
+    http.delete(`/projects/${projectId}/references/${sheetId}/images/${imageId}`, { params: { force } }).then((r) => r.data),
+  imageUrl: (image: ReferenceImage) => image.url,
 };
 
 // ── Scenes ───────────────────────────────────────────────────────────────
@@ -296,6 +324,24 @@ export const generation = {
       .get<GenerationJob[]>(`/projects/${projectId}/jobs`)
       .then((r) => r.data),
 
+  listRuns: (projectId: string, limit = 50) =>
+    http
+      .get<GenerationRun[]>(`/projects/${projectId}/runs`, { params: { limit } })
+      .then((r) => r.data),
+
+  currentRun: (projectId: string) =>
+    http
+      .get<GenerationRun | null>(`/projects/${projectId}/runs/current`)
+      .then((r) => r.data),
+
+  getRun: (runId: string) =>
+    http.get<GenerationRun>(`/runs/${runId}`).then((r) => r.data),
+
+  queueStatus: (projectId: string) =>
+    http
+      .get<QueueStatus>(`/projects/${projectId}/queue/status`)
+      .then((r) => r.data),
+
   // Jobs are addressed globally by id, not nested under a project.
   getJob: (jobId: string) =>
     http.get<GenerationJob>(`/jobs/${jobId}`).then((r) => r.data),
@@ -320,8 +366,12 @@ export const generation = {
 // ── Review (Takes) ───────────────────────────────────────────────────────
 
 export const review = {
-  listTakes: (projectId: string) =>
-    http.get<Take[]>(`/projects/${projectId}/takes`).then((r) => r.data),
+  listTakes: (projectId: string, runId?: string | null) =>
+    http
+      .get<Take[]>(`/projects/${projectId}/takes`, {
+        params: runId ? { run: runId } : undefined,
+      })
+      .then((r) => r.data),
 
   listShotTakes: (shotId: string) =>
     http.get<Take[]>(`/shots/${shotId}/takes`).then((r) => r.data),
@@ -345,6 +395,12 @@ export const review = {
       .post<GenerationJob>(`/shots/${shotId}/regenerate`, {
         confirm_paid_generation: confirmPaid,
       })
+      .then((r) => r.data),
+
+  /** Current single-shot route and price, including already-approved shots. */
+  regenerationEstimate: (shotId: string) =>
+    http
+      .get<GenerationEstimate>(`/shots/${shotId}/regenerate/estimate`)
       .then((r) => r.data),
 
   /**
@@ -395,6 +451,17 @@ export const timeline = {
     http
       .post<RenderResult>(`/projects/${projectId}/render`)
       .then((r) => r.data),
+};
+
+export const subtitles = {
+  get: (projectId: string) =>
+    http.get<SubtitleSettings>(`/projects/${projectId}/subtitles`).then((r) => r.data),
+  update: (projectId: string, settings: SubtitleSettings) =>
+    http.put<SubtitleSettings>(`/projects/${projectId}/subtitles`, settings).then((r) => r.data),
+  export: (projectId: string, format: "ass" | "srt") =>
+    http.get(`/projects/${projectId}/export/subtitles`, {
+      params: { format }, responseType: "blob",
+    }).then((r) => r.data as Blob),
 };
 
 // ── AI providers and story tasks ─────────────────────────────────────────
@@ -513,12 +580,14 @@ const api = {
   characters,
   locations,
   styles,
+  references,
   scenes,
   shots,
   workflows,
   generation,
   review,
   timeline,
+  subtitles,
   exports: exports_,
 };
 

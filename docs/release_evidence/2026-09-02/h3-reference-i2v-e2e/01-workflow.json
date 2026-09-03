@@ -1,0 +1,43 @@
+{
+  "id": "711d55b8-fc50-41b3-92eb-d706653fde4f",
+  "name": "H3 Video - I2V (API)",
+  "purpose": "image-to-video",
+  "source_json_path": "C:\\Users\\jongp\\Desktop\\Thinkpad_and_PC_Sync\\ContentAutomationStudio\\backend\\data\\workflows\\711d55b8-fc50-41b3-92eb-d706653fde4f_H3_Video_-_I2V__API_.json",
+  "source_format": "api",
+  "sha256_hash": "a742c6de241bd77d540767cf0ec2ce4bc084d701eeae85faf925ec79ccf75601",
+  "version": "1.0",
+  "required_models": [],
+  "required_custom_nodes": [],
+  "parameter_mapping": {
+    "positivePrompt": {
+      "nodeId": "105:104",
+      "field": "prompt"
+    },
+    "seed": {
+      "nodeId": "105:15",
+      "field": "noise_seed"
+    },
+    "referenceImage": {
+      "nodeId": "114",
+      "field": "image"
+    },
+    "aspectRatio": {
+      "nodeId": "115",
+      "field": "aspect_ratio"
+    },
+    "outputPrefix": {
+      "nodeId": "92",
+      "field": "filename_prefix"
+    }
+  },
+  "output_mapping": [
+    {
+      "nodeId": "92",
+      "type": "video"
+    }
+  ],
+  "tested_comfyui_version": "0.34.0",
+  "validation_status": "valid",
+  "created_at": "2026-09-01T09:23:24.463813",
+  "updated_at": "2026-09-02T14:04:53.321570"
+}

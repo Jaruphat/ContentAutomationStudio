@@ -193,6 +193,11 @@ def embedded_metadata_keys(file_path: str) -> list[str]:
     :func:`read_container_tags` for an empty result first.
     """
     tags = read_container_tags(file_path)
+    return embedded_metadata_keys_from_tags(tags)
+
+
+def embedded_metadata_keys_from_tags(tags: dict[str, Any]) -> list[str]:
+    """Classify disallowed keys from one already-verified ffprobe snapshot."""
     if not tags:
         return []
     keys: set[str] = set()

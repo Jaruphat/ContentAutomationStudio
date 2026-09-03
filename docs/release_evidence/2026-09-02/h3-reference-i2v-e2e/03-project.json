@@ -1,0 +1,19 @@
+{
+  "id": "e6cdd637-17b5-43f5-9281-9834ef51a9b7",
+  "title": "Reference Bible Real H3 I2V E2E",
+  "objective": "Prove the selected canonical image reaches H3 first_frame through CAS",
+  "audience": "release audit",
+  "content_type": "video",
+  "aspect_ratio": "9:5",
+  "target_resolution": "864x480",
+  "target_duration_sec": 5.2,
+  "frame_rate": 24.0,
+  "language": "en",
+  "default_image_workflow_id": null,
+  "default_video_workflow_id": "711d55b8-fc50-41b3-92eb-d706653fde4f",
+  "status": "Draft",
+  "brief_text": "Keep one blue paper boat and the child visually stable while the boat moves gently.",
+  "plot_text": "",
+  "created_at": "2026-09-02T14:05:03.518218",
+  "updated_at": "2026-09-02T14:05:03.518218"
+}

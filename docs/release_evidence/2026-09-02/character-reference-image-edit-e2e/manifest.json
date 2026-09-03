@@ -1,0 +1,39 @@
+{
+  "result": "PASS",
+  "project_id": "482fa596-0139-4c83-902e-44a7a20cd4e8",
+  "sheet_id": "034b46c7-a95b-4f2d-a110-5b86cc174e4a",
+  "reference_image_id": "d2ecd06d-6c69-460d-8c0c-d4eaff1a97ff",
+  "reference_sha256": "841ebf7cd1174f86c42f58839a79c1e140615125447d07eb97f228f66689d97e",
+  "shot_id": "8502453b-1a67-4416-a494-1534e3ff0f66",
+  "job_id": "403d6a68-b5c0-4c1b-81fa-96adf0acb63c",
+  "mock": false,
+  "provider": "comfyui",
+  "workflow_id": "75a73b44-5c6f-4661-87f6-26e66a639efd",
+  "workflow_sha256": "05d08b4b3485b4d8d20a5b575a492686efbf74cf7688a0d28e438ca604751a54",
+  "comfyui_prompt_id": "d20aad31-2648-4f62-b193-08f1dcc6dbef",
+  "take_id": "ec00689e-4ed5-40d6-8e99-6b7955a043eb",
+  "take_sha256": "ff479d031876fa2d224ec076778f79bd67d3d9baff630ecfc296193b02e10a47",
+  "prompt_revision": 1,
+  "prompt_sha256": "dc71b236a02a46f83e3c561a41f2755baf8ed64816bb005022d3b340b9b0dc64",
+  "reference_image_ids": [
+    "d2ecd06d-6c69-460d-8c0c-d4eaff1a97ff"
+  ],
+  "reference_sha256s": [
+    "841ebf7cd1174f86c42f58839a79c1e140615125447d07eb97f228f66689d97e"
+  ],
+  "source_sha256_before": "05d08b4b3485b4d8d20a5b575a492686efbf74cf7688a0d28e438ca604751a54",
+  "source_sha256_after": "05d08b4b3485b4d8d20a5b575a492686efbf74cf7688a0d28e438ca604751a54",
+  "source_unchanged": true,
+  "review_status": "Approved",
+  "timeline_item_id": "8e268eb2-9099-477b-a4fd-15b3a6c90f9a",
+  "delivery": {
+    "filename": "review.mp4",
+    "sha256": "d1704e6a861608af138d061f258e0b76e2ef8d5f4ca214e3b99b504cc116411f",
+    "codec": "h264",
+    "width": 512,
+    "height": 512,
+    "frame_rate": 24,
+    "duration_sec": 3.0,
+    "embedded_metadata_keys": []
+  }
+}

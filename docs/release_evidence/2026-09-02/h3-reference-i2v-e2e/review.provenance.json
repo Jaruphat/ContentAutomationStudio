@@ -1,0 +1,120 @@
+{
+  "kind": "cas.review_render.provenance",
+  "schema_version": 1,
+  "generated_at": "2026-09-02T14:16:20.748417+00:00",
+  "project": {
+    "id": "e6cdd637-17b5-43f5-9281-9834ef51a9b7",
+    "title": "Reference Bible Real H3 I2V E2E",
+    "target_resolution": "864x480",
+    "frame_rate": 24.0,
+    "aspect_ratio": "9:5"
+  },
+  "output": {
+    "path": "C:\\Users\\jongp\\Desktop\\Thinkpad_and_PC_Sync\\ContentAutomationStudio\\backend\\data\\exports\\e6cdd637-17b5-43f5-9281-9834ef51a9b7\\review.mp4",
+    "filename": "review.mp4",
+    "sha256": "88744edf45870a3a03f6068f156ba20bb31f7701405574c9482523612988e05c",
+    "size_bytes": 278914,
+    "probe": {
+      "width": 864,
+      "height": 480,
+      "codec": "h264",
+      "duration_sec": 5.205,
+      "frame_rate": 24.0,
+      "has_audio": true,
+      "audio_codec": "aac"
+    },
+    "container_tags": {
+      "format": {
+        "major_brand": "isom",
+        "minor_version": "512",
+        "compatible_brands": "isomiso2avc1mp41",
+        "encoder": "Lavf62.12.102"
+      },
+      "streams": [
+        {
+          "language": "und",
+          "handler_name": "VideoHandler"
+        },
+        {
+          "language": "und",
+          "handler_name": "SoundHandler"
+        }
+      ]
+    }
+  },
+  "render_settings": {
+    "width": 864,
+    "height": 480,
+    "frame_rate": 24.0,
+    "segment_count": 1,
+    "audio": {
+      "kept": true,
+      "sample_rate": 48000,
+      "channels": 2,
+      "bitrate": "192k",
+      "target_lufs": -16.0,
+      "true_peak_dbtp": -1.5,
+      "loudness_range_lu": 11.0,
+      "measured_input_lufs": -52.51,
+      "measured_output_lufs": -16.37,
+      "measured_output_true_peak_dbtp": -1.8,
+      "target_achieved": true,
+      "applied_gain_db": 36.51
+    },
+    "container_metadata_stripped": true
+  },
+  "segments": [
+    {
+      "segment_index": 0,
+      "timeline_order": 0,
+      "duration_sec": 5.167,
+      "take": {
+        "id": "46d72a7d-ef9b-4bf8-9345-9ef3222b17b3",
+        "source_path": "C:\\Users\\jongp\\Desktop\\Thinkpad_and_PC_Sync\\ContentAutomationStudio\\backend\\data\\generated\\c2937676-fcd0-49fd-aade-27251aa92b44_e6cdd637_b38d7914_00001_.mp4",
+        "source_sha256": "a65cda6364ee17b4eab0bbf67df83624c225261916560a5b1e43cbecc389a744",
+        "probe": {
+          "width": 864,
+          "height": 480,
+          "codec": "h264",
+          "duration_sec": 5.167,
+          "frame_rate": 24.0,
+          "has_audio": true,
+          "audio_codec": "aac"
+        },
+        "embedded_metadata_keys": [
+          "prompt"
+        ]
+      },
+      "scene": {
+        "id": "064b19ed-eb46-42a3-86f1-ee5d944ad61a",
+        "order": 1,
+        "title": "Boat begins moving"
+      },
+      "shot": {
+        "id": "b38d7914-60bf-4abc-b2ce-c6537a590bea",
+        "order": 1,
+        "generation_mode": "image-to-video",
+        "image_prompt": "",
+        "video_prompt": "Locked camera. Preserve the supplied first frame exactly: same child in blue raincoat, same single blue paper boat, same pond and sunset. Only the boat and nearby ripples move gently forward. No cuts or new subjects.",
+        "negative_prompt": "second boat, duplicate child, wardrobe change, boat color change, camera cut, flicker, deformation"
+      },
+      "job": {
+        "id": "009333cc-7c73-4269-b50d-0813ae3b5f45",
+        "seed": 42,
+        "comfyui_prompt_id": "c2937676-fcd0-49fd-aade-27251aa92b44",
+        "attempts": 1,
+        "workflow_snapshot_path": "C:\\Users\\jongp\\Desktop\\Thinkpad_and_PC_Sync\\ContentAutomationStudio\\backend\\data\\snapshots\\009333cc-7c73-4269-b50d-0813ae3b5f45.json",
+        "workflow_sha256": "a742c6de241bd77d540767cf0ec2ce4bc084d701eeae85faf925ec79ccf75601"
+      },
+      "workflow": {
+        "id": "711d55b8-fc50-41b3-92eb-d706653fde4f",
+        "name": "H3 Video - I2V (API)",
+        "purpose": "image-to-video",
+        "version": "1.0",
+        "source_format": "api",
+        "sha256_hash": "a742c6de241bd77d540767cf0ec2ce4bc084d701eeae85faf925ec79ccf75601"
+      }
+    }
+  ],
+  "note": "Container metadata is stripped from the delivered MP4 so the generator's embedded workflow graph, model filenames and prompt text are not shipped inside it. This sidecar is the provenance record."
+}

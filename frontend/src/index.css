@@ -374,3 +374,13 @@ html.theme-light :focus-visible {
     width 200ms ease-in-out,
     opacity 200ms ease-in-out;
 }
+
+/* Neutral video canvas for the subtitle preview in either application theme.
+   Inline-size containment makes cqw subtitle metrics scale with this frame,
+   rather than with the browser viewport. */
+.subtitle-preview {
+  container-type: inline-size;
+  background:
+    radial-gradient(circle at 70% 25%, rgba(129, 140, 248, 0.34), transparent 30%),
+    linear-gradient(145deg, #27272a, #09090b 70%);
+}

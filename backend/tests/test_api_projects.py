@@ -5,6 +5,9 @@ Validates full CRUD operations via FastAPI TestClient.
 """
 
 from fastapi.testclient import TestClient
+from sqlalchemy.orm import Session
+
+from app.models import GenerationRun, Workflow
 
 
 class TestCreateProject:
@@ -56,6 +59,16 @@ class TestCreateProject:
         )
         assert response.status_code == 422  # Validation error
 
+    def test_create_project_rejects_non_positive_or_odd_resolution(
+        self, client: TestClient
+    ):
+        for resolution in ("-10x-20", "1921x1081", "invalid"):
+            response = client.post(
+                "/api/projects",
+                json={"title": "Invalid resolution", "target_resolution": resolution},
+            )
+            assert response.status_code == 422, resolution
+
     def test_create_project_returns_uuid_id(self, client: TestClient):
         response = client.post(
             "/api/projects",
@@ -65,6 +78,59 @@ class TestCreateProject:
         data = response.json()
         # UUID should be 36 characters (8-4-4-4-12)
         assert len(data["id"]) == 36
+
+    def test_create_project_derives_resolution_from_explicit_aspect(
+        self, client: TestClient
+    ):
+        response = client.post(
+            "/api/projects", json={"title": "Vertical", "aspect_ratio": "9:16"}
+        )
+
+        assert response.status_code == 201
+        assert response.json()["target_resolution"] == "1080x1920"
+
+    def test_create_project_assigns_runnable_local_workflow_defaults(
+        self, client: TestClient, db_session: Session
+    ):
+        db_session.add_all(
+            [
+                Workflow(
+                    id="image-t2i",
+                    name="Local T2I",
+                    purpose="image",
+                    source_format="api",
+                    validation_status="valid",
+                    parameter_mapping={"positivePrompt": {}},
+                    output_mapping=[{"nodeId": "1", "type": "image"}],
+                ),
+                Workflow(
+                    id="image-edit",
+                    name="Reference image edit",
+                    purpose="image",
+                    source_format="api",
+                    validation_status="valid",
+                    parameter_mapping={"positivePrompt": {}, "referenceImage": {}},
+                    output_mapping=[{"nodeId": "2", "type": "image"}],
+                ),
+                Workflow(
+                    id="video-t2v",
+                    name="Local T2V",
+                    purpose="text-to-video",
+                    source_format="api",
+                    validation_status="valid",
+                    parameter_mapping={"positivePrompt": {}},
+                    output_mapping=[{"nodeId": "3", "type": "video"}],
+                ),
+            ]
+        )
+        db_session.commit()
+
+        response = client.post("/api/projects", json={"title": "Ready Project"})
+
+        assert response.status_code == 201
+        data = response.json()
+        assert data["default_image_workflow_id"] == "image-t2i"
+        assert data["default_video_workflow_id"] == "video-t2v"
 
 
 class TestListProjects:
@@ -219,6 +285,26 @@ class TestDeleteProject:
     def test_delete_nonexistent_project(self, client: TestClient):
         response = client.delete("/api/projects/nonexistent-id")
         assert response.status_code == 404
+
+    def test_delete_removes_generation_runs_without_sqlite_fk_cascades(
+        self, client: TestClient, db_session: Session, sample_project, sample_shot
+    ):
+        generated = client.post(
+            f"/api/projects/{sample_project.id}/generate", json={}
+        )
+        assert generated.status_code == 200, generated.text
+        run_id = generated.json()[0]["run_id"]
+        assert db_session.query(GenerationRun).filter(
+            GenerationRun.id == run_id
+        ).count() == 1
+
+        deleted = client.delete(f"/api/projects/{sample_project.id}")
+
+        assert deleted.status_code == 204
+        assert db_session.query(GenerationRun).filter(
+            GenerationRun.id == run_id
+        ).count() == 0
+        assert client.get(f"/api/runs/{run_id}").status_code == 404
 
     def test_delete_removes_from_list(self, client: TestClient):
         create_resp = client.post(

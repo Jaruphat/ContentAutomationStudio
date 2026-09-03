@@ -15,3 +15,5 @@ pytest-asyncio==0.24.0
 ruff==0.6.9
 # Used by test_e2e.py, which drives the running server over HTTP.
 requests==2.34.2
+# Unicode extended grapheme clusters for safe Thai/Indic/emoji subtitle wrapping.
+regex==2026.9.3

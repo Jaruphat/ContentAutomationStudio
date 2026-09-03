@@ -1,0 +1,114 @@
+{
+  "kind": "cas.review_render.provenance",
+  "schema_version": 1,
+  "generated_at": "2026-09-02T14:09:49.790257+00:00",
+  "project": {
+    "id": "482fa596-0139-4c83-902e-44a7a20cd4e8",
+    "title": "Reference Bible Real Boogu E2E",
+    "target_resolution": "512x512",
+    "frame_rate": 24.0,
+    "aspect_ratio": "1:1"
+  },
+  "output": {
+    "path": "C:\\Users\\jongp\\Desktop\\Thinkpad_and_PC_Sync\\ContentAutomationStudio\\backend\\data\\exports\\482fa596-0139-4c83-902e-44a7a20cd4e8\\review.mp4",
+    "filename": "review.mp4",
+    "sha256": "d1704e6a861608af138d061f258e0b76e2ef8d5f4ca214e3b99b504cc116411f",
+    "size_bytes": 21117,
+    "probe": {
+      "width": 512,
+      "height": 512,
+      "codec": "h264",
+      "duration_sec": 3.0,
+      "frame_rate": 24.0,
+      "has_audio": false,
+      "audio_codec": ""
+    },
+    "container_tags": {
+      "format": {
+        "major_brand": "isom",
+        "minor_version": "512",
+        "compatible_brands": "isomiso2avc1mp41",
+        "encoder": "Lavf62.12.102"
+      },
+      "streams": [
+        {
+          "language": "und",
+          "handler_name": "VideoHandler"
+        }
+      ]
+    }
+  },
+  "render_settings": {
+    "width": 512,
+    "height": 512,
+    "frame_rate": 24.0,
+    "segment_count": 1,
+    "audio": {
+      "kept": false,
+      "sample_rate": 0,
+      "channels": 0,
+      "bitrate": "",
+      "target_lufs": null,
+      "true_peak_dbtp": null,
+      "loudness_range_lu": null,
+      "measured_input_lufs": null,
+      "measured_output_lufs": null,
+      "measured_output_true_peak_dbtp": null,
+      "target_achieved": null,
+      "applied_gain_db": null
+    },
+    "container_metadata_stripped": true
+  },
+  "segments": [
+    {
+      "segment_index": 0,
+      "timeline_order": 0,
+      "duration_sec": 3.0,
+      "take": {
+        "id": "ec00689e-4ed5-40d6-8e99-6b7955a043eb",
+        "source_path": "C:\\Users\\jongp\\Desktop\\Thinkpad_and_PC_Sync\\ContentAutomationStudio\\backend\\data\\generated\\d20aad31-2648-4f62-b193-08f1dcc6dbef_482fa596_8502453b_00001.png",
+        "source_sha256": "ff479d031876fa2d224ec076778f79bd67d3d9baff630ecfc296193b02e10a47",
+        "probe": {
+          "width": 512,
+          "height": 512,
+          "codec": "png",
+          "duration_sec": 0.0,
+          "frame_rate": 25.0,
+          "has_audio": false,
+          "audio_codec": ""
+        },
+        "embedded_metadata_keys": []
+      },
+      "scene": {
+        "id": "2bbe070b-dba8-484a-82a6-7e22b484c81c",
+        "order": 1,
+        "title": "Boat identity lock"
+      },
+      "shot": {
+        "id": "8502453b-1a67-4416-a494-1534e3ff0f66",
+        "order": 1,
+        "generation_mode": "image",
+        "image_prompt": "Edit the supplied reference frame. Keep the existing child, yellow raincoat, pond, composition, and exactly one paper boat. Make that single boat medium blue while preserving its folds and scale. Remove any additional boats. Natural warm late-afternoon light.",
+        "video_prompt": "",
+        "negative_prompt": "duplicate boat, two boats, white boat, dark navy boat, changed child, extra limbs, text, watermark"
+      },
+      "job": {
+        "id": "403d6a68-b5c0-4c1b-81fa-96adf0acb63c",
+        "seed": 42,
+        "comfyui_prompt_id": "d20aad31-2648-4f62-b193-08f1dcc6dbef",
+        "attempts": 1,
+        "workflow_snapshot_path": "C:\\Users\\jongp\\Desktop\\Thinkpad_and_PC_Sync\\ContentAutomationStudio\\backend\\data\\snapshots\\403d6a68-b5c0-4c1b-81fa-96adf0acb63c.json",
+        "workflow_sha256": "05d08b4b3485b4d8d20a5b575a492686efbf74cf7688a0d28e438ca604751a54"
+      },
+      "workflow": {
+        "id": "75a73b44-5c6f-4661-87f6-26e66a639efd",
+        "name": "Boogu Image Edit INT8 (Reference Conditioned)",
+        "purpose": "image",
+        "version": "1.0-reference.1",
+        "source_format": "api",
+        "sha256_hash": "05d08b4b3485b4d8d20a5b575a492686efbf74cf7688a0d28e438ca604751a54"
+      }
+    }
+  ],
+  "note": "Container metadata is stripped from the delivered MP4 so the generator's embedded workflow graph, model filenames and prompt text are not shipped inside it. This sidecar is the provenance record."
+}

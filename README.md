@@ -130,12 +130,14 @@ cd backend
 python -m pytest tests/ -q
 ```
 
-429 tests covering the data model, prompt compiler, workflow registry and
+869 tests covering the data model, prompt compiler, workflow registry and
 mapping, workflow format detection, node/model inventory and candidate mapping
-derivation, dependency checking, job payload construction, queue state and
-retry policy, error classification, the review API, schema migration, and the
-FFmpeg render. The analysis heuristics are also exercised against the three
-real ComfyUI exports in `workflows/source/ui/`, skipping if absent.
+derivation, dependency checking, immutable generation-run grouping, persisted
+queue pause/restart state, reference conditioning and provenance, job payload
+construction, queue state and retry policy, error classification, the review
+API, additive schema migration, and the FFmpeg render. The analysis heuristics
+are also exercised against the three real ComfyUI exports in
+`workflows/source/ui/`, skipping if absent.
 Tests redirect `CAS_DATA_DIR` to a temporary directory, so running them leaves
 no files in your working tree. Render tests that shell out to FFmpeg skip
 themselves automatically when it is not installed.

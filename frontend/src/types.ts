@@ -46,6 +46,35 @@ export type ExportFormat =
   | "timeline"
   | "archive";
 
+export type SubtitleMode = "off" | "soft" | "burn_in";
+export type SubtitlePreset = "clean" | "cinematic" | "social_bold" | "thai_friendly";
+export type SubtitlePosition = "top" | "middle" | "bottom";
+export type SubtitleFont =
+  | "Segoe UI"
+  | "Leelawadee UI"
+  | "Tahoma"
+  | "Arial"
+  | "Noto Sans Thai";
+
+export interface SubtitleSettings {
+  mode: SubtitleMode;
+  preset: SubtitlePreset;
+  font_family: SubtitleFont;
+  font_size: number;
+  text_color: string;
+  outline_color: string;
+  shadow_color: string;
+  background_color: string;
+  bold: boolean;
+  italic: boolean;
+  outline_width: number;
+  shadow_depth: number;
+  background_box: boolean;
+  position: SubtitlePosition;
+  vertical_margin: number;
+  max_chars_per_line: number;
+}
+
 // ── Core entities ────────────────────────────────────────────────────────
 
 export interface Project {
@@ -111,6 +140,48 @@ export interface Style {
   updated_at: string;
 }
 
+export type ReferenceSheetKind = "character" | "prop" | "location";
+export type ReferenceImageRole = "canonical" | "support";
+
+export interface ReferenceImage {
+  id: string;
+  sheet_id: string;
+  project_id: string;
+  role: ReferenceImageRole;
+  original_filename: string;
+  stored_filename: string;
+  mime_type: string;
+  size_bytes: number;
+  width: number;
+  height: number;
+  sha256: string;
+  caption: string;
+  provenance: Record<string, unknown>;
+  url: string;
+  created_at: string;
+}
+
+export interface ReferenceSheet {
+  id: string;
+  project_id: string;
+  kind: ReferenceSheetKind;
+  name: string;
+  subject_ref_id: string | null;
+  canonical_description: string;
+  identity_tokens: string;
+  negative_tokens: string;
+  notes: string;
+  revision: number;
+  content_sha256: string;
+  images: ReferenceImage[];
+  created_at: string;
+  updated_at: string;
+}
+
+export type ReferenceSheetCreate = Partial<
+  Omit<ReferenceSheet, "id" | "project_id" | "revision" | "content_sha256" | "images" | "created_at" | "updated_at">
+> & Pick<ReferenceSheet, "kind" | "name">;
+
 export interface Scene {
   id: string;
   project_id: string;
@@ -154,6 +225,12 @@ export interface Shot {
   image_model: string;
   seed_policy: string;
   status: ShotStatus;
+  prompt_revision: number;
+  prompt_sha256: string;
+  content_sha256: string;
+  reference_sha256s: string[];
+  generated_revision: number;
+  is_stale: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -242,6 +319,7 @@ export interface WorkflowAnalysis {
 export interface GenerationJob {
   id: string;
   shot_id: string;
+  run_id: string | null;
   workflow_id: string | null;
   workflow_version: string;
   /** Exact graph submitted for this job, kept for reproducibility. */
@@ -273,6 +351,7 @@ export interface Take {
   id: string;
   shot_id: string;
   job_id: string | null;
+  run_id: string | null;
   file_path: string;
   thumbnail_path: string;
   duration_sec: number;
@@ -294,6 +373,48 @@ export interface Take {
   created_at: string;
 }
 
+export interface GenerationRunJob {
+  job_id: string;
+  run_id: string;
+  shot_id: string;
+  scene_id: string | null;
+  scene_name: string;
+  shot_name: string;
+  status: JobStatus;
+  attempts: number;
+  error_message: string | null;
+  media_provider_id: MediaProviderId;
+  media_model: string;
+  seed: number | null;
+  created_at: string | null;
+  completed_at: string | null;
+  take_id: string | null;
+  take_review_status: ReviewStatus | null;
+  thumbnail_url: string | null;
+}
+
+export interface GenerationRun {
+  id: string;
+  project_id: string;
+  kind: string;
+  sequence: number;
+  label: string;
+  created_at: string;
+  requested_job_count: number;
+  shot_count: number;
+  total_jobs: number;
+  queued: number;
+  running: number;
+  completed: number;
+  failed: number;
+  cancelled: number;
+  status: JobStatus;
+  terminal: boolean;
+  pending_take_count: number;
+  ready_for_review: boolean;
+  jobs: GenerationRunJob[];
+}
+
 export interface TimelineItem {
   id: string;
   project_id: string;
@@ -307,6 +428,15 @@ export interface TimelineItem {
   transition_out: string;
   created_at: string;
   updated_at: string;
+  /* Resolved by the backend so a row reads as a scene and a shot, not as two
+     truncated identifiers. */
+  scene_id: string | null;
+  scene_title: string;
+  shot_name: string;
+  /** Only set when the take's media is really servable. */
+  thumbnail_url: string | null;
+  /** This row's take was accepted under an explicit aspect waiver. */
+  waived: boolean;
 }
 
 // ── Derived / request / response types ───────────────────────────────────
@@ -359,6 +489,38 @@ export interface TimelineManifest {
   items: TimelineItem[];
   total_duration_sec: number;
   item_count: number;
+  warnings: DeliveryWarning[];
+  delivery_validation: DeliveryValidation;
+  coverage: TimelineCoverage;
+}
+
+/** One shot the build left off the cut, and the next step for it. */
+export interface TimelineCoverageEntry {
+  shot_id: string;
+  scene_id: string | null;
+  scene_title: string;
+  shot_name: string;
+  shot_order: number;
+  reason: string;
+}
+
+export interface TimelineCoverage {
+  total_shots: number;
+  covered_shots: number;
+  missing: TimelineCoverageEntry[];
+}
+
+export interface DeliveryWarning {
+  code: string;
+  message: string;
+  take_ids: string[];
+  waived_from_take_ids: string[];
+  waiver_reasons: string[];
+}
+
+export interface DeliveryValidation {
+  pipeline_pass: boolean;
+  delivery_spec_pass: boolean;
 }
 
 export interface RenderSegment {
@@ -377,6 +539,8 @@ export interface RenderPlan {
   ffmpeg_available: boolean;
   commands: string[];
   warnings: string[];
+  warning_metadata: DeliveryWarning[];
+  delivery_validation: DeliveryValidation;
 }
 
 /** Result of actually executing the render with FFmpeg. */
@@ -392,6 +556,9 @@ export interface RenderResult {
   duration_sec: number;
   codec: string;
   size_bytes: number;
+  /** Structured form of any waiver carried by the rendered takes. */
+  warning_metadata: DeliveryWarning[];
+  delivery_validation: DeliveryValidation;
 }
 
 /** Queue counters returned by the pause/resume endpoints. */
@@ -402,6 +569,7 @@ export interface QueueStatus {
   running: number;
   completed: number;
   failed: number;
+  cancelled: number;
 }
 
 export interface ComfyUIHealth {

@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import Project, Scene
 from app.schemas import SceneCreate, SceneReorderRequest, SceneResponse, SceneUpdate
+from app.services import revisions
 
 router = APIRouter(prefix="/api/projects/{project_id}/scenes", tags=["scenes"])
 
@@ -98,6 +99,7 @@ def update_scene(
         setattr(scene, key, value)
     scene.updated_at = datetime.now(timezone.utc)
     db.commit()
+    revisions.refresh_project(db, project_id)
     db.refresh(scene)
     return scene
 

@@ -1,0 +1,264 @@
+{
+  "kind": "cas.full_system_multiscene_e2e.media_phase",
+  "schema_version": 1,
+  "completed_at": "2026-09-02T10:27:16.169899+00:00",
+  "elapsed_sec": 342.344,
+  "project_id": "5df52248-ce4b-4a76-8c81-a436b21b6b46",
+  "comfyui": {
+    "version": "0.34.0",
+    "mock": false
+  },
+  "storyboard": [
+    {
+      "scene_id": "c5e466d3-e637-44e7-89d6-a32fc17d6858",
+      "scene_order": 0,
+      "scene_title": "Folding the Paper Boat",
+      "scene_summary": "At the misty pond edge at dawn, the child in a blue raincoat finishes folding a white paper boat, their hands careful and focused.",
+      "shot_id": "add1126f-1103-47bb-b89e-ac8a3cff7ae0",
+      "shot_order": 0,
+      "generation_mode": "image",
+      "image_prompt": "Child, short dark hair, blue raincoat, rubber boots, round face, sitting at the grassy misty edge of Dawn Pond, carefully finishing folding a small white paper boat with focused gentle hands, medium close-up, eye level framing, 50mm lens, shallow depth of field, soft natural dawn light with gentle mist over calm water reflecting muted blues, grays, and greens, sparse trees in background creating a hazy atmosphere.",
+      "video_prompt": ""
+    },
+    {
+      "scene_id": "b2514801-6241-41f7-9d87-af69d139b53b",
+      "scene_order": 1,
+      "scene_title": "Boat Set Adrift",
+      "scene_summary": "The child gently sets the white paper boat on the still pond, and the boat begins to drift away across the calm surface.",
+      "shot_id": "9b56cb9b-6218-4d9c-9d72-886828e20655",
+      "shot_order": 0,
+      "generation_mode": "video",
+      "image_prompt": "Child, short dark hair, blue raincoat, rubber boots, round face, at the misty grassy edge of Dawn Pond, hand gently releasing a small white paper boat onto the still calm water, medium shot from slightly high angle, 35mm lens, shallow depth of field, soft diffuse dawn light with muted blues and greens, calm reflective water with gentle ripples, sparse trees and misty atmosphere.",
+      "video_prompt": "The child's hand slowly releases the white paper boat onto the calm pond water; the boat begins drifting gently away with soft ripples; the camera slowly tracks the boat's rightward movement at a steady pace, maintaining shallow focus and misty background."
+    },
+    {
+      "scene_id": "6780a0d0-aae5-4842-9106-9c6111dc1037",
+      "scene_order": 2,
+      "scene_title": "Sunlit Arrival",
+      "scene_summary": "The white paper boat drifts into a band of golden sunlight on the pond, while the child in the blue raincoat watches from the grassy shore, hope reflected in their eyes.",
+      "shot_id": "fef81802-ceb3-4982-8034-6d31de8cf5fe",
+      "shot_order": 0,
+      "generation_mode": "image",
+      "image_prompt": "Small white paper boat floating on calm Dawn Pond water, drifting into a band of soft golden sunlight breaking through morning mist, with the Child, short dark hair, blue raincoat, rubber boots, round face, standing quietly on the grassy misty shore watching, wide shot, eye level framing, 35mm lens, shallow depth of field, warm muted greens and blues with gentle cinematic atmosphere and soft natural light.",
+      "video_prompt": ""
+    }
+  ],
+  "jobs": [
+    {
+      "id": "632308c1-0d0c-4c4a-8d92-97f0abce86e6",
+      "shot_id": "fef81802-ceb3-4982-8034-6d31de8cf5fe",
+      "status": "Completed",
+      "attempts": 1,
+      "comfyui_prompt_id": "32c1fc90-9a42-426a-97cc-9f205a1897e1",
+      "media_provider_id": "comfyui",
+      "media_model": "workflow"
+    },
+    {
+      "id": "39310ea1-4822-472c-aae5-37cc60ad3705",
+      "shot_id": "add1126f-1103-47bb-b89e-ac8a3cff7ae0",
+      "status": "Completed",
+      "attempts": 1,
+      "comfyui_prompt_id": "e909fb3a-00b8-490b-aaa0-a9bab4f8873a",
+      "media_provider_id": "comfyui",
+      "media_model": "workflow"
+    },
+    {
+      "id": "308b224a-513b-4774-93be-7ef227505a34",
+      "shot_id": "9b56cb9b-6218-4d9c-9d72-886828e20655",
+      "status": "Completed",
+      "attempts": 1,
+      "comfyui_prompt_id": "87f6aff0-a2ef-46e9-8956-7418d9fa26a0",
+      "media_provider_id": "comfyui",
+      "media_model": "workflow"
+    },
+    {
+      "id": "fa0d526e-dbb2-48eb-9b07-8ede292c1b30",
+      "shot_id": "fef81802-ceb3-4982-8034-6d31de8cf5fe",
+      "status": "Completed",
+      "attempts": 1,
+      "comfyui_prompt_id": "9dd9a330-2ff8-4c91-93c3-2b1e76a08e54",
+      "media_provider_id": "comfyui",
+      "media_model": "workflow"
+    }
+  ],
+  "takes": [
+    {
+      "id": "19ccc0f0-41ad-433e-8cbc-09dcabc7f76d",
+      "shot_id": "fef81802-ceb3-4982-8034-6d31de8cf5fe",
+      "job_id": "632308c1-0d0c-4c4a-8d92-97f0abce86e6",
+      "review_status": "Approved",
+      "file_path": "C:\\Users\\jongp\\Desktop\\Thinkpad_and_PC_Sync\\ContentAutomationStudio\\backend\\data\\generated\\32c1fc90-9a42-426a-97cc-9f205a1897e1_5df52248_fef81802_00002_.png",
+      "duration_sec": 0.0,
+      "width": 864,
+      "height": 480,
+      "frame_rate": 25.0,
+      "codec": "png"
+    },
+    {
+      "id": "7bcdcf55-5efe-42c8-9dba-43d8aa456cc4",
+      "shot_id": "fef81802-ceb3-4982-8034-6d31de8cf5fe",
+      "job_id": "fa0d526e-dbb2-48eb-9b07-8ede292c1b30",
+      "review_status": "Rejected",
+      "file_path": "C:\\Users\\jongp\\Desktop\\Thinkpad_and_PC_Sync\\ContentAutomationStudio\\backend\\data\\generated\\9dd9a330-2ff8-4c91-93c3-2b1e76a08e54_5df52248_fef81802_00001_.png",
+      "duration_sec": 0.0,
+      "width": 864,
+      "height": 480,
+      "frame_rate": 25.0,
+      "codec": "png"
+    },
+    {
+      "id": "aad3ebf0-db64-426c-9077-7777040fe938",
+      "shot_id": "9b56cb9b-6218-4d9c-9d72-886828e20655",
+      "job_id": "308b224a-513b-4774-93be-7ef227505a34",
+      "review_status": "Approved",
+      "file_path": "C:\\Users\\jongp\\Desktop\\Thinkpad_and_PC_Sync\\ContentAutomationStudio\\backend\\data\\generated\\87f6aff0-a2ef-46e9-8956-7418d9fa26a0_5df52248_9b56cb9b_00001_.mp4",
+      "duration_sec": 5.167,
+      "width": 864,
+      "height": 480,
+      "frame_rate": 24.0,
+      "codec": "h264"
+    },
+    {
+      "id": "1a1bb03e-4e3b-49e3-bc47-2417ebd9522e",
+      "shot_id": "add1126f-1103-47bb-b89e-ac8a3cff7ae0",
+      "job_id": "39310ea1-4822-472c-aae5-37cc60ad3705",
+      "review_status": "Approved",
+      "file_path": "C:\\Users\\jongp\\Desktop\\Thinkpad_and_PC_Sync\\ContentAutomationStudio\\backend\\data\\generated\\e909fb3a-00b8-490b-aaa0-a9bab4f8873a_5df52248_add1126f_00001_.png",
+      "duration_sec": 0.0,
+      "width": 864,
+      "height": 480,
+      "frame_rate": 25.0,
+      "codec": "png"
+    }
+  ],
+  "review_path": {
+    "approved_initial_take_ids": [
+      "1a1bb03e-4e3b-49e3-bc47-2417ebd9522e",
+      "aad3ebf0-db64-426c-9077-7777040fe938"
+    ],
+    "rejected_take_id": "7bcdcf55-5efe-42c8-9dba-43d8aa456cc4",
+    "regeneration_job_id": "632308c1-0d0c-4c4a-8d92-97f0abce86e6",
+    "approved_regenerated_take_id": "19ccc0f0-41ad-433e-8cbc-09dcabc7f76d"
+  },
+  "timeline": {
+    "project_id": "5df52248-ce4b-4a76-8c81-a436b21b6b46",
+    "items": [
+      {
+        "id": "368ec533-26bc-4ecb-8836-b210a320e748",
+        "project_id": "5df52248-ce4b-4a76-8c81-a436b21b6b46",
+        "shot_id": "add1126f-1103-47bb-b89e-ac8a3cff7ae0",
+        "take_id": "1a1bb03e-4e3b-49e3-bc47-2417ebd9522e",
+        "order": 0,
+        "in_point_sec": 0.0,
+        "out_point_sec": 3.0,
+        "duration_sec": 3.0,
+        "transition_in": "cut",
+        "transition_out": "cut",
+        "created_at": "2026-09-02T10:27:14.769671",
+        "updated_at": "2026-09-02T10:27:14.769671"
+      },
+      {
+        "id": "c2da2804-c557-4e6d-b210-df50c6f1c740",
+        "project_id": "5df52248-ce4b-4a76-8c81-a436b21b6b46",
+        "shot_id": "9b56cb9b-6218-4d9c-9d72-886828e20655",
+        "take_id": "aad3ebf0-db64-426c-9077-7777040fe938",
+        "order": 1,
+        "in_point_sec": 3.0,
+        "out_point_sec": 8.167,
+        "duration_sec": 5.167,
+        "transition_in": "cut",
+        "transition_out": "cut",
+        "created_at": "2026-09-02T10:27:14.769671",
+        "updated_at": "2026-09-02T10:27:14.769671"
+      },
+      {
+        "id": "62ec5711-1410-41ff-b0ea-85e3327968bc",
+        "project_id": "5df52248-ce4b-4a76-8c81-a436b21b6b46",
+        "shot_id": "fef81802-ceb3-4982-8034-6d31de8cf5fe",
+        "take_id": "19ccc0f0-41ad-433e-8cbc-09dcabc7f76d",
+        "order": 2,
+        "in_point_sec": 8.167,
+        "out_point_sec": 11.167,
+        "duration_sec": 3.0,
+        "transition_in": "cut",
+        "transition_out": "cut",
+        "created_at": "2026-09-02T10:27:14.769671",
+        "updated_at": "2026-09-02T10:27:14.769671"
+      }
+    ],
+    "total_duration_sec": 11.167,
+    "item_count": 3
+  },
+  "render": {
+    "path": "C:\\Users\\jongp\\Desktop\\Thinkpad_and_PC_Sync\\ContentAutomationStudio\\backend\\data\\exports\\5df52248-ce4b-4a76-8c81-a436b21b6b46\\review.mp4",
+    "provenance_path": "C:\\Users\\jongp\\Desktop\\Thinkpad_and_PC_Sync\\ContentAutomationStudio\\backend\\data\\exports\\5df52248-ce4b-4a76-8c81-a436b21b6b46\\review.provenance.json",
+    "sha256": "9dd5a119b2f654d6bc0182a5b5d421f679020de28917abdb718fc69d051e5948",
+    "provenance_sha256": "8b54eb0f6f368b7c840ed81a8184573dcde86515c06ba2d7aede28d9359fa016",
+    "probe": {
+      "programs": [],
+      "stream_groups": [],
+      "streams": [
+        {
+          "index": 0,
+          "codec_name": "h264",
+          "codec_type": "video",
+          "width": 864,
+          "height": 480,
+          "r_frame_rate": "24/1",
+          "avg_frame_rate": "274432/11435",
+          "start_time": "0.020996",
+          "duration": "11.166992",
+          "nb_frames": "268"
+        },
+        {
+          "index": 1,
+          "codec_name": "aac",
+          "codec_type": "audio",
+          "sample_rate": "48000",
+          "channels": 2,
+          "channel_layout": "stereo",
+          "r_frame_rate": "0/0",
+          "avg_frame_rate": "0/0",
+          "start_time": "0.000000",
+          "duration": "11.188333",
+          "nb_frames": "528"
+        }
+      ],
+      "format": {
+        "start_time": "0.000000",
+        "duration": "11.188333",
+        "size": "530358"
+      }
+    }
+  },
+  "exports": {
+    "storyboard_json": {
+      "status": 200,
+      "bytes": 5353
+    },
+    "storyboard_csv": {
+      "status": 200,
+      "bytes": 4494
+    },
+    "storyboard_markdown": {
+      "status": 200,
+      "bytes": 2910
+    },
+    "prompts": {
+      "status": 200,
+      "bytes": 16437
+    },
+    "generation_manifest": {
+      "status": 200,
+      "bytes": 10082
+    },
+    "timeline_manifest": {
+      "status": 200,
+      "bytes": 3465
+    },
+    "project_archive": {
+      "status": 200,
+      "bytes": 15854
+    }
+  }
+}

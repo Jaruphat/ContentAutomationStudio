@@ -1,0 +1,181 @@
+{
+  "workflow_id": "75a73b44-5c6f-4661-87f6-26e66a639efd",
+  "name": "Boogu Image Edit INT8 (Reference Conditioned)",
+  "format": "api",
+  "format_confidence": 1.0,
+  "format_reasons": [
+    "All 15 top-level entries carry 'class_type', which is the API prompt format.",
+    "This shape can be submitted to /prompt."
+  ],
+  "submittable": true,
+  "blocking_reason": "",
+  "node_count": 15,
+  "subgraphs": [],
+  "required_node_classes": [
+    "BasicScheduler",
+    "CLIPLoader",
+    "EmptyLatentImage",
+    "GetImageSize",
+    "ImageCompare",
+    "KSamplerSelect",
+    "LoadImage",
+    "ModelSamplingAuraFlow",
+    "ResizeImageMaskNode",
+    "SamplerCustom",
+    "SaveImageAdvanced",
+    "TextEncodeBooguEdit",
+    "UNETLoader",
+    "VAEDecode",
+    "VAELoader"
+  ],
+  "frontend_only_node_classes": [],
+  "required_models": [
+    "ae.safetensors",
+    "boogu_image_edit_int8_convrot.safetensors",
+    "qwen3vl_8b_fp8_scaled.safetensors"
+  ],
+  "mapping_candidates": [
+    {
+      "logical_field": "negativePrompt",
+      "node_class": "TextEncodeBooguEdit",
+      "input_name": "negative_prompt",
+      "node_id": "45:36",
+      "match_kind": "exact-name",
+      "confidence": 1.0,
+      "note": "TextEncodeBooguEdit node 45:36, input 'negative_prompt'.",
+      "exposed": true,
+      "auto_applicable": true
+    },
+    {
+      "logical_field": "outputPrefix",
+      "node_class": "SaveImageAdvanced",
+      "input_name": "filename_prefix",
+      "node_id": "55",
+      "match_kind": "exact-name",
+      "confidence": 1.0,
+      "note": "SaveImageAdvanced node 55, input 'filename_prefix'.",
+      "exposed": true,
+      "auto_applicable": true
+    },
+    {
+      "logical_field": "positivePrompt",
+      "node_class": "TextEncodeBooguEdit",
+      "input_name": "prompt",
+      "node_id": "45:36",
+      "match_kind": "exact-name",
+      "confidence": 1.0,
+      "note": "TextEncodeBooguEdit node 45:36, input 'prompt'.",
+      "exposed": true,
+      "auto_applicable": true
+    },
+    {
+      "logical_field": "seed",
+      "node_class": "SamplerCustom",
+      "input_name": "noise_seed",
+      "node_id": "45:21",
+      "match_kind": "exact-name",
+      "confidence": 0.95,
+      "note": "SamplerCustom node 45:21, input 'noise_seed'.",
+      "exposed": true,
+      "auto_applicable": true
+    },
+    {
+      "logical_field": "referenceImage",
+      "node_class": "LoadImage",
+      "input_name": "image",
+      "node_id": "32",
+      "match_kind": "upstream-widget",
+      "confidence": 0.35,
+      "note": "TextEncodeBooguEdit node 45:36 has 'images.image_1' wired from LoadImage node 32, so it cannot be set directly. Set 'image' on that node instead, or detach the link in ComfyUI and re-export.",
+      "exposed": false,
+      "auto_applicable": true
+    }
+  ],
+  "alternate_candidates": [
+    {
+      "logical_field": "negativePrompt",
+      "node_class": "TextEncodeBooguEdit",
+      "input_name": "negative_prompt",
+      "node_id": "45:36",
+      "match_kind": "upstream-widget",
+      "confidence": 0.45,
+      "note": "SamplerCustom node 45:21 has 'negative' wired from TextEncodeBooguEdit node 45:36, so it cannot be set directly. Set 'negative_prompt' on that node instead, or detach the link in ComfyUI and re-export.",
+      "exposed": false,
+      "auto_applicable": false
+    },
+    {
+      "logical_field": "positivePrompt",
+      "node_class": "TextEncodeBooguEdit",
+      "input_name": "prompt",
+      "node_id": "45:36",
+      "match_kind": "upstream-widget",
+      "confidence": 0.45,
+      "note": "SamplerCustom node 45:21 has 'positive' wired from TextEncodeBooguEdit node 45:36, so it cannot be set directly. Set 'prompt' on that node instead, or detach the link in ComfyUI and re-export.",
+      "exposed": false,
+      "auto_applicable": false
+    }
+  ],
+  "unmapped_logical_fields": [
+    "width",
+    "height",
+    "frames"
+  ],
+  "suggested_parameter_mapping": {
+    "negativePrompt": {
+      "nodeId": "45:36",
+      "field": "negative_prompt"
+    },
+    "outputPrefix": {
+      "nodeId": "55",
+      "field": "filename_prefix"
+    },
+    "positivePrompt": {
+      "nodeId": "45:36",
+      "field": "prompt"
+    },
+    "seed": {
+      "nodeId": "45:21",
+      "field": "noise_seed"
+    },
+    "referenceImage": {
+      "nodeId": "32",
+      "field": "image"
+    }
+  },
+  "dependencies": {
+    "checked": true,
+    "reason": "",
+    "satisfied": true,
+    "summary": "All 15 node class(es) and 3 model file(s) are available.",
+    "node_classes_present": [
+      "BasicScheduler",
+      "CLIPLoader",
+      "EmptyLatentImage",
+      "GetImageSize",
+      "ImageCompare",
+      "KSamplerSelect",
+      "LoadImage",
+      "ModelSamplingAuraFlow",
+      "ResizeImageMaskNode",
+      "SamplerCustom",
+      "SaveImageAdvanced",
+      "TextEncodeBooguEdit",
+      "UNETLoader",
+      "VAEDecode",
+      "VAELoader"
+    ],
+    "node_classes_missing": [],
+    "node_classes_frontend_only": [],
+    "models_present": [
+      "ae.safetensors",
+      "boogu_image_edit_int8_convrot.safetensors",
+      "qwen3vl_8b_fp8_scaled.safetensors"
+    ],
+    "models_missing": [],
+    "catalogue_size": 1800
+  },
+  "warnings": [
+    "Candidate(s) for referenceImage target an input that is wired from another node, so the proposal drives the upstream node's widget instead. Confirm each one before generating.",
+    "'referenceImage' would map to GetImageSize node 46 input 'image', but that input is wired from ResizeImageMaskNode node 49, which exposes no matching widget (has: resize_type, resize_type.megapixels, scale_method). Drive it from that node, or detach the link in ComfyUI and re-export."
+  ]
+}

@@ -1,0 +1,54 @@
+{
+  "result": "PASS",
+  "project_id": "e6cdd637-17b5-43f5-9281-9834ef51a9b7",
+  "job_id": "009333cc-7c73-4269-b50d-0813ae3b5f45",
+  "take_ids": [
+    "46d72a7d-ef9b-4bf8-9345-9ef3222b17b3"
+  ],
+  "provider_id": "comfyui",
+  "mock": false,
+  "comfyui_prompt_id": "c2937676-fcd0-49fd-aade-27251aa92b44",
+  "workflow_id": "711d55b8-fc50-41b3-92eb-d706653fde4f",
+  "workflow_sha256": "a742c6de241bd77d540767cf0ec2ce4bc084d701eeae85faf925ec79ccf75601",
+  "runtime_reference_value": "cas/009333cc-7c73-4269-b50d-0813ae3b5f45/c7aec94a-319d-4063-b6d5-029a9a59dbf4.png",
+  "reference_image_ids": [
+    "c7aec94a-319d-4063-b6d5-029a9a59dbf4"
+  ],
+  "reference_sha256s": [
+    "841ebf7cd1174f86c42f58839a79c1e140615125447d07eb97f228f66689d97e"
+  ],
+  "reference_mapping": {
+    "nodeId": "114",
+    "field": "image"
+  },
+  "aspect_mapping": {
+    "nodeId": "115",
+    "field": "aspect_ratio",
+    "runtime_value": "16:9 (Widescreen)"
+  },
+  "output": {
+    "filename": "output.mp4",
+    "sha256": "a65cda6364ee17b4eab0bbf67df83624c225261916560a5b1e43cbecc389a744",
+    "size_bytes": 322634
+  },
+  "reference": {
+    "filename": "reference.png",
+    "sha256": "841ebf7cd1174f86c42f58839a79c1e140615125447d07eb97f228f66689d97e",
+    "size_bytes": 480719
+  },
+  "review_status": "Approved",
+  "timeline_item_id": "43dd0c9c-62a3-451b-99b4-ddf4b511bb7d",
+  "delivery": {
+    "filename": "review.mp4",
+    "sha256": "88744edf45870a3a03f6068f156ba20bb31f7701405574c9482523612988e05c",
+    "codec": "h264",
+    "width": 864,
+    "height": 480,
+    "aspect_ratio": "9:5",
+    "frame_rate": 24,
+    "duration_sec": 5.205,
+    "audio_codec": "aac",
+    "audio_sample_rate": 48000,
+    "embedded_metadata_keys": []
+  }
+}

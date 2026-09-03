@@ -1,0 +1,218 @@
+{
+  "kind": "cas.review_render.provenance",
+  "schema_version": 1,
+  "generated_at": "2026-09-02T13:51:39.805784+00:00",
+  "project": {
+    "id": "5df52248-ce4b-4a76-8c81-a436b21b6b46",
+    "title": "The Last Paper Boat — Full System E2E 20260902",
+    "target_resolution": "864x480",
+    "frame_rate": 24.0,
+    "aspect_ratio": "9:5"
+  },
+  "output": {
+    "path": "C:\\Users\\jongp\\Desktop\\Thinkpad_and_PC_Sync\\ContentAutomationStudio\\backend\\data\\exports\\5df52248-ce4b-4a76-8c81-a436b21b6b46\\review.mp4",
+    "filename": "review.mp4",
+    "sha256": "2f649feed2855529cb9252c9852c4e7801bbc77b44450156847442a97df4397d",
+    "size_bytes": 533907,
+    "probe": {
+      "width": 864,
+      "height": 480,
+      "codec": "h264",
+      "duration_sec": 11.196,
+      "frame_rate": 24.0,
+      "has_audio": true,
+      "audio_codec": "aac"
+    },
+    "container_tags": {
+      "format": {
+        "major_brand": "isom",
+        "minor_version": "512",
+        "compatible_brands": "isomiso2avc1mp41",
+        "encoder": "Lavf62.12.102"
+      },
+      "streams": [
+        {
+          "language": "und",
+          "handler_name": "VideoHandler"
+        },
+        {
+          "language": "und",
+          "handler_name": "SoundHandler"
+        }
+      ]
+    }
+  },
+  "render_settings": {
+    "width": 864,
+    "height": 480,
+    "frame_rate": 24.0,
+    "segment_count": 3,
+    "audio": {
+      "kept": true,
+      "sample_rate": 48000,
+      "channels": 2,
+      "bitrate": "192k",
+      "target_lufs": -16.0,
+      "true_peak_dbtp": -1.5,
+      "loudness_range_lu": 11.0,
+      "measured_input_lufs": -52.74,
+      "measured_output_lufs": -16.67,
+      "measured_output_true_peak_dbtp": -2.01,
+      "target_achieved": true,
+      "applied_gain_db": 36.74
+    },
+    "container_metadata_stripped": true
+  },
+  "segments": [
+    {
+      "segment_index": 0,
+      "timeline_order": 0,
+      "duration_sec": 3.0,
+      "take": {
+        "id": "1a1bb03e-4e3b-49e3-bc47-2417ebd9522e",
+        "source_path": "C:\\Users\\jongp\\Desktop\\Thinkpad_and_PC_Sync\\ContentAutomationStudio\\backend\\data\\generated\\e909fb3a-00b8-490b-aaa0-a9bab4f8873a_5df52248_add1126f_00001_.png",
+        "source_sha256": "969ff8cda54b4a7d36f9ac15b4a1ec2efca00fcc206e58e009cd9b912b2756cd",
+        "probe": {
+          "width": 864,
+          "height": 480,
+          "codec": "png",
+          "duration_sec": 0.0,
+          "frame_rate": 25.0,
+          "has_audio": false,
+          "audio_codec": ""
+        },
+        "embedded_metadata_keys": []
+      },
+      "scene": {
+        "id": "c5e466d3-e637-44e7-89d6-a32fc17d6858",
+        "order": 0,
+        "title": "Folding the Paper Boat"
+      },
+      "shot": {
+        "id": "add1126f-1103-47bb-b89e-ac8a3cff7ae0",
+        "order": 0,
+        "generation_mode": "image",
+        "image_prompt": "Child, short dark hair, blue raincoat, rubber boots, round face, sitting at the grassy misty edge of Dawn Pond, carefully finishing folding a small white paper boat with focused gentle hands, medium close-up, eye level framing, 50mm lens, shallow depth of field, soft natural dawn light with gentle mist over calm water reflecting muted blues, grays, and greens, sparse trees in background creating a hazy atmosphere.",
+        "video_prompt": "",
+        "negative_prompt": "text overlays, watermarks, modern clothing, harsh shadows, bright saturated colors, dialogue, on-screen text, logos, extra boats, extra people"
+      },
+      "job": {
+        "id": "39310ea1-4822-472c-aae5-37cc60ad3705",
+        "seed": 42,
+        "comfyui_prompt_id": "e909fb3a-00b8-490b-aaa0-a9bab4f8873a",
+        "attempts": 1,
+        "workflow_snapshot_path": "C:\\Users\\jongp\\Desktop\\Thinkpad_and_PC_Sync\\ContentAutomationStudio\\backend\\data\\snapshots\\39310ea1-4822-472c-aae5-37cc60ad3705.json",
+        "workflow_sha256": "a31450cf898fc2cabb47e42fb87fc3a08feeb1e76ba96d18069b87e818e9ba89"
+      },
+      "workflow": {
+        "id": "359c2852-f880-430f-a096-07e6ef5625a3",
+        "name": "Z-Image Turbo T2I (Local API)",
+        "purpose": "image",
+        "version": "1.0-local.1",
+        "source_format": "api",
+        "sha256_hash": "a31450cf898fc2cabb47e42fb87fc3a08feeb1e76ba96d18069b87e818e9ba89"
+      }
+    },
+    {
+      "segment_index": 1,
+      "timeline_order": 1,
+      "duration_sec": 5.167,
+      "take": {
+        "id": "aad3ebf0-db64-426c-9077-7777040fe938",
+        "source_path": "C:\\Users\\jongp\\Desktop\\Thinkpad_and_PC_Sync\\ContentAutomationStudio\\backend\\data\\generated\\87f6aff0-a2ef-46e9-8956-7418d9fa26a0_5df52248_9b56cb9b_00001_.mp4",
+        "source_sha256": "9000a9ae3bec795c3b45d62825d8e641610eefc2d3f317b7630a7de02437e59a",
+        "probe": {
+          "width": 864,
+          "height": 480,
+          "codec": "h264",
+          "duration_sec": 5.167,
+          "frame_rate": 24.0,
+          "has_audio": true,
+          "audio_codec": "aac"
+        },
+        "embedded_metadata_keys": [
+          "prompt"
+        ]
+      },
+      "scene": {
+        "id": "b2514801-6241-41f7-9d87-af69d139b53b",
+        "order": 1,
+        "title": "Boat Set Adrift"
+      },
+      "shot": {
+        "id": "9b56cb9b-6218-4d9c-9d72-886828e20655",
+        "order": 0,
+        "generation_mode": "video",
+        "image_prompt": "Child, short dark hair, blue raincoat, rubber boots, round face, at the misty grassy edge of Dawn Pond, hand gently releasing a small white paper boat onto the still calm water, medium shot from slightly high angle, 35mm lens, shallow depth of field, soft diffuse dawn light with muted blues and greens, calm reflective water with gentle ripples, sparse trees and misty atmosphere.",
+        "video_prompt": "The child's hand slowly releases the white paper boat onto the calm pond water; the boat begins drifting gently away with soft ripples; the camera slowly tracks the boat's rightward movement at a steady pace, maintaining shallow focus and misty background.",
+        "negative_prompt": "text overlays, watermarks, modern clothing, harsh shadows, bright saturated colors, dialogue, on-screen text, logos, extra boats, extra people"
+      },
+      "job": {
+        "id": "308b224a-513b-4774-93be-7ef227505a34",
+        "seed": 42,
+        "comfyui_prompt_id": "87f6aff0-a2ef-46e9-8956-7418d9fa26a0",
+        "attempts": 1,
+        "workflow_snapshot_path": "C:\\Users\\jongp\\Desktop\\Thinkpad_and_PC_Sync\\ContentAutomationStudio\\backend\\data\\snapshots\\308b224a-513b-4774-93be-7ef227505a34.json",
+        "workflow_sha256": "06392e8508554ce7b9cbefc8ae1ebc59e12e7019c3d04d372ad11a4864030088"
+      },
+      "workflow": {
+        "id": "afdaf6f8-d4bd-48a9-91c0-9b3b6a3b2023",
+        "name": "H3 Video - T2V (API)",
+        "purpose": "text-to-video",
+        "version": "1.0",
+        "source_format": "api",
+        "sha256_hash": "06392e8508554ce7b9cbefc8ae1ebc59e12e7019c3d04d372ad11a4864030088"
+      }
+    },
+    {
+      "segment_index": 2,
+      "timeline_order": 2,
+      "duration_sec": 3.0,
+      "take": {
+        "id": "19ccc0f0-41ad-433e-8cbc-09dcabc7f76d",
+        "source_path": "C:\\Users\\jongp\\Desktop\\Thinkpad_and_PC_Sync\\ContentAutomationStudio\\backend\\data\\generated\\32c1fc90-9a42-426a-97cc-9f205a1897e1_5df52248_fef81802_00002_.png",
+        "source_sha256": "9d23ca02badfb7e6a1e36d33a625d09728f6f7763eea95a23348f1adb33a35d6",
+        "probe": {
+          "width": 864,
+          "height": 480,
+          "codec": "png",
+          "duration_sec": 0.0,
+          "frame_rate": 25.0,
+          "has_audio": false,
+          "audio_codec": ""
+        },
+        "embedded_metadata_keys": []
+      },
+      "scene": {
+        "id": "6780a0d0-aae5-4842-9106-9c6111dc1037",
+        "order": 2,
+        "title": "Sunlit Arrival"
+      },
+      "shot": {
+        "id": "fef81802-ceb3-4982-8034-6d31de8cf5fe",
+        "order": 0,
+        "generation_mode": "image",
+        "image_prompt": "Small white paper boat floating on calm Dawn Pond water, drifting into a band of soft golden sunlight breaking through morning mist, with the Child, short dark hair, blue raincoat, rubber boots, round face, standing quietly on the grassy misty shore watching, wide shot, eye level framing, 35mm lens, shallow depth of field, warm muted greens and blues with gentle cinematic atmosphere and soft natural light.",
+        "video_prompt": "",
+        "negative_prompt": "text overlays, watermarks, modern clothing, harsh shadows, bright saturated colors, dialogue, on-screen text, logos, extra boats, extra people"
+      },
+      "job": {
+        "id": "632308c1-0d0c-4c4a-8d92-97f0abce86e6",
+        "seed": 970460793,
+        "comfyui_prompt_id": "32c1fc90-9a42-426a-97cc-9f205a1897e1",
+        "attempts": 1,
+        "workflow_snapshot_path": "C:\\Users\\jongp\\Desktop\\Thinkpad_and_PC_Sync\\ContentAutomationStudio\\backend\\data\\snapshots\\632308c1-0d0c-4c4a-8d92-97f0abce86e6.json",
+        "workflow_sha256": "a31450cf898fc2cabb47e42fb87fc3a08feeb1e76ba96d18069b87e818e9ba89"
+      },
+      "workflow": {
+        "id": "359c2852-f880-430f-a096-07e6ef5625a3",
+        "name": "Z-Image Turbo T2I (Local API)",
+        "purpose": "image",
+        "version": "1.0-local.1",
+        "source_format": "api",
+        "sha256_hash": "a31450cf898fc2cabb47e42fb87fc3a08feeb1e76ba96d18069b87e818e9ba89"
+      }
+    }
+  ],
+  "note": "Container metadata is stripped from the delivered MP4 so the generator's embedded workflow graph, model filenames and prompt text are not shipped inside it. This sidecar is the provenance record."
+}

@@ -13,7 +13,7 @@
 
 import { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
   Zap,
   Shield,
@@ -36,6 +36,8 @@ import CostConfirmDialog from "../components/CostConfirmDialog";
 import type {
   GenerationEstimate,
   GenerationJob,
+  GenerationRun,
+  GenerationRunJob,
   MediaHealthResponse,
   MediaProviderCatalogue,
   MediaProviderId,
@@ -55,6 +57,75 @@ function formatUsd(amount: number): string {
 /** The deterministic mock derives its prompt id from the job id. */
 function isMockJob(job: GenerationJob): boolean {
   return (job.comfyui_prompt_id ?? "").startsWith("mock-");
+}
+
+type RunTab = "current" | "failed" | "completed" | "history";
+
+function RunJobCard({ job }: { job: GenerationRunJob }) {
+  return (
+    <article className="overflow-hidden rounded-lg border border-zinc-800 bg-zinc-950/60">
+      <div className="aspect-video bg-zinc-950">
+        {job.thumbnail_url ? (
+          <img
+            src={job.thumbnail_url}
+            alt={`Preview for ${job.shot_name}`}
+            className="h-full w-full object-cover"
+          />
+        ) : (
+          <div className="flex h-full items-center justify-center text-xs text-zinc-600">
+            No preview
+          </div>
+        )}
+      </div>
+      <div className="space-y-2 p-3">
+        <p className="text-xs text-zinc-500">{job.scene_name}</p>
+        <div className="flex items-start justify-between gap-2">
+          <h4 className="text-sm font-medium text-zinc-200">{job.shot_name}</h4>
+          <StatusBadge status={job.status} />
+        </div>
+        {job.error_message && <p className="text-xs text-red-400">{job.error_message}</p>}
+      </div>
+    </article>
+  );
+}
+
+function RunSection({
+  run,
+  jobs = run.jobs,
+}: {
+  run: GenerationRun;
+  jobs?: GenerationRunJob[];
+}) {
+  return (
+    <section className="space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h3 className="font-semibold text-zinc-100">{run.label}</h3>
+          <p className="mt-1 text-xs text-zinc-500">
+            {run.completed} completed · {run.failed} failed · {run.cancelled} cancelled ·{" "}
+            {run.queued} queued · {run.running} running · of {run.total_jobs}
+          </p>
+        </div>
+        {run.terminal && run.ready_for_review && run.pending_take_count > 0 && (
+          <Link
+            to={`/review?run=${encodeURIComponent(run.id)}`}
+            className="rounded-md bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-500"
+          >
+            Go to Review
+          </Link>
+        )}
+      </div>
+      {jobs.length > 0 ? (
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {jobs.map((job) => (
+            <RunJobCard key={job.job_id} job={job} />
+          ))}
+        </div>
+      ) : (
+        <p className="py-8 text-center text-sm text-zinc-500">No jobs in this view.</p>
+      )}
+    </section>
+  );
 }
 
 type Tone = "ok" | "warn" | "bad" | "muted";
@@ -295,6 +366,108 @@ function ReadinessSummary({
   );
 }
 
+const MISSING_WORKFLOW_BLOCKER =
+  "No workflow assigned (shot or project default)";
+
+function WorkflowRecovery({
+  imageWorkflows,
+  videoWorkflows,
+  imageWorkflowId,
+  videoWorkflowId,
+  onImageWorkflowChange,
+  onVideoWorkflowChange,
+  onApply,
+  applying,
+  error,
+}: {
+  imageWorkflows: Workflow[];
+  videoWorkflows: Workflow[];
+  imageWorkflowId: string;
+  videoWorkflowId: string;
+  onImageWorkflowChange: (id: string) => void;
+  onVideoWorkflowChange: (id: string) => void;
+  onApply: () => void;
+  applying: boolean;
+  error: string | null;
+}) {
+  const canApply = !!imageWorkflowId && !!videoWorkflowId && !applying;
+
+  return (
+    <section className="rounded-lg border border-indigo-700/60 bg-indigo-950/30 p-4">
+      <div className="flex items-start gap-2">
+        <Wrench size={16} className="mt-0.5 shrink-0 text-indigo-300" />
+        <div>
+          <h2 className="text-sm font-semibold text-indigo-100">
+            Assign project workflow defaults
+          </h2>
+          <p className="mt-1 text-xs text-indigo-200/70">
+            Choose runnable API-format workflows to clear the missing-workflow
+            blocker for shots without their own override.
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-4 grid gap-3 md:grid-cols-2">
+        <label className="space-y-1 text-xs font-medium text-zinc-300">
+          <span>Default image workflow</span>
+          <select
+            value={imageWorkflowId}
+            onChange={(event) => onImageWorkflowChange(event.target.value)}
+            className="h-9 w-full rounded-md border border-zinc-700 bg-zinc-900 px-2 text-sm text-zinc-100"
+          >
+            <option value="">Select an image workflow</option>
+            {imageWorkflows.map((workflow) => (
+              <option key={workflow.id} value={workflow.id}>
+                {workflow.name}
+              </option>
+            ))}
+          </select>
+          {imageWorkflows.length === 0 && (
+            <span className="block font-normal text-amber-300">
+              No valid API-format image workflow is registered.
+            </span>
+          )}
+        </label>
+
+        <label className="space-y-1 text-xs font-medium text-zinc-300">
+          <span>Default video workflow</span>
+          <select
+            value={videoWorkflowId}
+            onChange={(event) => onVideoWorkflowChange(event.target.value)}
+            className="h-9 w-full rounded-md border border-zinc-700 bg-zinc-900 px-2 text-sm text-zinc-100"
+          >
+            <option value="">Select a video workflow</option>
+            {videoWorkflows.map((workflow) => (
+              <option key={workflow.id} value={workflow.id}>
+                {workflow.name}
+              </option>
+            ))}
+          </select>
+          {videoWorkflows.length === 0 && (
+            <span className="block font-normal text-amber-300">
+              No valid API-format video workflow is registered.
+            </span>
+          )}
+        </label>
+      </div>
+
+      {error && <p className="mt-3 text-xs text-red-300">{error}</p>}
+
+      <div className="mt-4 flex justify-end">
+        <button
+          type="button"
+          onClick={onApply}
+          disabled={!canApply}
+          className="flex h-9 items-center gap-1.5 rounded-md bg-indigo-600 px-4 text-sm font-medium text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {applying && <Loader2 size={13} className="animate-spin" />}
+          Apply workflows
+        </button>
+      </div>
+    </section>
+  );
+}
+
 // ── Cost / run panel ─────────────────────────────────────────────────────
 
 function RunPanel({
@@ -306,6 +479,7 @@ function RunPanel({
   generating,
   generateError,
   queuePaused,
+  showQueueControl,
   onPause,
   onResume,
   queueBusy,
@@ -323,6 +497,7 @@ function RunPanel({
   generating: boolean;
   generateError: string | null;
   queuePaused: boolean;
+  showQueueControl: boolean;
   onPause: () => void;
   onResume: () => void;
   queueBusy: boolean;
@@ -490,7 +665,7 @@ function RunPanel({
 
       {/* Controls */}
       <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-zinc-800 pt-3">
-        {queuePaused ? (
+        {showQueueControl && (queuePaused ? (
           <button
             onClick={onResume}
             disabled={queueBusy}
@@ -506,7 +681,7 @@ function RunPanel({
           >
             <Pause size={13} /> Pause queue
           </button>
-        )}
+        ))}
 
         <div className="flex-1" />
 
@@ -789,10 +964,18 @@ function JobRow({
 // ══════════════════════════════════════════════════════════════════════════
 
 export default function GeneratePage() {
-  const { currentProjectId, queuePaused } = useAppState();
+  const { currentProjectId } = useAppState();
   const dispatch = useAppDispatch();
   const navigate = useNavigate();
   const qc = useQueryClient();
+  const [searchParams] = useSearchParams();
+  const requestedTab = searchParams.get("tab");
+  const runTab: RunTab =
+    requestedTab === "failed" ||
+    requestedTab === "completed" ||
+    requestedTab === "history"
+      ? requestedTab
+      : "current";
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [simulationAckProjectId, setSimulationAckProjectId] = useState<
     string | null
@@ -800,6 +983,9 @@ export default function GeneratePage() {
   // Analysing a workflow is a real backend cost, so the diagnostics queries
   // only mount once the disclosure has actually been opened.
   const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
+  const [historyLimit, setHistoryLimit] = useState(50);
+  const [imageWorkflowId, setImageWorkflowId] = useState("");
+  const [videoWorkflowId, setVideoWorkflowId] = useState("");
 
   // ── Queries ────────────────────────────────────────────────────────────
   const workflowsQ = useQuery({
@@ -826,10 +1012,21 @@ export default function GeneratePage() {
   });
   const projectAvailable = projectQ.isSuccess;
 
+  const jobsQ = useQuery({
+    queryKey: ["jobs", currentProjectId],
+    queryFn: () => api.generation.listJobs(currentProjectId!),
+    enabled: !!currentProjectId && projectAvailable,
+    // Keep checking even after an empty first response so jobs created by a
+    // worker or another browser session become visible here.
+    refetchInterval: projectAvailable ? 2000 : false,
+  });
+  const hasJobs = (jobsQ.data?.length ?? 0) > 0;
+
   const preflightQ = useQuery({
     queryKey: ["preflight", currentProjectId],
     queryFn: () => api.generation.preflight(currentProjectId!),
     enabled: !!currentProjectId && projectAvailable,
+    refetchInterval: hasJobs ? 2000 : false,
   });
 
   // Safe to fetch on load: the estimate endpoint creates nothing and calls no
@@ -838,13 +1035,28 @@ export default function GeneratePage() {
     queryKey: ["generation-estimate", currentProjectId],
     queryFn: () => api.generation.estimate(currentProjectId!),
     enabled: !!currentProjectId && projectAvailable,
+    refetchInterval: hasJobs ? 2000 : false,
   });
 
-  const jobsQ = useQuery({
-    queryKey: ["jobs", currentProjectId],
-    queryFn: () => api.generation.listJobs(currentProjectId!),
+  const queueStatusQ = useQuery({
+    queryKey: ["queue-status", currentProjectId],
+    queryFn: () => api.generation.queueStatus(currentProjectId!),
     enabled: !!currentProjectId && projectAvailable,
+    refetchInterval: hasJobs ? 2000 : false,
+  });
+
+  const currentRunQ = useQuery({
+    queryKey: ["generation-run-current", currentProjectId],
+    queryFn: () => api.generation.currentRun(currentProjectId!),
+    enabled: !!currentProjectId && projectAvailable && runTab !== "history",
     refetchInterval: projectAvailable ? 2000 : false,
+  });
+
+  const runsQ = useQuery({
+    queryKey: ["generation-runs", currentProjectId, historyLimit + 1],
+    queryFn: () => api.generation.listRuns(currentProjectId!, historyLimit + 1),
+    enabled: !!currentProjectId && projectAvailable && runTab === "history",
+    refetchInterval: runTab === "history" ? 2000 : false,
   });
 
   // ── Mutations ──────────────────────────────────────────────────────────
@@ -856,17 +1068,38 @@ export default function GeneratePage() {
       qc.invalidateQueries({ queryKey: ["jobs", currentProjectId] });
       qc.invalidateQueries({ queryKey: ["preflight", currentProjectId] });
       qc.invalidateQueries({ queryKey: ["generation-estimate", currentProjectId] });
+      qc.invalidateQueries({ queryKey: ["generation-run-current", currentProjectId] });
+      qc.invalidateQueries({ queryKey: ["generation-runs", currentProjectId] });
     },
   });
 
   const pauseMut = useMutation({
     mutationFn: () => api.generation.pauseQueue(currentProjectId!),
-    onSuccess: () => dispatch({ type: "SET_QUEUE_PAUSED", paused: true }),
+    onSuccess: (status) =>
+      qc.setQueryData(["queue-status", currentProjectId], status),
   });
 
   const resumeMut = useMutation({
     mutationFn: () => api.generation.resumeQueue(currentProjectId!),
-    onSuccess: () => dispatch({ type: "SET_QUEUE_PAUSED", paused: false }),
+    onSuccess: (status) =>
+      qc.setQueryData(["queue-status", currentProjectId], status),
+  });
+
+  const applyWorkflowsMut = useMutation({
+    mutationFn: ({ imageId, videoId }: { imageId: string; videoId: string }) =>
+      api.projects.update(currentProjectId!, {
+        default_image_workflow_id: imageId,
+        default_video_workflow_id: videoId,
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({
+        queryKey: ["selected-project", currentProjectId],
+      });
+      qc.invalidateQueries({ queryKey: ["preflight", currentProjectId] });
+      qc.invalidateQueries({
+        queryKey: ["generation-estimate", currentProjectId],
+      });
+    },
   });
 
   const providerLabel = (id: MediaProviderId) =>
@@ -926,6 +1159,9 @@ export default function GeneratePage() {
 
   const estimate = estimateQ.data;
   const jobs = jobsQ.data;
+  const queuePaused = queueStatusQ.data?.paused ?? false;
+  const showQueueControl =
+    (queueStatusQ.data?.queued ?? 0) + (queueStatusQ.data?.running ?? 0) > 0;
   const comfyuiHealth = mediaHealthQ.data?.providers.find(
     (provider) => provider.id === "comfyui",
   );
@@ -939,12 +1175,55 @@ export default function GeneratePage() {
     simulationRequired && simulationAckProjectId === currentProjectId;
   const unrunnableWorkflows =
     workflowsQ.data?.filter((w) => w.source_format !== "api") ?? [];
+  const validApiWorkflows =
+    workflowsQ.data?.filter(
+      (workflow) =>
+        workflow.source_format === "api" &&
+        workflow.validation_status === "valid",
+    ) ?? [];
+  const allImageWorkflows = validApiWorkflows.filter(
+    (workflow) => workflow.purpose === "image",
+  );
+  const generalImageWorkflows = allImageWorkflows.filter(
+    (workflow) => !("referenceImage" in workflow.parameter_mapping),
+  );
+  const imageWorkflows =
+    generalImageWorkflows.length > 0 ? generalImageWorkflows : allImageWorkflows;
+  const videoWorkflows = validApiWorkflows.filter(
+    (workflow) =>
+      workflow.purpose === "text-to-video" ||
+      workflow.purpose === "image-to-video",
+  );
+  const selectedImageWorkflowId = imageWorkflows.some(
+    (workflow) => workflow.id === imageWorkflowId,
+  )
+    ? imageWorkflowId
+    : imageWorkflows.some(
+          (workflow) =>
+            workflow.id === projectQ.data?.default_image_workflow_id,
+        )
+      ? projectQ.data!.default_image_workflow_id!
+      : (imageWorkflows[0]?.id ?? "");
+  const selectedVideoWorkflowId = videoWorkflows.some(
+    (workflow) => workflow.id === videoWorkflowId,
+  )
+    ? videoWorkflowId
+    : videoWorkflows.some(
+          (workflow) =>
+            workflow.id === projectQ.data?.default_video_workflow_id,
+        )
+      ? projectQ.data!.default_video_workflow_id!
+      : (videoWorkflows[0]?.id ?? "");
+  const missingWorkflowBlocker =
+    preflightQ.data?.issues.some((issue) =>
+      issue.issues.includes(MISSING_WORKFLOW_BLOCKER),
+    ) ?? false;
 
-  const queuedCount = jobs?.filter((j) => j.status === "Queued").length ?? 0;
-  const runningCount = jobs?.filter((j) => j.status === "Running").length ?? 0;
-  const completedCount =
-    jobs?.filter((j) => j.status === "Completed").length ?? 0;
-  const failedCount = jobs?.filter((j) => j.status === "Failed").length ?? 0;
+  const queuedCount = queueStatusQ.data?.queued ?? 0;
+  const runningCount = queueStatusQ.data?.running ?? 0;
+  const completedCount = queueStatusQ.data?.completed ?? 0;
+  const failedCount = queueStatusQ.data?.failed ?? 0;
+  const cancelledCount = queueStatusQ.data?.cancelled ?? 0;
 
   const onGenerate = () => {
     if (
@@ -991,6 +1270,29 @@ export default function GeneratePage() {
         unrunnableWorkflows={unrunnableWorkflows}
       />
 
+      {missingWorkflowBlocker && (
+        <WorkflowRecovery
+          imageWorkflows={imageWorkflows}
+          videoWorkflows={videoWorkflows}
+          imageWorkflowId={selectedImageWorkflowId}
+          videoWorkflowId={selectedVideoWorkflowId}
+          onImageWorkflowChange={setImageWorkflowId}
+          onVideoWorkflowChange={setVideoWorkflowId}
+          onApply={() =>
+            applyWorkflowsMut.mutate({
+              imageId: selectedImageWorkflowId,
+              videoId: selectedVideoWorkflowId,
+            })
+          }
+          applying={applyWorkflowsMut.isPending}
+          error={
+            applyWorkflowsMut.isError
+              ? toAIError(applyWorkflowsMut.error).detail
+              : null
+          }
+        />
+      )}
+
       <RunPanel
         estimate={estimate}
         loading={estimateQ.isLoading}
@@ -1000,6 +1302,7 @@ export default function GeneratePage() {
         generating={generateMut.isPending && !confirmOpen}
         generateError={confirmOpen ? null : generateError}
         queuePaused={queuePaused}
+        showQueueControl={showQueueControl}
         onPause={() => pauseMut.mutate()}
         onResume={() => resumeMut.mutate()}
         queueBusy={pauseMut.isPending || resumeMut.isPending}
@@ -1013,20 +1316,97 @@ export default function GeneratePage() {
       />
 
       {/* Stats bar */}
-      {jobs && jobs.length > 0 && (
+      {queueStatusQ.data && queueStatusQ.data.total_jobs > 0 && (
         <div className="flex gap-4 text-xs">
           <span className="text-zinc-500">
-            Total: <span className="text-zinc-300">{jobs.length}</span>
+            Total:{" "}
+            <span className="text-zinc-300">{queueStatusQ.data.total_jobs}</span>
           </span>
           <span className="text-blue-400">Queued: {queuedCount}</span>
           <span className="text-yellow-400">Running: {runningCount}</span>
           <span className="text-green-400">Completed: {completedCount}</span>
           <span className="text-red-400">Failed: {failedCount}</span>
+          <span className="text-zinc-400">Cancelled: {cancelledCount}</span>
+          {queuePaused && (
+            <span className="font-medium text-amber-300">Paused</span>
+          )}
         </div>
       )}
 
-      {/* Jobs table */}
+      {/* Run-oriented queue: one Generate action remains one visible batch. */}
       <div className="overflow-hidden rounded-lg border border-zinc-800 bg-zinc-900/60">
+        <nav className="flex border-b border-zinc-800 px-2" aria-label="Generation queue views">
+          {([
+            ["current", "Current"],
+            ["failed", "Failed"],
+            ["completed", "Completed"],
+            ["history", "History"],
+          ] as [RunTab, string][]).map(([key, label]) => (
+            <Link
+              key={key}
+              to={key === "current" ? "/generate" : `/generate?tab=${key}`}
+              aria-current={runTab === key ? "page" : undefined}
+              className={`border-b-2 px-4 py-3 text-sm font-medium ${
+                runTab === key
+                  ? "border-indigo-500 text-indigo-300"
+                  : "border-transparent text-zinc-500 hover:text-zinc-300"
+              }`}
+            >
+              {label}
+            </Link>
+          ))}
+        </nav>
+        <div className="p-4">
+          {runTab === "history" ? (
+            runsQ.isError ? (
+              <div className="flex items-start gap-2 rounded-md border border-red-800 bg-red-900/30 px-4 py-3 text-sm text-red-300">
+                <AlertCircle size={14} className="mt-0.5 shrink-0" />
+                {toAIError(runsQ.error).detail}
+              </div>
+            ) : runsQ.data && runsQ.data.length > 0 ? (
+              <div className="space-y-8">
+                {runsQ.data.slice(0, historyLimit).map((run) => (
+                  <RunSection key={run.id} run={run} />
+                ))}
+                {runsQ.data.length > historyLimit && (
+                  <div className="text-center">
+                    <button
+                      type="button"
+                      onClick={() => setHistoryLimit((value) => value + 50)}
+                      className="rounded-md border border-zinc-700 px-4 py-2 text-sm font-medium text-zinc-300 hover:bg-zinc-800"
+                    >
+                      Load 50 more runs
+                    </button>
+                  </div>
+                )}
+              </div>
+            ) : runsQ.data ? (
+              <p className="py-8 text-center text-sm text-zinc-500">No generation jobs yet.</p>
+            ) : (
+              <p className="py-8 text-center text-sm text-zinc-500">Loading run history...</p>
+            )
+          ) : currentRunQ.data ? (
+            <RunSection
+              run={currentRunQ.data}
+              jobs={currentRunQ.data.jobs.filter((job) =>
+                runTab === "failed"
+                  ? job.status === "Failed"
+                  : runTab === "completed"
+                    ? job.status === "Completed"
+                    : true,
+              )}
+            />
+          ) : currentRunQ.data === null ? (
+            <p className="py-8 text-center text-sm text-zinc-500">No generation jobs yet.</p>
+          ) : (
+            <p className="py-8 text-center text-sm text-zinc-500">Loading current run...</p>
+          )}
+        </div>
+      </div>
+
+      {/* Legacy job detail table retains provider evidence and job actions. */}
+      {runTab === "current" && (
+        <div className="overflow-hidden rounded-lg border border-zinc-800 bg-zinc-900/60">
         <div className="border-b border-zinc-800 px-4 py-2.5">
           <h2 className="text-sm font-semibold text-zinc-200">Job Queue</h2>
         </div>
@@ -1084,7 +1464,8 @@ export default function GeneratePage() {
             </table>
           </div>
         )}
-      </div>
+        </div>
+      )}
 
       {/* Advanced diagnostics: everything needed to fix a workflow, and
           nothing needed to decide whether to generate. */}

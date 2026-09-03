@@ -1,0 +1,46 @@
+{
+  "result": "PASS",
+  "project_id": "db99b7fe-73a9-41ed-9922-018043fdbd12",
+  "provider": "comfyui",
+  "mock": false,
+  "reference_image_id": "f9a8a931-b5a8-4788-86ff-3eca71003c37",
+  "reference_sha256": "841ebf7cd1174f86c42f58839a79c1e140615125447d07eb97f228f66689d97e",
+  "job_ids": [
+    "c59813fd-5999-4e88-9a35-24986d855915",
+    "4e274cf6-9561-43a2-86f1-59a87ea0047f",
+    "9d1bcc74-bd0e-4ebd-b2be-682e565cf1bd",
+    "b2c141ce-286c-4d99-9e2c-c741f8b937ab"
+  ],
+  "comfyui_prompt_ids": [
+    "c98a79f0-8478-4486-9415-c27c6c5a0a77",
+    "4a6790f5-3d87-4a39-bd17-9f35ebb6196b",
+    "2bc16b95-833c-49a1-b690-3d70dfabc703",
+    "c2d05f05-d681-4a90-97da-b41518df3b5f"
+  ],
+  "take_ids": [
+    "8871cb3c-1e09-40da-9be8-2ffa53eab83e",
+    "0dd4e573-f3c7-451e-8dbb-a35910e448b5",
+    "6f28de40-2732-4fce-b6b4-8d4fe85deb38",
+    "2ff0eb61-c047-4ff9-95ee-8ab5190dc265"
+  ],
+  "timeline_item_count": 3,
+  "delivery": {
+    "filename": "review.mp4",
+    "sha256": "fc16ac7ad5d0e795377b6c74dd0abdc0cbb44bff2aeb5712fdd1b91d3cc43590",
+    "size_bytes": 165924,
+    "width": 864,
+    "height": 480,
+    "duration_sec": 9.0,
+    "codec": "h264",
+    "embedded_metadata_keys": []
+  },
+  "selective_regeneration": {
+    "changed_shot_id": "804aece3-e5c3-4d68-80f2-162abcaa5118",
+    "stale_shot_count": 1,
+    "stale_timeline_http_status": 409,
+    "affected_take_count": 2,
+    "unaffected_take_count": 2,
+    "final_revision": 2,
+    "evidence": "08-selective-regeneration.json"
+  }
+}

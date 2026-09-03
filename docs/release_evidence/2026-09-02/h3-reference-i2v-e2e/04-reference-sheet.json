@@ -1,0 +1,42 @@
+{
+  "id": "4d2dc089-8f24-4120-b9de-cf86bc70c33f",
+  "project_id": "e6cdd637-17b5-43f5-9281-9834ef51a9b7",
+  "kind": "character",
+  "name": "Child and blue boat first frame",
+  "subject_ref_id": null,
+  "canonical_description": "A child in a blue raincoat watches exactly one blue folded paper boat on a misty pond.",
+  "identity_tokens": "same child, blue raincoat, one blue paper boat, same misty pond",
+  "negative_tokens": "duplicate child, duplicate boat, wardrobe change, boat color change",
+  "notes": "",
+  "revision": 2,
+  "content_sha256": "63db276299e0d8e0e1421e6a477d0a5699b94b3b4a1a8d25e6a40720d923d4be",
+  "images": [
+    {
+      "id": "c7aec94a-319d-4063-b6d5-029a9a59dbf4",
+      "sheet_id": "4d2dc089-8f24-4120-b9de-cf86bc70c33f",
+      "project_id": "e6cdd637-17b5-43f5-9281-9834ef51a9b7",
+      "role": "canonical",
+      "original_filename": "reference.png",
+      "stored_filename": "c7aec94a-319d-4063-b6d5-029a9a59dbf4.png",
+      "mime_type": "image/png",
+      "size_bytes": 480719,
+      "width": 864,
+      "height": 480,
+      "sha256": "841ebf7cd1174f86c42f58839a79c1e140615125447d07eb97f228f66689d97e",
+      "caption": "Canonical first frame for H3 I2V",
+      "provenance": {
+        "source": "upload",
+        "sha256": "841ebf7cd1174f86c42f58839a79c1e140615125447d07eb97f228f66689d97e",
+        "mime_type": "image/png",
+        "width": 864,
+        "height": 480,
+        "size_bytes": 480719,
+        "original_filename": "reference.png"
+      },
+      "created_at": "2026-09-02T14:05:03.555756",
+      "url": "/api/media/references/c7aec94a-319d-4063-b6d5-029a9a59dbf4/file"
+    }
+  ],
+  "created_at": "2026-09-02T14:05:03.534234",
+  "updated_at": "2026-09-02T14:05:03.560756"
+}

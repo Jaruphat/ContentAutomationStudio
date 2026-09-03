@@ -1,0 +1,18 @@
+[
+  {
+    "id": "064b19ed-eb46-42a3-86f1-ee5d944ad61a",
+    "project_id": "e6cdd637-17b5-43f5-9281-9834ef51a9b7",
+    "order": 1,
+    "title": "Boat begins moving",
+    "purpose": "",
+    "summary": "The child watches the same boat drift forward.",
+    "character_ids": [],
+    "location_id": null,
+    "time_of_day": "sunset",
+    "emotional_beat": "",
+    "planned_duration_sec": 5.2,
+    "status": "Ready",
+    "created_at": "2026-09-02T14:05:03.577799",
+    "updated_at": "2026-09-02T14:05:03.577799"
+  }
+]

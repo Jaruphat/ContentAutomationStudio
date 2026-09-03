@@ -16,6 +16,7 @@ import { PanelRight } from "lucide-react";
 import StageRail, { ThemeControl } from "./StageRail";
 import Inspector from "./Inspector";
 import ProjectSwitcher from "./ProjectSwitcher";
+import StageErrorBoundary from "./StageErrorBoundary";
 import { useAppState, useAppDispatch } from "../store/useProjectStore";
 
 /** Subscribes to a media query so layout changes follow a live resize. */
@@ -86,7 +87,9 @@ export default function AppLayout() {
         <div className="flex min-h-0 flex-1 flex-col">
           <ProjectSwitcher />
           <main className="min-h-0 flex-1 overflow-y-auto">
-            <Outlet />
+            <StageErrorBoundary>
+              <Outlet />
+            </StageErrorBoundary>
           </main>
         </div>
         <StageRail variant="bar" />
@@ -102,9 +105,12 @@ export default function AppLayout() {
       {/* min-w-0 so a wide child (a table, a long prompt) scrolls inside the
           centre panel instead of pushing the rail and inspector off-screen. */}
       <div className="flex min-w-0 flex-1 flex-col">
+        <TopBar />
         <ProjectSwitcher />
         <main className="min-h-0 flex-1 overflow-y-auto">
-          <Outlet />
+          <StageErrorBoundary>
+            <Outlet />
+          </StageErrorBoundary>
         </main>
       </div>
 

@@ -47,6 +47,7 @@ WIDTH = "width"
 HEIGHT = "height"
 FRAMES = "frames"
 REFERENCE_IMAGE = "referenceImage"
+ASPECT_RATIO = "aspectRatio"
 OUTPUT_PREFIX = "outputPrefix"
 
 LOGICAL_FIELDS: tuple[str, ...] = (
@@ -57,6 +58,7 @@ LOGICAL_FIELDS: tuple[str, ...] = (
     HEIGHT,
     FRAMES,
     REFERENCE_IMAGE,
+    ASPECT_RATIO,
     OUTPUT_PREFIX,
 )
 

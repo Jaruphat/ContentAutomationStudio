@@ -339,3 +339,34 @@ class TestPreflightReportsFormat:
         body = client.get(f"/api/projects/{sample_project.id}/preflight").json()
         assert body["ready"] is False
         assert body["issues"]
+
+    def test_preflight_blocks_mismatched_project_aspect_and_resolution(
+        self, client, db_session, sample_project, sample_shot
+    ):
+        sample_project.aspect_ratio = "9:16"
+        sample_project.target_resolution = "1920x1080"
+        db_session.commit()
+
+        body = client.get(f"/api/projects/{sample_project.id}/preflight").json()
+
+        messages = [text for issue in body["issues"] for text in issue["issues"]]
+        assert any(
+            "9:16" in message
+            and "1920x1080" in message
+            and "does not match" in message
+            for message in messages
+        )
+
+    def test_generate_refuses_mismatched_project_aspect_and_resolution(
+        self, client, db_session, sample_project, sample_shot
+    ):
+        sample_project.aspect_ratio = "9:16"
+        sample_project.target_resolution = "1920x1080"
+        db_session.commit()
+
+        response = client.post(
+            f"/api/projects/{sample_project.id}/generate", json={}
+        )
+
+        assert response.status_code == 409
+        assert "does not match" in response.json()["detail"]

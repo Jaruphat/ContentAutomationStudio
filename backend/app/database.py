@@ -44,12 +44,26 @@ def get_db():
 
 
 def init_db():
-    """Create all tables and apply additive column migrations."""
+    """Create all tables, apply additive column migrations, then backfill."""
     # Import models so they are registered on Base.metadata before create_all.
     import app.models  # noqa: F401
 
     Base.metadata.create_all(bind=engine)
     ensure_schema()
+    backfill_data()
+
+
+def backfill_data():
+    """Populate new columns that an ALTER TABLE could only add as NULL.
+
+    ``ensure_schema`` can add a column but not fill it, so anything a new
+    feature needs on existing rows is derived here instead. Imported lazily to
+    keep this module free of service-layer imports at module scope.
+    """
+    from app.services import generation_runs
+
+    generation_runs.backfill_legacy_job_defaults(engine)
+    generation_runs.backfill_legacy_runs(engine)
 
 
 def ensure_schema():

@@ -26,11 +26,35 @@ def _get_project_or_404(db: Session, project_id: str) -> Project:
     return project
 
 
+def _responses(
+    items: list[TimelineItem], manifest: dict
+) -> list[TimelineItemResponse]:
+    """Merge each stored row with the names and media the manifest resolved.
+
+    The row itself only holds ids; the scene title, shot name and thumbnail
+    come from the manifest, which already looked them up.
+    """
+    display = {
+        entry["id"]: entry.get("display", {}) for entry in manifest.get("items", [])
+    }
+    return [
+        TimelineItemResponse.model_validate(item).model_copy(
+            update=display.get(item.id, {})
+        )
+        for item in items
+    ]
+
+
 @router.get("/timeline", response_model=TimelineManifest)
 def get_timeline(project_id: str, db: Session = Depends(get_db)):
     """Return the current timeline manifest."""
     _get_project_or_404(db, project_id)
-    manifest = timeline_service.get_timeline_manifest(db, project_id)
+    try:
+        manifest = timeline_service.get_timeline_manifest(
+            db, project_id, strict_lineage=True
+        )
+    except timeline_service.StaleTimelineError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     items = (
         db.query(TimelineItem)
         .filter(TimelineItem.project_id == project_id)
@@ -39,9 +63,12 @@ def get_timeline(project_id: str, db: Session = Depends(get_db)):
     )
     return TimelineManifest(
         project_id=project_id,
-        items=[TimelineItemResponse.model_validate(i) for i in items],
+        items=_responses(items, manifest),
         total_duration_sec=manifest["total_duration_sec"],
         item_count=manifest["item_count"],
+        warnings=manifest["warnings"],
+        delivery_validation=manifest["delivery_validation"],
+        coverage=manifest["coverage"],
     )
 
 
@@ -67,13 +94,21 @@ def update_timeline(
         }
         for item in payload.items
     ]
-    created = timeline_service.save_timeline_items(db, project_id, items_data)
-    total_duration = sum(i.duration_sec for i in created)
+    try:
+        created = timeline_service.save_timeline_items(db, project_id, items_data)
+        manifest = timeline_service.get_timeline_manifest(
+            db, project_id, strict_lineage=True
+        )
+    except timeline_service.StaleTimelineError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     return TimelineManifest(
         project_id=project_id,
-        items=[TimelineItemResponse.model_validate(i) for i in created],
-        total_duration_sec=total_duration,
+        items=_responses(created, manifest),
+        total_duration_sec=manifest["total_duration_sec"],
         item_count=len(created),
+        warnings=manifest["warnings"],
+        delivery_validation=manifest["delivery_validation"],
+        coverage=manifest["coverage"],
     )
 
 
@@ -86,12 +121,17 @@ def build_timeline(project_id: str, db: Session = Depends(get_db)):
     _get_project_or_404(db, project_id)
     items_data = timeline_service.build_timeline_from_approved_takes(db, project_id)
     created = timeline_service.save_timeline_items(db, project_id, items_data)
-    total_duration = sum(i.duration_sec for i in created)
+    manifest = timeline_service.get_timeline_manifest(
+        db, project_id, strict_lineage=True
+    )
     return TimelineManifest(
         project_id=project_id,
-        items=[TimelineItemResponse.model_validate(i) for i in created],
-        total_duration_sec=total_duration,
+        items=_responses(created, manifest),
+        total_duration_sec=manifest["total_duration_sec"],
         item_count=len(created),
+        warnings=manifest["warnings"],
+        delivery_validation=manifest["delivery_validation"],
+        coverage=manifest["coverage"],
     )
 
 
@@ -104,13 +144,18 @@ def generate_render_plan(project_id: str, db: Session = Depends(get_db)):
     Real rendering requires FFmpeg installed and actual media files.
     """
     _get_project_or_404(db, project_id)
-    plan = timeline_service.generate_render_plan(db, project_id)
+    try:
+        plan = timeline_service.generate_render_plan(db, project_id)
+    except timeline_service.StaleTimelineError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     return RenderPlan(
         project_id=plan["project_id"],
         timeline_items=plan["timeline_items"],
         ffmpeg_available=plan["ffmpeg_available"],
         commands=plan["commands"],
         warnings=plan["warnings"],
+        warning_metadata=plan["warning_metadata"],
+        delivery_validation=plan["delivery_validation"],
     )
 
 
@@ -124,5 +169,8 @@ def render_review(project_id: str, db: Session = Depends(get_db)):
     the response explains why - nothing is fabricated.
     """
     _get_project_or_404(db, project_id)
-    result = render_service.render_review_video(db, project_id)
+    try:
+        result = render_service.render_review_video(db, project_id)
+    except timeline_service.StaleTimelineError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     return RenderResult(**result)

@@ -1,0 +1,36 @@
+{
+  "id": "b38d7914-60bf-4abc-b2ce-c6537a590bea",
+  "scene_id": "064b19ed-eb46-42a3-86f1-ee5d944ad61a",
+  "order": 1,
+  "shot_type": "wide",
+  "camera_angle": "eye level",
+  "camera_movement": "locked camera",
+  "lens_framing": "",
+  "subject": "the same child and exactly one blue paper boat",
+  "action": "the boat drifts slowly forward while the child remains still",
+  "environment": "misty pond at sunset",
+  "dialogue": "",
+  "planned_duration_sec": 5.2,
+  "generation_mode": "image-to-video",
+  "image_prompt": "",
+  "video_prompt": "Locked camera. Preserve the supplied first frame exactly: same child in blue raincoat, same single blue paper boat, same pond and sunset. Only the boat and nearby ripples move gently forward. No cuts or new subjects.",
+  "negative_prompt": "second boat, duplicate child, wardrobe change, boat color change, camera cut, flicker, deformation",
+  "reference_asset_ids": [
+    "c7aec94a-319d-4063-b6d5-029a9a59dbf4"
+  ],
+  "workflow_preset_id": "711d55b8-fc50-41b3-92eb-d706653fde4f",
+  "image_provider_id": "comfyui",
+  "image_model": "workflow",
+  "seed_policy": "fixed",
+  "status": "Ready",
+  "prompt_revision": 1,
+  "prompt_sha256": "bb1d62b0731d0784a316674d8a5d96829ee53deb19b9a21026f9970a9747a8ba",
+  "content_sha256": "464c55fb87178350476ea20f4510d5d69533ce613a9459474fb946ceeb35c153",
+  "reference_sha256s": [
+    "841ebf7cd1174f86c42f58839a79c1e140615125447d07eb97f228f66689d97e"
+  ],
+  "generated_revision": 0,
+  "is_stale": false,
+  "created_at": "2026-09-02T14:05:03.598310",
+  "updated_at": "2026-09-02T14:05:03.614861"
+}

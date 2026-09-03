@@ -264,6 +264,40 @@ def export_prompts(db: Session, project_id: str) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
+# Delivery status shared by the exports that describe delivered media
+# ---------------------------------------------------------------------------
+
+def _delivery_status(db: Session, project_id: str) -> dict[str, Any]:
+    """The lineage and waiver state of the current cut.
+
+    Every export that describes delivered media repeats this, so a stale
+    lineage or a waived delivery cannot be read as a clean one just because
+    the reader opened a different file than the timeline manifest itself.
+    This reuses the timeline manifest's own strict check rather than
+    recomputing it, so the two can never disagree.
+    """
+    from app.services.timeline_service import StaleTimelineError, get_timeline_manifest
+
+    try:
+        manifest = get_timeline_manifest(db, project_id, strict_lineage=True)
+    except StaleTimelineError as exc:
+        return {
+            "warnings": [{
+                "code": "stale_timeline_lineage",
+                "message": str(exc),
+            }],
+            "delivery_validation": {
+                "pipeline_pass": False,
+                "delivery_spec_pass": False,
+            },
+        }
+    return {
+        "warnings": manifest["warnings"],
+        "delivery_validation": manifest["delivery_validation"],
+    }
+
+
+# ---------------------------------------------------------------------------
 # Generation manifest export
 # ---------------------------------------------------------------------------
 
@@ -271,17 +305,18 @@ def export_generation_manifest(db: Session, project_id: str) -> dict[str, Any]:
     """
     Export all generation jobs and their provenance for a project.
     """
+    delivery = _delivery_status(db, project_id)
     scenes = db.query(Scene).filter(Scene.project_id == project_id).all()
     scene_ids = [s.id for s in scenes]
 
     if not scene_ids:
-        return {"project_id": project_id, "jobs": []}
+        return {"project_id": project_id, "jobs": [], **delivery}
 
     shots = db.query(Shot).filter(Shot.scene_id.in_(scene_ids)).all()
     shot_ids = [s.id for s in shots]
 
     if not shot_ids:
-        return {"project_id": project_id, "jobs": []}
+        return {"project_id": project_id, "jobs": [], **delivery}
 
     jobs = (
         db.query(GenerationJob)
@@ -334,6 +369,9 @@ def export_generation_manifest(db: Session, project_id: str) -> dict[str, Any]:
                     "review_status": t.review_status,
                     "rating": t.rating,
                     "notes": t.notes,
+                    # A take accepted under a waiver has to say so wherever it
+                    # is exported, not only on the timeline manifest.
+                    "lineage": t.lineage or {},
                 }
                 for t in takes
             ],
@@ -343,6 +381,7 @@ def export_generation_manifest(db: Session, project_id: str) -> dict[str, Any]:
         "project_id": project_id,
         "job_count": len(job_entries),
         "jobs": job_entries,
+        **delivery,
     }
 
 
@@ -353,7 +392,7 @@ def export_generation_manifest(db: Session, project_id: str) -> dict[str, Any]:
 def export_timeline_manifest(db: Session, project_id: str) -> dict[str, Any]:
     """Export timeline manifest as a standalone JSON document."""
     from app.services.timeline_service import get_timeline_manifest
-    return get_timeline_manifest(db, project_id)
+    return get_timeline_manifest(db, project_id, strict_lineage=True)
 
 
 # ---------------------------------------------------------------------------
@@ -436,6 +475,7 @@ def export_project_archive(db: Session, project_id: str) -> dict[str, Any]:
             ],
         },
         "ai_authoring_audit": project_audit(db, project),
+        **_delivery_status(db, project_id),
         "scenes": [],
         "timeline": [
             {
@@ -516,6 +556,7 @@ def export_project_archive(db: Session, project_id: str) -> dict[str, Any]:
                         "review_status": t.review_status,
                         "rating": t.rating,
                         "notes": t.notes,
+                        "lineage": t.lineage or {},
                     }
                     for t in takes
                 ],

@@ -239,6 +239,55 @@ def synthesise_clip():
     return _make
 
 
+@pytest.fixture()
+def png_bytes():
+    """Return a factory producing a real PNG of the requested size in memory.
+
+    Hand-rolled through the mock provider's encoder so image tests need neither
+    Pillow nor FFmpeg for the common case.
+    """
+    from app.services.mock_provider import _create_placeholder_png
+
+    def _make(width: int = 128, height: int = 128) -> bytes:
+        with tempfile.TemporaryDirectory(prefix="cas-png-") as tmp:
+            path = os.path.join(tmp, "sample.png")
+            _create_placeholder_png(path, width, height)
+            with open(path, "rb") as f:
+                return f.read()
+
+    return _make
+
+
+@pytest.fixture()
+def encoded_image_bytes():
+    """Return a factory producing a real JPEG/WEBP through FFmpeg.
+
+    Skips the calling test when FFmpeg cannot produce the file: a format
+    assertion is only meaningful against bytes a real encoder wrote.
+    """
+    from app.services import media_probe
+
+    def _make(fmt: str, width: int = 128, height: int = 128) -> bytes:
+        ffmpeg = media_probe.ffmpeg_path()
+        if not ffmpeg:
+            pytest.skip("ffmpeg is not installed on this machine")
+        with tempfile.TemporaryDirectory(prefix="cas-img-") as tmp:
+            path = os.path.join(tmp, f"sample.{fmt}")
+            cmd = [
+                ffmpeg, "-y", "-loglevel", "error",
+                "-f", "lavfi",
+                "-i", f"color=c=teal:s={width}x{height}:d=1",
+                "-frames:v", "1", path,
+            ]
+            returncode, _stdout, stderr = media_probe.run_captured(cmd, timeout=60)
+            if returncode != 0 or not os.path.isfile(path):
+                pytest.skip(f"could not encode {fmt}: {stderr[-200:]}")
+            with open(path, "rb") as f:
+                return f.read()
+
+    return _make
+
+
 # ---------------------------------------------------------------------------
 # Helper fixtures for creating sample entities
 # ---------------------------------------------------------------------------

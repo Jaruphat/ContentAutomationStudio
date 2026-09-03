@@ -23,6 +23,7 @@ from app.schemas import (
     StyleResponse,
     StyleUpdate,
 )
+from app.services import revisions
 
 router = APIRouter(prefix="/api/projects", tags=["story"])
 
@@ -55,6 +56,7 @@ def update_story(
         project.plot_text = payload.plot_text
     project.updated_at = datetime.now(timezone.utc)
     db.commit()
+    revisions.refresh_project(db, project_id)
     db.refresh(project)
     return StoryResponse(brief_text=project.brief_text, plot_text=project.plot_text)
 
@@ -135,6 +137,7 @@ def update_character(
         setattr(character, key, value)
     character.updated_at = datetime.now(timezone.utc)
     db.commit()
+    revisions.refresh_project(db, project_id)
     db.refresh(character)
     return character
 
@@ -153,6 +156,7 @@ def delete_character(
         raise HTTPException(status_code=404, detail="Character not found")
     db.delete(character)
     db.commit()
+    revisions.refresh_project(db, project_id)
     return None
 
 
@@ -232,6 +236,7 @@ def update_location(
         setattr(location, key, value)
     location.updated_at = datetime.now(timezone.utc)
     db.commit()
+    revisions.refresh_project(db, project_id)
     db.refresh(location)
     return location
 
@@ -250,6 +255,7 @@ def delete_location(
         raise HTTPException(status_code=404, detail="Location not found")
     db.delete(location)
     db.commit()
+    revisions.refresh_project(db, project_id)
     return None
 
 
@@ -329,6 +335,7 @@ def update_style(
         setattr(style, key, value)
     style.updated_at = datetime.now(timezone.utc)
     db.commit()
+    revisions.refresh_project(db, project_id)
     db.refresh(style)
     return style
 
@@ -347,4 +354,5 @@ def delete_style(
         raise HTTPException(status_code=404, detail="Style not found")
     db.delete(style)
     db.commit()
+    revisions.refresh_project(db, project_id)
     return None

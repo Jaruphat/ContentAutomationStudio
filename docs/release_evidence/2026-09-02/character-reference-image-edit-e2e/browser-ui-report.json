@@ -1,0 +1,380 @@
+{
+  "result": "PASS",
+  "target": {
+    "title": "Content Automation Studio",
+    "url": "http://127.0.0.1:5173/story"
+  },
+  "project_id": "482fa596-0139-4c83-902e-44a7a20cd4e8",
+  "project_selector": [
+    {
+      "label": "Switch project",
+      "value": "db99b7fe-73a9-41ed-9922-018043fdbd12",
+      "options": [
+        {
+          "value": "db99b7fe-73a9-41ed-9922-018043fdbd12",
+          "text": "Reference Bible Real Multiscene Continuity E2E"
+        },
+        {
+          "value": "e6cdd637-17b5-43f5-9281-9834ef51a9b7",
+          "text": "Reference Bible Real H3 I2V E2E"
+        },
+        {
+          "value": "d68c74bf-2d25-4cb0-89ac-1e1f072b95bc",
+          "text": "Reference Bible Real H3 I2V E2E"
+        },
+        {
+          "value": "482fa596-0139-4c83-902e-44a7a20cd4e8",
+          "text": "Reference Bible Real Boogu E2E"
+        },
+        {
+          "value": "0964b7be-d35a-4ca8-9561-e122196b4489",
+          "text": "Reference Bible Real Boogu E2E"
+        },
+        {
+          "value": "5df52248-ce4b-4a76-8c81-a436b21b6b46",
+          "text": "The Last Paper Boat — Full System E2E 20260902"
+        },
+        {
+          "value": "2b04f988-cab0-4973-b570-3e3d76aae215",
+          "text": "Release Real H3 T2V Export E2E 20260902"
+        },
+        {
+          "value": "61ce452e-2723-45e4-a2f0-1810e2200096",
+          "text": "ทดสอบ workflow"
+        },
+        {
+          "value": "fec6ece3-c0b5-402b-bf0a-f8fbc8de38c4",
+          "text": "Release Real Comfy Image 20260902"
+        },
+        {
+          "value": "537ab438-9879-4dba-856f-e97a188adfc3",
+          "text": "H3 T2V controlled preflight"
+        }
+      ]
+    },
+    {
+      "label": "New project preset",
+      "value": "",
+      "options": [
+        {
+          "value": "",
+          "text": "Preset…"
+        },
+        {
+          "value": "blank",
+          "text": "Blank"
+        },
+        {
+          "value": "plot",
+          "text": "Start from Plot"
+        },
+        {
+          "value": "youtube",
+          "text": "YouTube"
+        },
+        {
+          "value": "shorts",
+          "text": "Shorts"
+        },
+        {
+          "value": "story",
+          "text": "Story Video"
+        }
+      ]
+    },
+    {
+      "label": null,
+      "value": "video",
+      "options": [
+        {
+          "value": "video",
+          "text": "Video"
+        },
+        {
+          "value": "image",
+          "text": "Image"
+        },
+        {
+          "value": "mixed",
+          "text": "Mixed"
+        }
+      ]
+    },
+    {
+      "label": null,
+      "value": "16:9",
+      "options": [
+        {
+          "value": "16:9",
+          "text": "16:9"
+        },
+        {
+          "value": "9:16",
+          "text": "9:16"
+        },
+        {
+          "value": "1:1",
+          "text": "1:1"
+        },
+        {
+          "value": "4:3",
+          "text": "4:3"
+        },
+        {
+          "value": "21:9",
+          "text": "21:9"
+        }
+      ]
+    },
+    {
+      "label": null,
+      "value": "openai",
+      "options": [
+        {
+          "value": "mock",
+          "text": "Deterministic mock (offline) (mock)"
+        },
+        {
+          "value": "openai",
+          "text": "OpenAI"
+        }
+      ]
+    },
+    {
+      "label": null,
+      "value": "gpt-4.1",
+      "options": [
+        {
+          "value": "gpt-4.1",
+          "text": "GPT-4.1"
+        },
+        {
+          "value": "gpt-4.1-mini",
+          "text": "GPT-4.1 mini"
+        },
+        {
+          "value": "gpt-4o",
+          "text": "GPT-4o"
+        },
+        {
+          "value": "gpt-4o-mini",
+          "text": "GPT-4o mini"
+        }
+      ]
+    },
+    {
+      "label": "Reference kind",
+      "value": "character",
+      "options": [
+        {
+          "value": "character",
+          "text": "Character"
+        },
+        {
+          "value": "prop",
+          "text": "Recurring prop"
+        },
+        {
+          "value": "location",
+          "text": "Location"
+        }
+      ]
+    }
+  ],
+  "selected": {
+    "ok": true,
+    "value": "482fa596-0139-4c83-902e-44a7a20cd4e8"
+  },
+  "visual_reference_bible_visible": true,
+  "canonical_sheet_visible": true,
+  "canonical_image_loaded": true,
+  "new_sheet_form_opened": true,
+  "new_sheet_form_visible": false,
+  "ui_state": {
+    "url": "http://127.0.0.1:5173/story",
+    "title": "Content Automation Studio",
+    "images": [
+      {
+        "alt": "Existing generated story frame used as the immutable edit reference",
+        "src": "http://127.0.0.1:5173/api/media/references/d2ecd06d-6c69-460d-8c0c-d4eaff1a97ff/file",
+        "complete": true,
+        "naturalWidth": 864,
+        "naturalHeight": 480
+      }
+    ],
+    "buttons": [
+      "Story",
+      "Storyboard",
+      "Generate",
+      "Review",
+      "Timeline",
+      "Export",
+      "Inspect",
+      "System",
+      "Light",
+      "Dark",
+      "New",
+      "Save",
+      "Creative Brief",
+      "Plot",
+      "Preview draft",
+      "Add sheet",
+      "Save sheet",
+      "Detach image",
+      "Characters0",
+      "Locations0",
+      "Visual Style0"
+    ],
+    "inputs": [
+      {
+        "tag": "SELECT",
+        "label": "Switch project",
+        "name": "",
+        "type": "select-one",
+        "value": "482fa596-0139-4c83-902e-44a7a20cd4e8"
+      },
+      {
+        "tag": "SELECT",
+        "label": "New project preset",
+        "name": "",
+        "type": "select-one",
+        "value": ""
+      },
+      {
+        "tag": "INPUT",
+        "label": null,
+        "name": "",
+        "type": "text",
+        "value": "Reference Bible Real Boogu E2E"
+      },
+      {
+        "tag": "TEXTAREA",
+        "label": null,
+        "name": "",
+        "type": "textarea",
+        "value": "Prove canonical reference upload and real local image editing"
+      },
+      {
+        "tag": "INPUT",
+        "label": null,
+        "name": "",
+        "type": "text",
+        "value": "release audit"
+      },
+      {
+        "tag": "SELECT",
+        "label": null,
+        "name": "",
+        "type": "select-one",
+        "value": "image"
+      },
+      {
+        "tag": "SELECT",
+        "label": null,
+        "name": "",
+        "type": "select-one",
+        "value": "1:1"
+      },
+      {
+        "tag": "INPUT",
+        "label": null,
+        "name": "",
+        "type": "text",
+        "value": "3"
+      },
+      {
+        "tag": "INPUT",
+        "label": null,
+        "name": "",
+        "type": "text",
+        "value": "en"
+      },
+      {
+        "tag": "TEXTAREA",
+        "label": null,
+        "name": "",
+        "type": "textarea",
+        "value": ""
+      },
+      {
+        "tag": "SELECT",
+        "label": null,
+        "name": "",
+        "type": "select-one",
+        "value": "openai"
+      },
+      {
+        "tag": "SELECT",
+        "label": null,
+        "name": "",
+        "type": "select-one",
+        "value": "gpt-4.1"
+      },
+      {
+        "tag": "TEXTAREA",
+        "label": null,
+        "name": "",
+        "type": "textarea",
+        "value": ""
+      },
+      {
+        "tag": "SELECT",
+        "label": "Reference kind",
+        "name": "",
+        "type": "select-one",
+        "value": "character"
+      },
+      {
+        "tag": "INPUT",
+        "label": "Reference name",
+        "name": "",
+        "type": "text",
+        "value": ""
+      },
+      {
+        "tag": "INPUT",
+        "label": null,
+        "name": "",
+        "type": "text",
+        "value": "Canonical blue paper boat"
+      },
+      {
+        "tag": "TEXTAREA",
+        "label": null,
+        "name": "",
+        "type": "textarea",
+        "value": "Exactly one small folded paper boat; identical geometry and blue color in every shot."
+      },
+      {
+        "tag": "INPUT",
+        "label": null,
+        "name": "",
+        "type": "text",
+        "value": "one single blue origami paper boat, same folds, same proportions"
+      },
+      {
+        "tag": "INPUT",
+        "label": null,
+        "name": "",
+        "type": "text",
+        "value": "duplicate boat, second boat, white boat, dark boat, changed shape"
+      },
+      {
+        "tag": "TEXTAREA",
+        "label": null,
+        "name": "",
+        "type": "textarea",
+        "value": "Canonical recurring story prop for continuity testing."
+      },
+      {
+        "tag": "INPUT",
+        "label": null,
+        "name": "",
+        "type": "file",
+        "value": ""
+      }
+    ]
+  },
+  "console_errors": [],
+  "body_text_excerpt": "CA\nStory\nStoryboard\nGenerate\nReview\nTimeline\nExport\nInspect\n\nTHEME\n\nSystem\nLight\nDark\nProject\nReference Bible Real Multiscene Continuity E2E\nReference Bible Real H3 I2V E2E\nReference Bible Real H3 I2V E2E\nReference Bible Real Boogu E2E\nReference Bible Real Boogu E2E\nThe Last Paper Boat — Full System E2E 20260902\nRelease Real H3 T2V Export E2E 20260902\nทดสอบ workflow\nRelease Real Comfy Image 20260902\nH3 T2V controlled preflight\nNew\nPreset…\nBlank\nStart from Plot\nYouTube\nShorts\nStory Video\nStory & Creative Brief\nSave\nCreative Brief\nPROJECT TITLE\nOBJECTIVE\nTARGET AUDIENCE\nCONTENT TYPE\nVideo\nImage\nMixed\nASPECT RATIO\n16:9\n9:16\n1:1\n4:3\n21:9\nDURATION (SEC)\nLANGUAGE\nPlot\nPLOT / NARRATIVE\nGenerate Story Bible with AI\n\nSave the brief and plot first. Preview a validated draft before writing characters, locations and visual style.\n\nProvider\nDeterministic mock (offline) (mock)\nOpenAI\nModel\nGPT-4.1\nGPT-4.1 mini\nGPT-4o\nGPT-4o mini\nOptional direction\nProvider ready\nPreview draft\nVisual Reference Bible\n\nProject-scoped canonical images and continuity identity. Shot assignments use image IDs in explicit order.\n\nCharacter\nRecurring prop\nLocation\nAdd sheet\nRECURRING PROP\nRevision 2\nName\nIdentity / wardrobe / color description\nCanonical identity tokens\nNegative identity tokens\nContinuity notes\nSave sheet\nExisting generated story frame used as the immutable edit reference\n\ncanonical · 864×480 · Uploaded: 9dd9a330-2ff8-4c91-93c3-2b1e76a08e54_5df52248_fef81802_00001_.png\n\nDetach image\nUpload canonical image\nCharacters\n0\nLocations\n0\nVisual Style\n0"
+}

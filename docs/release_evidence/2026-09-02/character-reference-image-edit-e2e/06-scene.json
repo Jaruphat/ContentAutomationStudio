@@ -1,0 +1,16 @@
+{
+  "id": "2bbe070b-dba8-484a-82a6-7e22b484c81c",
+  "project_id": "482fa596-0139-4c83-902e-44a7a20cd4e8",
+  "order": 1,
+  "title": "Boat identity lock",
+  "purpose": "",
+  "summary": "The same single boat floats on a quiet pond.",
+  "character_ids": [],
+  "location_id": null,
+  "time_of_day": "late afternoon",
+  "emotional_beat": "",
+  "planned_duration_sec": 3.0,
+  "status": "Ready",
+  "created_at": "2026-09-02T13:41:05.924166",
+  "updated_at": "2026-09-02T13:41:05.924166"
+}

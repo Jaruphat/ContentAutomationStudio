@@ -23,6 +23,7 @@ import { useAppState, useAppDispatch } from "../store/useProjectStore";
 import StatusBadge from "../components/StatusBadge";
 import AIGenerationPanel from "../components/AIGenerationPanel";
 import MediaProviderFields from "../components/MediaProviderFields";
+import { ShotReferenceAssignment } from "../components/VisualReferenceBible";
 import type { MediaProviderId, Scene, Shot, ShotCreate } from "../types";
 
 // ── Shot row ─────────────────────────────────────────────────────────────
@@ -54,6 +55,12 @@ function ShotRow({
     shot.image_provider_id ?? "comfyui",
   );
   const [imageModel, setImageModel] = useState(shot.image_model || "workflow");
+  const [referenceAssetIds, setReferenceAssetIds] = useState(shot.reference_asset_ids);
+
+  const referencesQ = useQuery({
+    queryKey: ["references", projectId],
+    queryFn: () => api.references.list(projectId),
+  });
 
   const mediaProvidersQ = useQuery({
     queryKey: ["media-providers"],
@@ -127,6 +134,12 @@ function ShotRow({
               }}
               onModelChange={setImageModel}
             />
+            <ShotReferenceAssignment
+              sheets={referencesQ.data ?? []}
+              assignedIds={referenceAssetIds}
+              onChange={setReferenceAssetIds}
+              revision={shot}
+            />
             <div>
               <label className="text-[10px] text-zinc-500 uppercase">Image Prompt</label>
               <textarea value={imagePrompt} onChange={(e) => setImagePrompt(e.target.value)} className="w-full rounded px-2 py-1 text-xs" rows={2} />
@@ -151,6 +164,7 @@ function ShotRow({
                     generation_mode: genMode,
                     image_provider_id: imageProviderId,
                     image_model: imageModel,
+                    reference_asset_ids: referenceAssetIds,
                   })
                 }
                 disabled={updateMut.isPending}
@@ -191,7 +205,16 @@ function ShotRow({
         {shot.image_prompt || shot.video_prompt || "--"}
       </td>
       <td className="px-2 py-2">
-        <StatusBadge status={shot.status} />
+        <div className="flex flex-col items-start gap-1">
+          <StatusBadge status={shot.status} />
+          <span className={`rounded px-1.5 py-0.5 text-[10px] ${shot.is_stale ? "bg-amber-950 text-amber-300" : "bg-zinc-800 text-zinc-400"}`}>
+            {shot.is_stale
+              ? `Stale · r${shot.generated_revision} → r${shot.prompt_revision}`
+              : shot.generated_revision
+                ? `Current · r${shot.generated_revision}`
+                : `Not generated · r${shot.prompt_revision}`}
+          </span>
+        </div>
       </td>
       <td className="px-2 py-2">
         <div className="flex gap-1">
