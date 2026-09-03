@@ -32,6 +32,14 @@ MAX_ATTEMPTS = 3
 POLL_INTERVAL_SEC = 1.0
 IDLE_INTERVAL_SEC = 2.0
 
+#: What a restart decided to do with a job that was already submitted.
+RESUME_HANDLED = "handled"      # the submission reached a terminal state here
+RESUME_POLL = "poll"            # it is still with the provider; keep polling
+RESUME_RESUBMIT = "resubmit"    # the provider proved it holds no such work
+
+#: Error code for a submission the provider can neither return nor disown.
+UNRECONCILED_ERROR = "UnreconciledSubmission"
+
 
 class QueueManager:
     """
@@ -98,8 +106,16 @@ class QueueManager:
 
     def reconcile_on_startup(self) -> None:
         """
-        Mark jobs that were Running when the app last shut down as Queued
-        so they will be retried. Called during app startup.
+        Requeue jobs that were Running when the app last shut down.
+
+        A job that had already been submitted keeps its provider prompt id.
+        That id is the only evidence that work may be outstanding - a real
+        generation the user is being billed for, or one already finished and
+        waiting in the provider's history. Clearing it here would make the
+        restarted queue submit the same job a second time, paying for it twice
+        and producing two takes for one request. The id is retained and
+        :meth:`_resume_submission` decides what to do with it before anything
+        is resubmitted.
         """
         db: Session = SessionLocal()
         try:
@@ -115,10 +131,18 @@ class QueueManager:
                 .all()
             )
             for job in running_jobs:
-                logger.info(f"Reconcile: resetting Running job {job.id} to Queued")
                 job.status = "Queued"
-                job.comfyui_prompt_id = None
-                job.started_at = None
+                if job.comfyui_prompt_id:
+                    logger.info(
+                        "Reconcile: job %s was submitted as prompt %s; queued for "
+                        "reconciliation rather than resubmission",
+                        job.id, job.comfyui_prompt_id,
+                    )
+                else:
+                    logger.info(
+                        "Reconcile: job %s was never submitted; requeued", job.id
+                    )
+                    job.started_at = None
             db.commit()
         finally:
             db.close()
@@ -168,10 +192,16 @@ class QueueManager:
         """Submit a single job, poll for completion, and update DB."""
         now = datetime.now(timezone.utc)
 
+        # A prompt id already on the job means a previous process submitted it
+        # and did not see it finish. This run reconciles that submission before
+        # it considers making another one.
+        resuming_prompt_id = (job.comfyui_prompt_id or "").strip() or None
+
         # Transition to Running
         job.status = "Running"
         job.started_at = now
-        job.attempts += 1
+        if not resuming_prompt_id:
+            job.attempts += 1
         db.commit()
 
         # Update shot status
@@ -201,6 +231,23 @@ class QueueManager:
             return
 
         try:
+            if resuming_prompt_id:
+                outcome = await self._resume_submission(
+                    db, job, shot, provider, resuming_prompt_id
+                )
+                if outcome == RESUME_HANDLED:
+                    return
+                if outcome == RESUME_POLL:
+                    await self._poll_until_terminal(
+                        db, job, shot, provider, resuming_prompt_id
+                    )
+                    return
+                # The provider proved it holds no such work, so this is a fresh
+                # attempt rather than a continuation of the old one.
+                job.comfyui_prompt_id = None
+                job.attempts += 1
+                db.commit()
+
             if (
                 provider_id == media_providers.COMFYUI
                 and provider.requires_workflow_payload
@@ -234,89 +281,224 @@ class QueueManager:
             job.submitted_at = datetime.now(timezone.utc)
             db.commit()
 
-            # Poll until terminal state
-            while self._running:
-                if self._is_cancelled(db, job):
-                    logger.info("Job %s cancelled while running; stopping poll", job.id)
-                    return
-
-                status = await provider.get_job_status(prompt_id)
-
-                if status.status == JobStatusEnum.COMPLETED:
-                    outputs = await provider.get_job_outputs(prompt_id)
-                    provenance = self._record_provenance(job, provider, prompt_id)
-                    job.status = "Completed"
-                    job.completed_at = datetime.now(timezone.utc)
-                    job.outputs = [
-                        {
-                            "file_path": o.file_path,
-                            "type": o.file_type,
-                            "width": o.width,
-                            "height": o.height,
-                        }
-                        for o in outputs
-                    ]
-                    db.commit()
-
-                    # Create Take records for each output. Each one carries the
-                    # provider, model, request parameters, usage, cost and seed
-                    # that produced it, so a take's origin stays auditable long
-                    # after the job row's context is forgotten.
-                    for o in outputs:
-                        take = Take(
-                            id=str(uuid.uuid4()),
-                            shot_id=job.shot_id,
-                            job_id=job.id,
-                            run_id=job.run_id,
-                            file_path=o.file_path,
-                            thumbnail_path="",
-                            duration_sec=o.duration_sec,
-                            width=o.width,
-                            height=o.height,
-                            frame_rate=o.frame_rate,
-                            codec=o.codec,
-                            media_provider_id=job.media_provider_id
-                            or media_providers.COMFYUI,
-                            media_model=job.media_model or "workflow",
-                            request_params=dict(job.request_params or {}),
-                            usage=dict(job.usage or {}),
-                            estimated_cost_usd=job.estimated_cost_usd,
-                            provenance={
-                                **dict(provenance),
-                                "references": dict(job.reference_provenance or {}),
-                            },
-                            prompt_revision=job.prompt_revision,
-                            prompt_sha256=job.prompt_sha256,
-                            content_sha256=job.content_sha256,
-                            reference_image_ids=list(job.reference_image_ids or []),
-                            reference_sha256s=list(job.reference_sha256s or []),
-                            lineage={"job_id": job.id},
-                            review_status="Pending",
-                        )
-                        db.add(take)
-
-                    # Update shot status
-                    if shot:
-                        shot.status = "NeedsReview"
-                        revisions.mark_generated(db, shot)
-                    db.commit()
-                    logger.info(f"Job {job.id} completed with {len(outputs)} output(s)")
-                    return
-
-                elif status.status == JobStatusEnum.FAILED:
-                    self._handle_failure(
-                        db, job, shot,
-                        message=status.error_message or "Unknown error",
-                        fallback_code=status.error_code,
-                    )
-                    return
-
-                # Still running or queued -- keep polling
-                await asyncio.sleep(POLL_INTERVAL_SEC)
+            await self._poll_until_terminal(db, job, shot, provider, prompt_id)
 
         except Exception as exc:
             logger.exception("Error executing job %s", job.id)
             self._handle_failure(db, job, shot, message=str(exc), exception=exc)
+
+    async def _poll_until_terminal(
+        self,
+        db: Session,
+        job: GenerationJob,
+        shot: Shot | None,
+        provider: MediaProvider,
+        prompt_id: str,
+    ) -> None:
+        """Poll one submitted prompt until it completes, fails or is cancelled."""
+        while self._running:
+            if self._is_cancelled(db, job):
+                logger.info("Job %s cancelled while running; stopping poll", job.id)
+                return
+
+            status = await provider.get_job_status(prompt_id)
+
+            if status.status == JobStatusEnum.COMPLETED:
+                await self._complete_job(db, job, shot, provider, prompt_id)
+                return
+
+            if status.status == JobStatusEnum.FAILED:
+                self._handle_failure(
+                    db, job, shot,
+                    message=status.error_message or "Unknown error",
+                    fallback_code=status.error_code,
+                )
+                return
+
+            # Still running or queued -- keep polling
+            await asyncio.sleep(POLL_INTERVAL_SEC)
+
+    async def _complete_job(
+        self,
+        db: Session,
+        job: GenerationJob,
+        shot: Shot | None,
+        provider: MediaProvider,
+        prompt_id: str,
+    ) -> None:
+        """Record a finished submission: outputs, takes and shot status."""
+        outputs = await provider.get_job_outputs(prompt_id)
+        provenance = self._record_provenance(job, provider, prompt_id)
+        job.status = "Completed"
+        job.completed_at = datetime.now(timezone.utc)
+        job.outputs = [
+            {
+                "file_path": o.file_path,
+                "type": o.file_type,
+                "width": o.width,
+                "height": o.height,
+            }
+            for o in outputs
+        ]
+        db.commit()
+
+        # Create Take records for each output. Each one carries the provider,
+        # model, request parameters, usage, cost and seed that produced it, so
+        # a take's origin stays auditable long after the job row's context is
+        # forgotten.
+        for o in outputs:
+            take = Take(
+                id=str(uuid.uuid4()),
+                shot_id=job.shot_id,
+                job_id=job.id,
+                run_id=job.run_id,
+                file_path=o.file_path,
+                thumbnail_path="",
+                duration_sec=o.duration_sec,
+                width=o.width,
+                height=o.height,
+                frame_rate=o.frame_rate,
+                codec=o.codec,
+                media_provider_id=job.media_provider_id or media_providers.COMFYUI,
+                media_model=job.media_model or "workflow",
+                request_params=dict(job.request_params or {}),
+                usage=dict(job.usage or {}),
+                estimated_cost_usd=job.estimated_cost_usd,
+                provenance={
+                    **dict(provenance),
+                    "references": dict(job.reference_provenance or {}),
+                },
+                prompt_revision=job.prompt_revision,
+                prompt_sha256=job.prompt_sha256,
+                content_sha256=job.content_sha256,
+                reference_image_ids=list(job.reference_image_ids or []),
+                reference_sha256s=list(job.reference_sha256s or []),
+                lineage={"job_id": job.id},
+                review_status="Pending",
+            )
+            db.add(take)
+
+        if shot:
+            shot.status = "NeedsReview"
+            # Only the shot this job was actually compiled from may have its
+            # staleness cleared. A shot edited while the job was in flight has
+            # moved on, and crediting this take to the new revision would hide
+            # that the delivered media is out of date.
+            current = revisions.mark_generated_if_current(
+                db, shot, job.content_sha256 or ""
+            )
+            if not current:
+                logger.info(
+                    "Job %s finished against an older revision of shot %s; "
+                    "the shot stays flagged for regeneration",
+                    job.id, shot.id,
+                )
+        db.commit()
+        logger.info("Job %s completed with %d output(s)", job.id, len(outputs))
+
+    async def _resume_submission(
+        self,
+        db: Session,
+        job: GenerationJob,
+        shot: Shot | None,
+        provider: MediaProvider,
+        prompt_id: str,
+    ) -> str:
+        """Decide what a restart should do with an already-submitted job.
+
+        Resubmitting is only safe when the provider can show it holds no such
+        work. Anything else - finished, still queued, or simply unknowable -
+        must not turn into a second generation, because on a metered provider
+        that is a second charge for a request the user made once.
+        """
+        try:
+            status = await provider.get_job_status(prompt_id)
+        except Exception as exc:  # provider unreachable during reconciliation
+            logger.warning(
+                "Could not reconcile job %s (prompt %s): %s", job.id, prompt_id, exc
+            )
+            self._requeue_for_reconciliation(db, job, shot, prompt_id, str(exc))
+            return RESUME_HANDLED
+
+        if status.status == JobStatusEnum.COMPLETED:
+            logger.info(
+                "Job %s was already completed by the provider; collecting its "
+                "outputs instead of resubmitting", job.id,
+            )
+            await self._complete_job(db, job, shot, provider, prompt_id)
+            return RESUME_HANDLED
+
+        absent = await self._submission_is_absent(provider, prompt_id)
+
+        if absent is True:
+            return RESUME_RESUBMIT
+
+        if absent is None:
+            # The provider cannot say whether this prompt ever existed, so the
+            # work may have run and been billed - and a reported failure may
+            # only mean "I no longer remember this id". Failing permanently
+            # keeps the decision with the user: Retry resubmits, nothing else.
+            self._fail_permanently(
+                db, job, shot, UNRECONCILED_ERROR,
+                f"This job was submitted as {prompt_id} before the backend "
+                f"restarted, and the provider can no longer say what happened "
+                f"to it. It may already have run - and been charged for. "
+                f"Check the provider, then use Retry to submit it again.",
+            )
+            return RESUME_HANDLED
+
+        # The provider still holds this prompt, so its verdict is trustworthy.
+        if status.status in (JobStatusEnum.FAILED, JobStatusEnum.CANCELLED):
+            self._handle_failure(
+                db, job, shot,
+                message=status.error_message or "Unknown error",
+                fallback_code=status.error_code,
+            )
+            return RESUME_HANDLED
+
+        return RESUME_POLL
+
+    @staticmethod
+    async def _submission_is_absent(
+        provider: MediaProvider, prompt_id: str
+    ) -> bool | None:
+        """True only when the provider positively disowns this prompt id."""
+        try:
+            known = await provider.submission_exists(prompt_id)
+        except Exception:  # pragma: no cover - a provider bug is not proof
+            logger.exception("submission_exists failed for prompt %s", prompt_id)
+            return None
+        if known is None:
+            return None
+        return not known
+
+    def _requeue_for_reconciliation(
+        self,
+        db: Session,
+        job: GenerationJob,
+        shot: Shot | None,
+        prompt_id: str,
+        reason: str,
+    ) -> None:
+        """Try the reconciliation again later, keeping the prompt id intact.
+
+        Bounded by the same attempt ceiling as any other failure, so a provider
+        that stays unreachable stops the job with an explanation instead of
+        holding the queue in a retry loop.
+        """
+        job.attempts = (job.attempts or 0) + 1
+        if job.attempts >= MAX_ATTEMPTS:
+            self._fail_permanently(
+                db, job, shot, UNRECONCILED_ERROR,
+                f"This job was submitted as {prompt_id}, but the provider could "
+                f"not be reached to find out what happened to it ({reason}). It "
+                f"was not resubmitted, because it may already have run. Bring "
+                f"the provider back and use Retry.",
+            )
+            return
+        job.status = "Queued"
+        job.started_at = None
+        db.commit()
 
     async def _prepare_reference_inputs(
         self, db: Session, job: GenerationJob, provider: Any

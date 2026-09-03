@@ -55,8 +55,25 @@ COVERAGE_REASON_UNGENERATED = (
 )
 
 
+#: A cut that predates lineage tracking is placed, but never silently: the
+#: manifest has to say that its takes could not be proven current.
+LEGACY_LINEAGE_WARNING = (
+    "Some placed takes predate content-revision tracking, so this cut cannot "
+    "be proven to match the current brief. Regenerate those shots to confirm."
+)
+
+
 class StaleTimelineError(Exception):
     """A timeline item no longer matches the current approved shot lineage."""
+
+
+class EmptyTimelineReplacementError(Exception):
+    """An auto-build would have replaced a real cut with nothing.
+
+    Raised instead of deleting, because a build that can place no take is
+    almost always a lineage or migration problem - and the existing timeline is
+    the only copy of the user's edit order.
+    """
 
 
 def _resolution_aspect(resolution: str) -> tuple[int, int] | None:
@@ -146,12 +163,27 @@ def _take_matches_shot(take: Take, shot: Shot) -> bool:
     """Require equality across every persisted generation dependency."""
     return bool(
         take.review_status == "Approved"
-        and take.prompt_revision == shot.prompt_revision
-        and take.prompt_sha256 == shot.prompt_sha256
-        and take.content_sha256 == shot.content_sha256
-        and list(take.reference_image_ids or []) == list(shot.reference_asset_ids or [])
-        and list(take.reference_sha256s or []) == list(shot.reference_sha256s or [])
+        and revisions.take_lineage_state(take, shot) == revisions.LINEAGE_CURRENT
     )
+
+
+def _take_is_legacy(take: Take, shot: Shot) -> bool:
+    """An approved take whose lineage was never recorded, so cannot be judged."""
+    return bool(
+        take.review_status == "Approved"
+        and revisions.take_lineage_state(take, shot) == revisions.LINEAGE_UNVERIFIED
+    )
+
+
+def _take_is_placeable(take: Take, shot: Shot) -> bool:
+    """Whether this approved take may sit on the cut.
+
+    Current takes always may. A take from before lineage tracking may too:
+    refusing it would quietly delete approved work that a database upgrade,
+    not the user, invalidated. What it may not do is pass as verified - see
+    :data:`LEGACY_LINEAGE_WARNING`.
+    """
+    return _take_matches_shot(take, shot) or _take_is_legacy(take, shot)
 
 
 def build_timeline_from_approved_takes(
@@ -191,8 +223,13 @@ def build_timeline_from_approved_takes(
                 .order_by(Take.created_at.desc())
                 .all()
             )
+            # A verified current take always wins; a legacy one is only used
+            # when there is nothing better, so an upgrade never demotes a cut.
             approved_take = next(
                 (take for take in approved_takes if _take_matches_shot(take, shot)),
+                None,
+            ) or next(
+                (take for take in approved_takes if _take_is_legacy(take, shot)),
                 None,
             )
             if approved_take is None:
@@ -224,11 +261,36 @@ def build_timeline_from_approved_takes(
 
 
 def save_timeline_items(
-    db: Session, project_id: str, items: list[dict[str, Any]]
+    db: Session,
+    project_id: str,
+    items: list[dict[str, Any]],
+    *,
+    allow_empty_replacement: bool = True,
 ) -> list[TimelineItem]:
-    """Atomically replace a timeline after validating every take lineage."""
+    """Atomically replace a timeline after validating every take lineage.
+
+    ``allow_empty_replacement`` guards the one case that cannot be undone: a
+    derived build that resolved to nothing is refused rather than allowed to
+    wipe an existing cut. An explicit edit that clears the timeline is a
+    different act and passes the default.
+    """
     revisions.refresh_project(db, project_id)
     prepared: list[tuple[dict[str, Any], Take | None, Shot | None]] = []
+
+    if not items and not allow_empty_replacement:
+        existing = (
+            db.query(TimelineItem)
+            .filter(TimelineItem.project_id == project_id)
+            .count()
+        )
+        if existing:
+            raise EmptyTimelineReplacementError(
+                f"This build placed no takes, but the project already has "
+                f"{existing} timeline item(s). Refusing to replace the current "
+                f"cut with an empty one. Check the Timeline coverage report "
+                f"for why each shot could not be placed, or clear the timeline "
+                f"explicitly if that is what you meant."
+            )
 
     # Validate the complete replacement before deleting the current cut. A
     # refused stale edit must not destroy a valid timeline as a side effect.
@@ -251,7 +313,7 @@ def save_timeline_items(
             and take.shot_id == shot.id
             and shot.scene is not None
             and shot.scene.project_id == project_id
-            and _take_matches_shot(take, shot)
+            and _take_is_placeable(take, shot)
         )
         if not valid:
             raise StaleTimelineError(
@@ -337,7 +399,7 @@ def timeline_coverage(db: Session, project_id: str) -> dict[str, Any]:
 
             takes = db.query(Take).filter(Take.shot_id == shot.id).all()
             approved = [t for t in takes if t.review_status == "Approved"]
-            if any(_take_matches_shot(take, shot) for take in approved):
+            if any(_take_is_placeable(take, shot) for take in approved):
                 reason = COVERAGE_REASON_REBUILD
             elif any(t.review_status == "Pending" for t in takes):
                 reason = COVERAGE_REASON_PENDING
@@ -404,14 +466,20 @@ def get_timeline_manifest(
         else {}
     )
     stale_items: list[str] = []
+    legacy_items: list[str] = []
     for item in items:
         take = takes.get(item.take_id) if item.take_id else None
         shot = shots.get(item.shot_id) if item.shot_id else None
+        if take is None or shot is None or take.shot_id != shot.id:
+            stale_items.append(item.id)
+            continue
+        if _take_is_legacy(take, shot):
+            # Nothing to compare a pre-lineage take against, so the recorded
+            # revisions on the row are not evidence either way.
+            legacy_items.append(item.id)
+            continue
         if (
-            take is None
-            or shot is None
-            or take.shot_id != shot.id
-            or not _take_matches_shot(take, shot)
+            not _take_matches_shot(take, shot)
             or item.take_prompt_revision != take.prompt_revision
             or item.shot_prompt_revision != shot.prompt_revision
         ):
@@ -457,16 +525,25 @@ def get_timeline_manifest(
         }
 
     timeline_takes = [takes[item.take_id] for item in items if item.take_id in takes]
-    override_warnings = aspect_override_warnings(db, project, timeline_takes)
+    warnings = aspect_override_warnings(db, project, timeline_takes)
+    if legacy_items:
+        warnings.append({
+            "code": "legacy_take_lineage",
+            "message": LEGACY_LINEAGE_WARNING,
+            "item_ids": legacy_items,
+            "take_ids": [
+                item.take_id for item in items if item.id in set(legacy_items)
+            ],
+        })
 
     return {
         "project_id": project_id,
         "item_count": len(items),
         "total_duration_sec": total_duration,
-        "warnings": override_warnings,
+        "warnings": warnings,
         "delivery_validation": {
             "pipeline_pass": not stale_items,
-            "delivery_spec_pass": not stale_items and not override_warnings,
+            "delivery_spec_pass": not stale_items and not warnings,
         },
         "coverage": timeline_coverage(db, project_id),
         "items": [

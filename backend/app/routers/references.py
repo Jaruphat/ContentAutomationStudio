@@ -39,6 +39,10 @@ _STATUS_FOR_CODE: dict[str, int] = {
     "missing_name": 422,
     "empty_file": 422,
     "dimensions_out_of_range": 422,
+    # The bytes are a real image container but do not decode as one whole
+    # image: truncated, corrupt, or carrying a payload after the image ends.
+    "malformed_image": 422,
+    "image_too_large_to_decode": 422,
     "unsupported_media_type": 415,
     "file_too_large": 413,
     "reference_in_use": 409,

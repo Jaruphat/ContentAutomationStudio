@@ -267,6 +267,17 @@ class OpenAIImageProvider(MediaProvider):
             )
         return JobStatus(status=JobStatusEnum.COMPLETED, progress=1.0)
 
+    async def submission_exists(self, prompt_id: str) -> bool | None:
+        """``True`` while held in memory; never ``False``.
+
+        The Images API bills on the request, and a submitted job that this
+        process no longer remembers may well have produced - and charged for -
+        an image. Reporting that as "the provider does not have it" would let
+        the queue generate and pay for it a second time, so an id this process
+        has forgotten is unknown, not absent.
+        """
+        return True if prompt_id in self._jobs else None
+
     async def get_job_outputs(self, prompt_id: str) -> list[OutputFile]:
         record = self._jobs.get(prompt_id)
         return [record["output"]] if record else []

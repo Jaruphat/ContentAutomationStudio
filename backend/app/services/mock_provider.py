@@ -296,6 +296,10 @@ class MockComfyUIProvider(ComfyUIProvider):
             outputs=[{"file_path": output.file_path, "type": output.file_type}],
         )
 
+    async def submission_exists(self, prompt_id: str) -> bool | None:
+        """The submission index is on disk, so this survives a restart."""
+        return prompt_id in self._submissions
+
     async def get_job_outputs(self, prompt_id: str) -> list[OutputFile]:
         return [self._materialise(prompt_id)]
 

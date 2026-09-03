@@ -15,6 +15,8 @@ from sqlalchemy.orm import Session, sessionmaker
 from app.models import GenerationJob, Scene, Shot, Take, Workflow
 from app.services import mock_provider as mock_provider_module
 from app.services import queue_manager as qm_module
+from app.services import revisions
+from app.services.comfyui_adapter import JobStatus, JobStatusEnum
 from app.services.job_payload import POSITIVE_PROMPT, SEED
 from app.services.mock_provider import MockComfyUIProvider
 from app.services.queue_manager import QueueManager
@@ -72,16 +74,13 @@ class TestReconcileOnStartup:
 
         assert manager.is_project_paused(sample_project.id) is True
 
-    def test_running_job_is_requeued(
+    def test_unsubmitted_running_job_is_requeued(
         self, db_session, sample_shot, manager, patched_sessions
     ):
         """A job left Running by a crash must come back as Queued so the
-        restarted queue picks it up again."""
-        job = make_job(
-            db_session, sample_shot.id,
-            status="Running",
-            comfyui_prompt_id="mock-stale",
-        )
+        restarted queue picks it up again. Nothing was sent to the provider,
+        so there is nothing to reconcile against."""
+        job = make_job(db_session, sample_shot.id, status="Running")
 
         manager.reconcile_on_startup()
 
@@ -89,6 +88,27 @@ class TestReconcileOnStartup:
         assert job.status == "Queued"
         assert job.comfyui_prompt_id is None
         assert job.started_at is None
+
+    def test_submitted_running_job_keeps_its_provider_prompt_id(
+        self, db_session, sample_shot, manager, patched_sessions
+    ):
+        """The prompt id is the only record that real work may be outstanding.
+
+        Dropping it here is what makes the restarted queue submit the same job
+        again - a second render, and on a metered provider a second charge, for
+        one request.
+        """
+        job = make_job(
+            db_session, sample_shot.id,
+            status="Running",
+            comfyui_prompt_id="mock-in-flight",
+        )
+
+        manager.reconcile_on_startup()
+
+        db_session.refresh(job)
+        assert job.status == "Queued"
+        assert job.comfyui_prompt_id == "mock-in-flight"
 
     def test_terminal_jobs_are_untouched(
         self, db_session, sample_shot, manager, patched_sessions
@@ -225,6 +245,197 @@ class TestExecuteJob:
         db_session.refresh(job)
         assert job.status == "Cancelled"
         assert db_session.query(Take).filter(Take.shot_id == sample_shot.id).count() == 0
+
+
+# ---------------------------------------------------------------------------
+# Resuming a submission across a restart
+#
+# Everything here is about one question: after a restart, may this job be
+# submitted again? Getting it wrong costs real GPU time, or real money.
+# ---------------------------------------------------------------------------
+
+class TestResumeAfterRestart:
+    @pytest.mark.asyncio
+    async def test_a_completed_submission_is_collected_not_resubmitted(
+        self, db_session, sample_shot, manager, patched_sessions, monkeypatch
+    ):
+        """The work finished while the backend was down. It must be harvested."""
+        monkeypatch.setattr(qm_module, "POLL_INTERVAL_SEC", 0.01)
+        monkeypatch.setattr(mock_provider_module, "QUEUED_SEC", 0.0)
+        monkeypatch.setattr(mock_provider_module, "RUNNING_SEC", 0.0)
+
+        job = make_job(db_session, sample_shot.id)
+        manager._running = True
+        # Submit through the provider, then simulate the restart: the job goes
+        # back to Queued with its prompt id, exactly as reconcile leaves it.
+        await manager._execute_job(db_session, job)
+        db_session.refresh(job)
+        prompt_id = job.comfyui_prompt_id
+        db_session.query(Take).delete()
+        job.status = "Queued"
+        job.outputs = []
+        job.completed_at = None
+        db_session.commit()
+
+        submissions = []
+        original_submit = manager._provider.submit_job
+
+        async def counting_submit(payload, job_id, context=None):
+            submissions.append(job_id)
+            return await original_submit(payload, job_id, context)
+
+        manager._provider.submit_job = counting_submit
+        await manager._execute_job(db_session, job)
+
+        db_session.refresh(job)
+        assert submissions == []
+        assert job.status == "Completed"
+        assert job.comfyui_prompt_id == prompt_id
+        assert db_session.query(Take).filter(Take.job_id == job.id).count() == 1
+
+    @pytest.mark.asyncio
+    async def test_a_submission_the_provider_disowns_is_submitted_again(
+        self, db_session, sample_shot, manager, patched_sessions, monkeypatch
+    ):
+        """A prompt id the provider has genuinely lost is safe to redo."""
+        monkeypatch.setattr(qm_module, "POLL_INTERVAL_SEC", 0.01)
+        monkeypatch.setattr(mock_provider_module, "QUEUED_SEC", 0.0)
+        monkeypatch.setattr(mock_provider_module, "RUNNING_SEC", 0.0)
+
+        job = make_job(
+            db_session, sample_shot.id, comfyui_prompt_id="mock-forgotten"
+        )
+        submissions = []
+        original_submit = manager._provider.submit_job
+
+        async def counting_submit(payload, job_id, context=None):
+            submissions.append(job_id)
+            return await original_submit(payload, job_id, context)
+
+        manager._provider.submit_job = counting_submit
+        manager._running = True
+        await manager._execute_job(db_session, job)
+
+        db_session.refresh(job)
+        assert submissions == [job.id]
+        assert job.status == "Completed"
+        assert job.comfyui_prompt_id != "mock-forgotten"
+
+    @pytest.mark.asyncio
+    async def test_an_unprovable_submission_is_never_blindly_resubmitted(
+        self, db_session, sample_shot, manager, patched_sessions
+    ):
+        """A provider that cannot say what happened is not permission to redo it.
+
+        This is the OpenAI Images case after a restart: the image may already
+        have been generated and billed. The job stops with an explanation and
+        waits for the user to press Retry.
+        """
+        async def forgotten(prompt_id):
+            return JobStatus(
+                status=JobStatusEnum.FAILED,
+                error_code="UNKNOWN_JOB",
+                error_message="not held in memory any more",
+            )
+
+        async def cannot_tell(prompt_id):
+            return None
+
+        manager._provider.get_job_status = forgotten
+        manager._provider.submission_exists = cannot_tell
+
+        submissions = []
+
+        async def counting_submit(payload, job_id, context=None):
+            submissions.append(job_id)
+            return "should-never-happen"
+
+        manager._provider.submit_job = counting_submit
+
+        job = make_job(
+            db_session, sample_shot.id, comfyui_prompt_id="openai-resp-123"
+        )
+        manager._running = True
+        await manager._execute_job(db_session, job)
+
+        db_session.refresh(job)
+        assert submissions == []
+        assert job.status == "Failed"
+        assert job.error_code == qm_module.UNRECONCILED_ERROR
+        assert "openai-resp-123" in job.error_message
+        assert db_session.query(Take).filter(Take.job_id == job.id).count() == 0
+
+
+# ---------------------------------------------------------------------------
+# Completion against the revision the job was actually built from
+# ---------------------------------------------------------------------------
+
+class TestStaleCompletion:
+    @pytest.mark.asyncio
+    async def test_completion_clears_staleness_only_for_the_matching_revision(
+        self, db_session, sample_project, sample_shot, manager,
+        patched_sessions, monkeypatch,
+    ):
+        """A job that finishes after its shot was edited must not mark the new
+        content generated. The take is kept; the shot stays flagged."""
+        monkeypatch.setattr(qm_module, "POLL_INTERVAL_SEC", 0.01)
+        monkeypatch.setattr(mock_provider_module, "QUEUED_SEC", 0.0)
+        monkeypatch.setattr(mock_provider_module, "RUNNING_SEC", 0.0)
+        revisions.refresh_project(db_session, sample_project.id)
+        # The shot has been generated once already, so staleness is meaningful.
+        revisions.mark_generated(db_session, sample_shot)
+        db_session.commit()
+
+        # The job records the shot as it was when Generate was pressed.
+        job = make_job(
+            db_session, sample_shot.id,
+            prompt_revision=sample_shot.prompt_revision,
+            prompt_sha256=sample_shot.prompt_sha256,
+            content_sha256=sample_shot.content_sha256,
+        )
+        submitted_revision = sample_shot.prompt_revision
+
+        # ... and the user edits the shot while it is in flight.
+        sample_shot.action = "an entirely different action"
+        db_session.commit()
+        revisions.refresh_project(db_session, sample_project.id)
+        db_session.refresh(sample_shot)
+        assert sample_shot.prompt_revision > submitted_revision
+        assert sample_shot.is_stale is True
+
+        manager._running = True
+        await manager._execute_job(db_session, job)
+
+        db_session.refresh(sample_shot)
+        # The take is kept - it is real output - but it is not evidence that
+        # the edited shot has been generated.
+        assert db_session.query(Take).filter(Take.job_id == job.id).count() == 1
+        assert sample_shot.generated_revision == submitted_revision
+        assert sample_shot.generated_revision != sample_shot.prompt_revision
+        assert sample_shot.is_stale is True
+
+    @pytest.mark.asyncio
+    async def test_completion_of_a_current_job_does_clear_staleness(
+        self, db_session, sample_project, sample_shot, manager,
+        patched_sessions, monkeypatch,
+    ):
+        monkeypatch.setattr(qm_module, "POLL_INTERVAL_SEC", 0.01)
+        monkeypatch.setattr(mock_provider_module, "QUEUED_SEC", 0.0)
+        monkeypatch.setattr(mock_provider_module, "RUNNING_SEC", 0.0)
+        revisions.refresh_project(db_session, sample_project.id)
+
+        job = make_job(
+            db_session, sample_shot.id,
+            prompt_revision=sample_shot.prompt_revision,
+            prompt_sha256=sample_shot.prompt_sha256,
+            content_sha256=sample_shot.content_sha256,
+        )
+        manager._running = True
+        await manager._execute_job(db_session, job)
+
+        db_session.refresh(sample_shot)
+        assert sample_shot.generated_revision == sample_shot.prompt_revision
+        assert sample_shot.is_stale is False
 
 
 # ---------------------------------------------------------------------------

@@ -134,6 +134,22 @@ class ComfyUIProvider(ABC):
         """
         ...
 
+    async def submission_exists(self, prompt_id: str) -> bool | None:
+        """Whether this provider still holds a record of a submitted prompt.
+
+        Asked after a restart, before the queue considers submitting the same
+        job again. Three answers, and the difference between the last two is
+        the difference between a duplicate charge and a lost one:
+
+        * ``True``  - the work is known (queued, running or in history).
+        * ``False`` - the provider positively disowns this id, so nothing is
+          outstanding and resubmitting is safe.
+        * ``None``  - the provider cannot tell. The default, because a provider
+          that keeps no record of its submissions must never be read as proof
+          that a paid generation did not happen.
+        """
+        return None
+
     async def get_object_info(self) -> dict[str, Any] | None:
         """
         Return the instance's node catalogue (``GET /object_info``).

@@ -479,6 +479,56 @@ def start_generation(
         # recording one would clutter the history with empty batches.
         return created_jobs
 
+    # Every blocker in the selection is found before anything is created. A
+    # caller reaching this endpoint directly gets the same gate the Generate
+    # page enforces through preflight, and the batch is refused as a whole:
+    # queueing the valid half of a run would charge for work the user cannot
+    # use, and leave a run whose shot list does not describe it.
+    references: dict[str, list[Any]] = {}
+    blocked: list[str] = []
+    for shot in selected:
+        plan = plans[shot.id]
+        shot_blockers = list(plan.blockers)
+        resolved_references, reference_problems = reference_bible.resolve_images(
+            db, project_id, list(shot.reference_asset_ids or [])
+        )
+        references[shot.id] = resolved_references
+        shot_blockers.extend(problem.message for problem in reference_problems)
+        if shot.generation_mode == "image-to-video" and not resolved_references:
+            shot_blockers.append("Image-to-video requires a reference image.")
+        if resolved_references and plan.provider_id == media_providers.COMFYUI:
+            workflow = (
+                db.query(Workflow).filter(Workflow.id == plan.workflow_id).first()
+                if plan.workflow_id
+                else None
+            )
+            if not workflow or job_payload.REFERENCE_IMAGE not in (
+                workflow.parameter_mapping or {}
+            ):
+                shot_blockers.append(
+                    "Reference-conditioned generation requires the "
+                    "referenceImage workflow mapping."
+                )
+            elif len(resolved_references) != 1:
+                shot_blockers.append(
+                    "The selected workflow accepts exactly one reference image."
+                )
+        if shot_blockers:
+            blocked.append(
+                f"{generation_runs.shot_display_name(shot)}: "
+                + " ".join(shot_blockers)
+            )
+
+    if blocked:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"{len(blocked)} of {len(selected)} selected shot(s) cannot be "
+                f"generated as configured, so nothing was queued. "
+                + " | ".join(blocked)
+            ),
+        )
+
     # One press of Generate is one run, created before the first job so every
     # job it produces carries the same batch identity. It is flushed rather
     # than committed with the jobs below, so a shot that fails validation
@@ -494,36 +544,8 @@ def start_generation(
         plan = plans[shot.id]
         workflow_id = plan.workflow_id
         workflow_version = plan.workflow_version
-        resolved_references, reference_problems = reference_bible.resolve_images(
-            db, project_id, list(shot.reference_asset_ids or [])
-        )
-        if reference_problems:
-            raise HTTPException(
-                status_code=409,
-                detail=" ".join(problem.message for problem in reference_problems),
-            )
-        if shot.generation_mode == "image-to-video" and not resolved_references:
-            raise HTTPException(
-                status_code=409,
-                detail="Image-to-video requires a reference image.",
-            )
-        if resolved_references and plan.provider_id == media_providers.COMFYUI:
-            workflow = db.query(Workflow).filter(Workflow.id == workflow_id).first()
-            if not workflow or job_payload.REFERENCE_IMAGE not in (
-                workflow.parameter_mapping or {}
-            ):
-                raise HTTPException(
-                    status_code=409,
-                    detail=(
-                        "Reference-conditioned generation requires the "
-                        "referenceImage workflow mapping."
-                    ),
-                )
-            if len(resolved_references) != 1:
-                raise HTTPException(
-                    status_code=409,
-                    detail="The selected workflow accepts exactly one reference image.",
-                )
+        # Already resolved and validated for the whole batch above.
+        resolved_references = references[shot.id]
 
         # Compile prompt
         scene = db.query(Scene).filter(Scene.id == shot.scene_id).first()

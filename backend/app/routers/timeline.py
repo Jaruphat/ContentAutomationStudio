@@ -113,14 +113,30 @@ def update_timeline(
 
 
 @router.post("/timeline/build", response_model=TimelineManifest)
-def build_timeline(project_id: str, db: Session = Depends(get_db)):
+def build_timeline(
+    project_id: str,
+    confirm_replace_with_empty: bool = False,
+    db: Session = Depends(get_db),
+):
     """
     Auto-build the timeline from approved takes, ordered by scene/shot order.
     Replaces any existing timeline items.
+
+    A build that can place nothing will not overwrite an existing cut: that is
+    the signature of a lineage or migration problem, not of an empty project.
+    Pass ``confirm_replace_with_empty=true`` to clear the timeline deliberately.
     """
     _get_project_or_404(db, project_id)
     items_data = timeline_service.build_timeline_from_approved_takes(db, project_id)
-    created = timeline_service.save_timeline_items(db, project_id, items_data)
+    try:
+        created = timeline_service.save_timeline_items(
+            db,
+            project_id,
+            items_data,
+            allow_empty_replacement=confirm_replace_with_empty,
+        )
+    except timeline_service.EmptyTimelineReplacementError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     manifest = timeline_service.get_timeline_manifest(
         db, project_id, strict_lineage=True
     )

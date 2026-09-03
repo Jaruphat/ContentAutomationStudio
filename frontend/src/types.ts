@@ -510,12 +510,21 @@ export interface TimelineCoverage {
   missing: TimelineCoverageEntry[];
 }
 
+/**
+ * Something about the current cut that a delivery has to be told about.
+ *
+ * `code` is what a consumer branches on; only the fields that code defines are
+ * present. `e2e_aspect_override` carries the waiver fields;
+ * `legacy_take_lineage` carries the items whose lineage predates tracking and
+ * therefore cannot be proven current.
+ */
 export interface DeliveryWarning {
   code: string;
   message: string;
   take_ids: string[];
-  waived_from_take_ids: string[];
-  waiver_reasons: string[];
+  waived_from_take_ids?: string[];
+  waiver_reasons?: string[];
+  item_ids?: string[];
 }
 
 export interface DeliveryValidation {

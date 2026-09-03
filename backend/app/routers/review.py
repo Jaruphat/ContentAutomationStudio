@@ -118,6 +118,29 @@ def approve_take(
     if take.review_status == "Approved":
         raise HTTPException(status_code=400, detail="Take is already approved")
 
+    # Approving is what marks a shot delivered, so the take has to still be of
+    # the shot as it stands. Revisions are recomputed first rather than trusted
+    # from the last write: the shot may have been edited in another tab since
+    # this take was listed, and an approval decided on stale pixels would
+    # otherwise promote content nobody reviewed.
+    shot = db.query(Shot).filter(Shot.id == take.shot_id).first()
+    scene = (
+        db.query(Scene).filter(Scene.id == shot.scene_id).first() if shot else None
+    )
+    if scene:
+        revisions.refresh_project(db, scene.project_id)
+        db.refresh(shot)
+    if shot and revisions.take_lineage_state(take, shot) == revisions.LINEAGE_STALE:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "This take is out of date: the shot changed after it was "
+                "generated, so approving it would mark content that no longer "
+                "matches the brief as delivered. Regenerate the shot, then "
+                "approve the new take."
+            ),
+        )
+
     take.review_status = "Approved"
     take.approved_at = datetime.now(timezone.utc)
     if payload:
@@ -125,14 +148,12 @@ def approve_take(
             take.rating = payload.rating
         if payload.notes:
             take.notes = payload.notes
-    db.commit()
-    db.refresh(take)
 
     # Update shot status to Approved if at least one take is approved
-    shot = db.query(Shot).filter(Shot.id == take.shot_id).first()
     if shot:
         shot.status = "Approved"
-        db.commit()
+    db.commit()
+    db.refresh(take)
 
     return take
 

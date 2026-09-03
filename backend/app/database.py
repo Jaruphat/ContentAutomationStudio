@@ -60,10 +60,16 @@ def backfill_data():
     feature needs on existing rows is derived here instead. Imported lazily to
     keep this module free of service-layer imports at module scope.
     """
-    from app.services import generation_runs
+    from app.services import generation_runs, lineage_backfill
 
     generation_runs.backfill_legacy_job_defaults(engine)
     generation_runs.backfill_legacy_runs(engine)
+    # Runs after the job defaults, so a take can still inherit the lineage its
+    # job recorded before those columns are normalised. Shot revision columns
+    # are deliberately left alone: the first revision refresh derives them, and
+    # deriving is better than guessing.
+    lineage_backfill.backfill_take_lineage(engine)
+    lineage_backfill.backfill_timeline_lineage(engine)
 
 
 def ensure_schema():

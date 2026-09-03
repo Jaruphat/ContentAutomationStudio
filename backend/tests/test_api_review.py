@@ -85,6 +85,85 @@ class TestApproveReject:
         assert resp.json()["status"] == "Approved"
 
 
+class TestApprovingStaleTakes:
+    """Approving is what marks a shot delivered, so it cannot outrun the shot.
+
+    A take listed in Review, then approved after the shot was edited in another
+    tab, would otherwise promote content nobody looked at - and the promotion
+    is what the timeline, the render and every export read.
+    """
+
+    @pytest.fixture()
+    def generated_take(self, db_session, sample_project, sample_shot) -> Take:
+        revisions.refresh_project(db_session, sample_project.id)
+        take = Take(
+            id=str(uuid.uuid4()),
+            shot_id=sample_shot.id,
+            file_path="C:/tmp/take.png",
+            review_status="Pending",
+            prompt_revision=sample_shot.prompt_revision,
+            prompt_sha256=sample_shot.prompt_sha256,
+            content_sha256=sample_shot.content_sha256,
+            reference_image_ids=list(sample_shot.reference_asset_ids or []),
+            reference_sha256s=list(sample_shot.reference_sha256s or []),
+        )
+        db_session.add(take)
+        db_session.commit()
+        db_session.refresh(take)
+        return take
+
+    def test_a_take_matching_the_current_shot_is_approved(
+        self, client, db_session, sample_shot, generated_take
+    ):
+        response = client.post(f"/api/takes/{generated_take.id}/approve", json={})
+
+        assert response.status_code == 200, response.text
+        db_session.refresh(sample_shot)
+        assert sample_shot.status == "Approved"
+
+    def test_a_take_from_before_an_edit_cannot_be_approved(
+        self, client, db_session, sample_project, sample_shot, generated_take
+    ):
+        """The shot moved on while this take sat in the review queue."""
+        sample_shot.action = "an entirely different action"
+        db_session.commit()
+
+        response = client.post(f"/api/takes/{generated_take.id}/approve", json={})
+
+        assert response.status_code == 409, response.text
+        assert "out of date" in response.json()["detail"]
+        db_session.refresh(generated_take)
+        db_session.refresh(sample_shot)
+        assert generated_take.review_status == "Pending"
+        assert generated_take.approved_at is None
+        assert sample_shot.status != "Approved"
+
+    def test_the_shot_is_re_read_before_the_decision_not_trusted(
+        self, client, db_session, sample_project, sample_shot, generated_take
+    ):
+        """The edit here never went through a revision refresh, which is what a
+        second browser tab writing directly to the API looks like."""
+        sample_shot.image_prompt = "a rewritten prompt"
+        db_session.commit()
+        # Deliberately no refresh_project: the endpoint has to do it itself, or
+        # it compares the take against a digest that is already out of date.
+
+        response = client.post(f"/api/takes/{generated_take.id}/approve", json={})
+
+        assert response.status_code == 409, response.text
+
+    def test_a_take_with_no_recorded_lineage_is_still_approvable(
+        self, client, db_session, sample_shot, sample_take
+    ):
+        """Migrated work predates lineage, so it can be neither proven current
+        nor called stale. Refusing it would strand a whole legacy project."""
+        response = client.post(f"/api/takes/{sample_take.id}/approve", json={})
+
+        assert response.status_code == 200, response.text
+        db_session.refresh(sample_shot)
+        assert sample_shot.status == "Approved"
+
+
 class TestRegenerate:
     def test_estimate_uses_current_plan_even_for_an_approved_take(
         self, client, db_session, sample_shot, sample_take

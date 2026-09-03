@@ -25,10 +25,23 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from app.models import Project, ReferenceImage, ReferenceSheet, Scene, Shot
+from app.models import Project, ReferenceImage, ReferenceSheet, Scene, Shot, Take
 from app.services import prompt_context
 
 logger = logging.getLogger("cas.revisions")
+
+#: The take was generated from exactly the shot as it stands now.
+LINEAGE_CURRENT = "current"
+#: The take predates lineage tracking, so it can be proven neither current nor
+#: stale. Written by a database that was migrated, never by a new generation.
+LINEAGE_UNVERIFIED = "unverified"
+#: The take records a lineage, and it is not this shot's.
+LINEAGE_STALE = "stale"
+
+#: Marker the migration writes onto a take whose lineage could not be
+#: recovered. It makes "we never recorded this" a state of its own rather than
+#: something indistinguishable from "this does not match".
+LEGACY_LINEAGE_FLAG = "legacy_unverified_lineage"
 
 
 @dataclass
@@ -252,3 +265,63 @@ def mark_generated(db: Session, shot: Shot, digest: ShotDigest | None = None) ->
     shot.generated_revision = shot.prompt_revision
     shot.generated_content_sha256 = shot.content_sha256
     _sync_staleness(shot)
+
+
+def mark_generated_if_current(
+    db: Session,
+    shot: Shot,
+    content_sha256: str,
+    digest: ShotDigest | None = None,
+) -> bool:
+    """Record a generation only when it was built from the shot as it stands.
+
+    A job can finish long after the shot it was compiled from was edited.
+    Clearing staleness on that shot would claim the delivered media matches a
+    brief it was never generated against, so the job's own recorded digest is
+    compared with the shot's current one and the generation is only credited
+    when the two agree. The digest is refreshed either way, so the shot's
+    revision and ``is_stale`` flag stay accurate.
+
+    Returns True when the generation was credited to the current revision.
+    """
+    if digest is None:
+        digest = shot_digest(db, shot)
+    apply_digest(shot, digest)
+    matches = bool(content_sha256) and shot.content_sha256 == content_sha256
+    if matches:
+        shot.generated_revision = shot.prompt_revision
+        shot.generated_content_sha256 = shot.content_sha256
+    _sync_staleness(shot)
+    return matches
+
+
+# ---------------------------------------------------------------------------
+# Take lineage
+# ---------------------------------------------------------------------------
+
+def is_legacy_lineage(take: Take) -> bool:
+    """Whether the migration marked this take's lineage as unrecoverable."""
+    lineage = take.lineage if isinstance(take.lineage, dict) else {}
+    return bool(lineage.get(LEGACY_LINEAGE_FLAG))
+
+
+def take_lineage_state(take: Take, shot: Shot) -> str:
+    """Classify a take against the shot as it stands now.
+
+    Three answers, not two: a take written before lineage was recorded cannot
+    be proven current, but neither can it be called stale. Collapsing that into
+    "does not match" is what silently drops migrated approved work off the cut.
+    """
+    if take is None or shot is None or take.shot_id != shot.id:
+        return LINEAGE_STALE
+    if is_legacy_lineage(take) or not (take.prompt_sha256 or take.content_sha256):
+        return LINEAGE_UNVERIFIED
+    if (
+        take.prompt_revision == shot.prompt_revision
+        and take.prompt_sha256 == shot.prompt_sha256
+        and take.content_sha256 == shot.content_sha256
+        and list(take.reference_image_ids or []) == list(shot.reference_asset_ids or [])
+        and list(take.reference_sha256s or []) == list(shot.reference_sha256s or [])
+    ):
+        return LINEAGE_CURRENT
+    return LINEAGE_STALE

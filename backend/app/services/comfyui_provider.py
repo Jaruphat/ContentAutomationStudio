@@ -295,6 +295,36 @@ class RealComfyUIProvider(ComfyUIProvider):
                 error_message=str(exc)[:500],
             )
 
+    async def submission_exists(self, prompt_id: str) -> bool | None:
+        """Ask the instance whether it still knows this prompt.
+
+        History and both queues are the complete set of places a submitted
+        prompt can be. A reachable instance that has it in none of them has
+        genuinely lost it - after its own restart, say - and the job can be
+        submitted again. An unreachable instance answers ``None``: silence is
+        not evidence that a generation did not happen.
+        """
+        try:
+            async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
+                hist_resp = await client.get(f"{self._base_url}/history/{prompt_id}")
+                if hist_resp.status_code == 200 and prompt_id in hist_resp.json():
+                    return True
+
+                queue_resp = await client.get(f"{self._base_url}/queue")
+                queue_resp.raise_for_status()
+                queue_data = queue_resp.json()
+                for key in ("queue_running", "queue_pending"):
+                    for item in queue_data.get(key, []):
+                        if len(item) >= 2 and item[1] == prompt_id:
+                            return True
+                return False
+        except Exception as exc:
+            logger.warning(
+                "Could not determine whether ComfyUI still holds prompt %s: %s",
+                prompt_id, exc,
+            )
+            return None
+
     def _parse_history_outputs(self, outputs: dict) -> list[dict[str, Any]]:
         """Parse ComfyUI history output format into our output list."""
         result: list[dict[str, Any]] = []

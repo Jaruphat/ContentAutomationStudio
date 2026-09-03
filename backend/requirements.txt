@@ -17,3 +17,6 @@ ruff==0.6.9
 requests==2.34.2
 # Unicode extended grapheme clusters for safe Thai/Indic/emoji subtitle wrapping.
 regex==2026.9.3
+# Decodes every uploaded reference image in full before it is stored, so a
+# forged or truncated header cannot pass as an image.
+Pillow==11.3.0

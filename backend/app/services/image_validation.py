@@ -7,17 +7,27 @@ declared filename are hints, and the bytes are the fact. Every accepted file is
 sniffed for a real image header, measured, bounded and hashed before anything
 touches the filesystem.
 
-Formats are sniffed by hand rather than through Pillow: the backend has no
-image dependency, and the three container headers we accept are short enough to
-parse exactly. A format we cannot parse is rejected rather than guessed at.
+Acceptance is three checks, and a file has to pass all of them:
+
+1. **Sniffing.** The container header is parsed by hand for the three formats
+   we accept, so an upload's declared type is never consulted.
+2. **Structure.** The container has to end exactly where the image ends. A
+   header-only stub, a truncated download and a polyglot with a payload
+   appended after the last chunk all fail here.
+3. **Decoding.** Pillow decodes the whole image, bounded by a pixel budget
+   applied to the header before any memory is allocated for it. A file that
+   only *looks* like a PNG never reaches the generation backend.
 """
 
 import hashlib
+import io
 import os
 import re
 import struct
 import unicodedata
 from dataclasses import dataclass
+
+from PIL import Image, UnidentifiedImageError
 
 #: Content types an upload may end up as, and the extension each is stored with.
 #: Anything not in this table is refused - including formats a browser would
@@ -40,6 +50,23 @@ MAX_IMAGE_BYTES = 25 * 1024 * 1024
 #: is beyond what any local model consumes and is almost certainly a mistake.
 MIN_IMAGE_EDGE = 64
 MAX_IMAGE_EDGE = 8192
+
+#: Decoded pixels a single upload may cost us. A few kilobytes of compressed
+#: header can declare a canvas of billions of pixels; decoding one would take
+#: the process down long before any edge limit was consulted, so this is
+#: checked against the header and before Pillow allocates anything.
+MAX_IMAGE_PIXELS = 40_000_000
+
+#: Formats Pillow may report for an accepted upload, and what each really is.
+#: Pillow's own name is used rather than the sniffed one, so a file that
+#: decodes as something other than it claimed cannot slip through.
+_PILLOW_FORMAT_MIME: dict[str, str] = {
+    "PNG": "image/png",
+    "JPEG": "image/jpeg",
+    # A multi-picture JPEG decodes as an ordinary first frame.
+    "MPO": "image/jpeg",
+    "WEBP": "image/webp",
+}
 
 #: Display filenames are shown in the UI and written into export metadata, so
 #: they are bounded rather than unbounded user text.
@@ -171,8 +198,135 @@ def sniff_image(data: bytes) -> SniffedImage | None:
 
 
 # ---------------------------------------------------------------------------
+# Container structure
+# ---------------------------------------------------------------------------
+
+def _png_container_length(data: bytes) -> int | None:
+    """Byte length of the PNG ending at its IEND chunk, or None if malformed."""
+    offset = len(_PNG_SIGNATURE)
+    total = len(data)
+    while offset + 8 <= total:
+        (chunk_length,) = struct.unpack(">I", data[offset:offset + 4])
+        chunk_type = data[offset + 4:offset + 8]
+        # length + type + payload + CRC
+        end = offset + 12 + chunk_length
+        if chunk_length > total or end > total:
+            return None
+        if chunk_type == b"IEND":
+            return end
+        offset = end
+    return None
+
+
+def _jpeg_container_length(data: bytes) -> int | None:
+    """Byte length of the JPEG up to and including its end-of-image marker."""
+    end = data.rfind(b"\xff\xd9")
+    if end == -1:
+        return None
+    return end + 2
+
+
+def _webp_container_length(data: bytes) -> int | None:
+    """Byte length declared by the RIFF header, which covers the whole file."""
+    if len(data) < 12:
+        return None
+    (riff_size,) = struct.unpack("<I", data[4:8])
+    # The RIFF size counts everything after the size field itself.
+    return riff_size + 8
+
+
+_CONTAINER_LENGTH = {
+    "image/png": _png_container_length,
+    "image/jpeg": _jpeg_container_length,
+    "image/webp": _webp_container_length,
+}
+
+
+def container_length(data: bytes, mime_type: str) -> int | None:
+    """Where this image really ends, or None when its container is broken."""
+    measure = _CONTAINER_LENGTH.get(mime_type)
+    return measure(data) if measure else None
+
+
+# ---------------------------------------------------------------------------
 # Validation
 # ---------------------------------------------------------------------------
+
+def _check_container(data: bytes, sniffed: SniffedImage) -> None:
+    """Refuse anything that is not exactly one complete image.
+
+    Two failures look identical from the header alone and are both refused
+    here: a file that stops before the image does (a truncated download, or a
+    header-only stub forged to declare convenient dimensions), and one that
+    continues after it does (an archive or script appended to a real image, so
+    that one upload is two files depending on who opens it).
+    """
+    length = container_length(data, sniffed.mime_type)
+    if length is None or length > len(data):
+        raise ImageValidationError(
+            "The image file is incomplete - it ends part-way through the "
+            "image data. Re-export or re-upload it.",
+            "malformed_image",
+        )
+    if length < len(data):
+        raise ImageValidationError(
+            f"The upload carries {len(data) - length} extra byte(s) after the "
+            f"end of the image. A file that is an image and something else at "
+            f"the same time is refused; re-export it as a plain image.",
+            "malformed_image",
+        )
+
+
+def _decode(data: bytes, sniffed: SniffedImage) -> SniffedImage:
+    """Decode the image in full and return what it actually turned out to be.
+
+    The header is inspected first so an implausible canvas is refused before
+    Pillow allocates a buffer for it, then every pixel is decoded: a file whose
+    header parses but whose image data does not is not an image we can hand to
+    a generation backend, whatever its first eight bytes say.
+    """
+    try:
+        with Image.open(io.BytesIO(data)) as image:
+            reported_format = (image.format or "").upper()
+            width, height = image.size
+            if width * height > MAX_IMAGE_PIXELS:
+                raise ImageValidationError(
+                    f"The image declares {width}x{height} pixels, beyond the "
+                    f"{MAX_IMAGE_PIXELS // 1_000_000} megapixel limit for a "
+                    f"reference image.",
+                    "image_too_large_to_decode",
+                )
+            image.load()
+    except ImageValidationError:
+        raise
+    except (UnidentifiedImageError, Image.DecompressionBombError) as exc:
+        raise ImageValidationError(
+            f"The upload could not be decoded as an image: {exc}",
+            "malformed_image",
+        ) from exc
+    except (OSError, ValueError, SyntaxError) as exc:
+        # Pillow raises OSError for truncated image data.
+        raise ImageValidationError(
+            f"The image data is corrupt or incomplete and could not be "
+            f"decoded: {exc}",
+            "malformed_image",
+        ) from exc
+
+    mime_type = _PILLOW_FORMAT_MIME.get(reported_format, "")
+    if mime_type not in ALLOWED_MIME_EXTENSIONS:
+        raise ImageValidationError(
+            f"The upload decodes as {reported_format or 'an unknown format'}, "
+            f"which is not a PNG, JPEG or WEBP image.",
+            "unsupported_media_type",
+        )
+    if mime_type != sniffed.mime_type:
+        raise ImageValidationError(
+            f"The upload's header says {sniffed.mime_type} but it decodes as "
+            f"{mime_type}. A file that disagrees with itself is refused.",
+            "malformed_image",
+        )
+    return SniffedImage(mime_type, width, height)
+
 
 def validate_image_bytes(
     data: bytes,
@@ -189,7 +343,8 @@ def validate_image_bytes(
     ------
     ImageValidationError
         With ``code`` one of ``empty_file``, ``file_too_large``,
-        ``unsupported_media_type`` or ``dimensions_out_of_range``.
+        ``unsupported_media_type``, ``malformed_image``,
+        ``image_too_large_to_decode`` or ``dimensions_out_of_range``.
     """
     if not data:
         raise ImageValidationError(
@@ -213,22 +368,27 @@ def validate_image_bytes(
             "unsupported_media_type",
         )
 
+    # The header is only a claim until the container and the pixels agree with
+    # it, so everything below measures the decoded image rather than the sniff.
+    _check_container(data, sniffed)
+    decoded = _decode(data, sniffed)
+
     if not (
-        MIN_IMAGE_EDGE <= sniffed.width <= MAX_IMAGE_EDGE
-        and MIN_IMAGE_EDGE <= sniffed.height <= MAX_IMAGE_EDGE
+        MIN_IMAGE_EDGE <= decoded.width <= MAX_IMAGE_EDGE
+        and MIN_IMAGE_EDGE <= decoded.height <= MAX_IMAGE_EDGE
     ):
         raise ImageValidationError(
-            f"The image is {sniffed.width}x{sniffed.height}. A reference image "
+            f"The image is {decoded.width}x{decoded.height}. A reference image "
             f"must be between {MIN_IMAGE_EDGE} and {MAX_IMAGE_EDGE} pixels on "
             f"each edge.",
             "dimensions_out_of_range",
         )
 
     return InspectedImage(
-        mime_type=sniffed.mime_type,
-        extension=ALLOWED_MIME_EXTENSIONS[sniffed.mime_type],
-        width=sniffed.width,
-        height=sniffed.height,
+        mime_type=decoded.mime_type,
+        extension=ALLOWED_MIME_EXTENSIONS[decoded.mime_type],
+        width=decoded.width,
+        height=decoded.height,
         size_bytes=len(data),
         sha256=hashlib.sha256(data).hexdigest(),
     )

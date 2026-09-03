@@ -97,6 +97,102 @@ def test_validate_rejects_dimensions_above_the_ceiling(monkeypatch, png_bytes):
     assert exc.value.code == "dimensions_out_of_range"
 
 
+# ---------------------------------------------------------------------------
+# Forged, truncated and polyglot uploads
+#
+# Sniffing reads a header. These are the files whose header is fine and whose
+# contents are not - the ones that reach a generation backend, or a browser,
+# as something other than the image they were accepted as.
+# ---------------------------------------------------------------------------
+
+def _png_header_only(width: int, height: int) -> bytes:
+    """A PNG signature and IHDR declaring a size, with no image data at all."""
+    import struct
+    import zlib
+
+    ihdr = struct.pack(">IIBBBBB", width, height, 8, 0, 0, 0, 0)
+    chunk = (
+        struct.pack(">I", len(ihdr))
+        + b"IHDR"
+        + ihdr
+        + struct.pack(">I", zlib.crc32(b"IHDR" + ihdr) & 0xFFFFFFFF)
+    )
+    return b"\x89PNG\r\n\x1a\n" + chunk
+
+
+def test_validate_rejects_a_header_only_png_that_forges_its_dimensions():
+    """The header alone can claim any size. Nothing here decodes."""
+    forged = _png_header_only(256, 256)
+    assert iv.sniff_image(forged).width == 256  # the header is convincing
+
+    with pytest.raises(iv.ImageValidationError) as exc:
+        iv.validate_image_bytes(forged, declared_content_type="image/png")
+    assert exc.value.code == "malformed_image"
+
+
+def test_validate_rejects_a_truncated_png(png_bytes):
+    """Half a download is not an image, however good its first bytes are."""
+    data = png_bytes(128, 128)
+    with pytest.raises(iv.ImageValidationError) as exc:
+        iv.validate_image_bytes(data[: len(data) // 2])
+    assert exc.value.code == "malformed_image"
+
+
+def test_validate_rejects_a_png_with_a_payload_appended_after_iend(png_bytes):
+    """A file that is an image and an archive at once is refused as both."""
+    polyglot = png_bytes(128, 128) + b"PK\x03\x04" + b"payload" * 64
+    with pytest.raises(iv.ImageValidationError) as exc:
+        iv.validate_image_bytes(polyglot, declared_filename="hero.png")
+    assert exc.value.code == "malformed_image"
+
+
+def test_validate_rejects_a_jpeg_with_trailing_data(encoded_image_bytes):
+    data = encoded_image_bytes("jpg", 96, 96) + b"<script>alert(1)</script>"
+    with pytest.raises(iv.ImageValidationError) as exc:
+        iv.validate_image_bytes(data)
+    assert exc.value.code == "malformed_image"
+
+
+def test_validate_rejects_a_png_whose_pixel_data_is_corrupt(png_bytes):
+    """The container is intact end to end; the compressed pixels are not."""
+    data = bytearray(png_bytes(128, 128))
+    start = data.find(b"IDAT") + 8
+    for offset in range(start, min(start + 40, len(data) - 12)):
+        data[offset] ^= 0xFF
+
+    with pytest.raises(iv.ImageValidationError) as exc:
+        iv.validate_image_bytes(bytes(data))
+    assert exc.value.code == "malformed_image"
+
+
+def test_validate_rejects_a_decompression_bomb_before_decoding_it(
+    monkeypatch, png_bytes
+):
+    """A few bytes of header must never become gigabytes of pixels.
+
+    The budget is read off the header, so the refusal has to happen before any
+    buffer is allocated for the image - which is what ``load`` would do.
+    """
+    from PIL import Image
+
+    def _must_not_decode(self, *args, **kwargs):
+        raise AssertionError("the image was decoded despite exceeding the budget")
+
+    monkeypatch.setattr(iv, "MAX_IMAGE_PIXELS", 1024)
+    monkeypatch.setattr(Image.Image, "load", _must_not_decode)
+
+    with pytest.raises(iv.ImageValidationError) as exc:
+        iv.validate_image_bytes(png_bytes(300, 200))
+    assert exc.value.code == "image_too_large_to_decode"
+
+
+def test_a_real_image_still_passes_every_structural_check(png_bytes):
+    """The guards above must not cost the ordinary upload."""
+    inspected = iv.validate_image_bytes(png_bytes(300, 200))
+    assert (inspected.width, inspected.height) == (300, 200)
+    assert inspected.mime_type == "image/png"
+
+
 def test_sniffed_type_wins_over_the_declared_one(encoded_image_bytes):
     """The client's Content-Type is a hint; the bytes are the fact."""
     inspected = iv.validate_image_bytes(
