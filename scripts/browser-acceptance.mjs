@@ -88,7 +88,7 @@ const generateChecks = await evaluate(`(() => {
     tabs: ['Current', 'Failed', 'Completed', 'History'].every(x => text.includes(x)),
     namedShots: text.includes('A Friendly Challenge') && text.includes('Shot 2 -'),
     runCounts: text.includes('11 completed') && text.includes('0 queued'),
-    reviewAction: text.includes('Go to Review'),
+    reviewAction: !!document.querySelector('[aria-label="Production stages"] button[title="Review"]'),
     noPageError: !text.includes('Something went wrong'),
     excerpt: text.slice(0, 3000)
   };
