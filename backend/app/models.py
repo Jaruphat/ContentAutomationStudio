@@ -628,6 +628,13 @@ class GenerationJob(Base):
     #: frame that was actually submitted as the first frame.
     continuity_source_take_id = Column(String, nullable=True)
     continuity_source_sha256 = Column(String, default="")
+    #: How far a running submission has got, 0..1, as the provider last
+    #: reported it. A shot can take eight minutes here, and "Running" alone
+    #: cannot tell a slow job from a stuck one.
+    progress = Column(Float, default=0.0)
+    #: What it is doing, in words, when the provider will say - "step 3 of 8".
+    #: Empty rather than guessed, so the UI can fall back to elapsed time.
+    progress_stage = Column(String, default="")
 
     seed = Column(Integer, nullable=True)
     comfyui_prompt_id = Column(String, nullable=True)

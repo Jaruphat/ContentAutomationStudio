@@ -25,6 +25,10 @@ class JobStatus:
 
     status: JobStatusEnum
     progress: float = 0.0  # 0.0 to 1.0
+    #: What the provider is doing right now, in words, when it will say. Empty
+    #: when the provider offers no such detail, which the UI shows as elapsed
+    #: time rather than inventing a stage.
+    stage: str = ""
     error_code: str | None = None
     error_message: str | None = None
     outputs: list[dict[str, Any]] = field(default_factory=list)

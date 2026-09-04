@@ -358,6 +358,10 @@ _LEGACY_JOB_DEFAULTS: dict[str, Any] = {
     "character_set_ids": [],
     "character_set_sha256s": [],
     "continuity_source_sha256": "",
+    # A job written before progress was recorded never reports any: it has
+    # already finished, and 0.0 with no stage is the truthful answer.
+    "progress": 0.0,
+    "progress_stage": "",
     "status": "Queued",
     "attempts": 0,
     "outputs": [],

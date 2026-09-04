@@ -72,7 +72,7 @@ function RunJobCard({ job }: { job: GenerationRunJob }) {
             className="h-full w-full object-cover"
           />
         ) : (
-          <div className="flex h-full items-center justify-center text-xs text-zinc-600">
+          <div className="flex h-full items-center justify-center text-xs text-zinc-500">
             No preview
           </div>
         )}
@@ -1109,7 +1109,7 @@ export default function GeneratePage() {
   if (!currentProjectId) {
     return (
       <div className="flex h-full flex-col items-center justify-center px-8 text-center">
-        <Zap size={32} className="mb-3 text-zinc-600" />
+        <Zap size={32} className="mb-3 text-zinc-500" />
         <h2 className="text-lg font-semibold text-zinc-300">
           No Project Selected
         </h2>
@@ -1426,7 +1426,7 @@ export default function GeneratePage() {
 
         {jobs && jobs.length === 0 && (
           <div className="flex flex-col items-center py-12 text-center">
-            <Clock size={24} className="mb-2 text-zinc-600" />
+            <Clock size={24} className="mb-2 text-zinc-500" />
             <p className="text-sm text-zinc-500">
               No generation jobs yet. Clear preflight and press Generate to
               start.

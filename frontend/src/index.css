@@ -23,6 +23,16 @@
 
 :root {
   color-scheme: dark;
+
+  /* Tailwind's own zinc-500 (#71717a) reads 3.08:1 on a zinc-800 panel, and
+     this ramp step carries 10-12px helper text, provenance and seeds - the
+     size where a thin ratio stops being a matter of taste. Lifted until it
+     clears 4.5:1 on every surface it is set on, while still sitting a clear
+     step below zinc-400 so the hierarchy survives.
+
+     Steps at 600 and below are lines and fills, never text; see the contrast
+     test beside this file, which reads these values and does the arithmetic. */
+  --color-zinc-500: #94949e;
 }
 
 html.theme-light {
@@ -35,7 +45,7 @@ html.theme-light {
   --color-zinc-800: #e4e4e7;
   --color-zinc-700: #d4d4d8;
   --color-zinc-600: #8f8f99;
-  --color-zinc-500: #6b6b76;
+  --color-zinc-500: #63636d;
   --color-zinc-400: #52525b;
   --color-zinc-300: #3f3f46;
   --color-zinc-200: #27272a;

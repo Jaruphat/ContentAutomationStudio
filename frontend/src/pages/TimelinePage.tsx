@@ -70,7 +70,7 @@ function TimelineRow({ item, index }: { item: TimelineItem; index: number }) {
             className="h-full w-full object-cover"
           />
         ) : (
-          <div className="flex h-full items-center justify-center text-[10px] text-zinc-600">
+          <div className="flex h-full items-center justify-center text-[10px] text-zinc-500">
             No preview
           </div>
         )}
@@ -395,7 +395,7 @@ export default function TimelinePage() {
   if (!currentProjectId) {
     return (
       <div className="flex h-full flex-col items-center justify-center text-center px-8">
-        <Film size={32} className="mb-3 text-zinc-600" />
+        <Film size={32} className="mb-3 text-zinc-500" />
         <h2 className="text-lg font-semibold text-zinc-300">No Project Selected</h2>
         <p className="mt-1 text-sm text-zinc-500">
           Go to the Story page and create or select a project first.
@@ -534,7 +534,7 @@ export default function TimelinePage() {
       {/* Empty */}
       {timelineQ.data && items.length === 0 && (
         <div className="flex flex-col items-center py-16 text-center">
-          <Film size={28} className="mb-2 text-zinc-600" />
+          <Film size={28} className="mb-2 text-zinc-500" />
           <p className="text-sm text-zinc-500">
             {buildMut.isSuccess
               ? "The build ran and found no shot with a current approved take, so the timeline is empty."

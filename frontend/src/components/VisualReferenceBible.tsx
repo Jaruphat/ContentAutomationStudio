@@ -3,6 +3,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowDown, ArrowUp, ImagePlus, Link2, Plus, Save, Trash2, Unlink } from "lucide-react";
 import api from "../api/client";
 import CharacterSetGenerator from "./CharacterSetGenerator";
+import CollapsibleSection from "./CollapsibleSection";
+import ImagePreview from "./ImagePreview";
 import type {
   ReferenceImage,
   ReferenceSheet,
@@ -80,7 +82,7 @@ function SheetEditor({ projectId, sheet }: { projectId: string; sheet: Reference
       <div className="grid gap-2 sm:grid-cols-2">
         {sheet.images.map((image) => (
           <figure key={image.id} className="rounded border border-zinc-700 p-2">
-            <img src={api.references.imageUrl(image)} alt={image.caption || `${sheet.name} reference`} className="h-32 w-full rounded object-cover" />
+            <ImagePreview src={api.references.imageUrl(image)} alt={image.caption || `${sheet.name} reference`} className="h-32 w-full" />
             <figcaption className="mt-1 text-xs text-zinc-300">{image.caption || image.original_filename}</figcaption>
             <p className="text-[10px] text-zinc-500">{image.role} · {image.width}×{image.height} · {imageProvenanceLabel(image)}</p>
             <button type="button" onClick={() => detach.mutate(image.id)} aria-label={`Detach image ${image.original_filename}`} className="mt-1 flex items-center gap-1 text-xs text-red-400"><Unlink size={11} />Detach image</button>
@@ -117,5 +119,5 @@ export default function VisualReferenceBible({ projectId }: { projectId: string 
   const [name, setName] = useState("");
   const query = useQuery({ queryKey: ["references", projectId], queryFn: () => api.references.list(projectId) });
   const create = useMutation({ mutationFn: (data: ReferenceSheetCreate) => api.references.create(projectId, data), onSuccess: () => { setName(""); qc.invalidateQueries({ queryKey: ["references", projectId] }); } });
-  return <div className="space-y-4"><CharacterSetGenerator projectId={projectId} /><section aria-label="Visual Reference Bible" className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-4 space-y-3"><div><h2 className="text-sm font-semibold text-zinc-100">Visual Reference Bible</h2><p className="text-xs text-zinc-400">Project-scoped canonical images and continuity identity. Shot assignments use image IDs in explicit order.</p></div><div className="flex gap-2"><select aria-label="Reference kind" value={kind} onChange={(e) => setKind(e.target.value as ReferenceSheetKind)} className="rounded px-2 py-1 text-sm">{Object.entries(KIND_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select><input aria-label="Reference name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Name" className="min-w-0 flex-1 rounded px-2 py-1 text-sm" /><button type="button" disabled={!name.trim()} onClick={() => create.mutate({ kind, name })} className="flex items-center gap-1 rounded bg-indigo-600 px-3 py-1 text-xs text-white disabled:opacity-50"><Plus size={12} />Add sheet</button></div>{query.isLoading && <p className="text-xs text-zinc-400">Loading references…</p>}{query.isError && <p role="alert" className="text-xs text-red-400">Failed to load references.</p>}<div className="grid gap-3 lg:grid-cols-2">{query.data?.map((sheet) => <SheetEditor key={sheet.id} projectId={projectId} sheet={sheet} />)}</div></section></div>;
+  return <div className="space-y-4"><CharacterSetGenerator projectId={projectId} /><CollapsibleSection id="reference-bible" title="Visual Reference Bible" summary={`${query.data?.length ?? 0} sheet(s)`}><section aria-label="Visual Reference Bible" className="space-y-3"><p className="text-xs text-zinc-400">Project-scoped canonical images and continuity identity. Shot assignments use image IDs in explicit order.</p><div className="flex gap-2"><select aria-label="Reference kind" value={kind} onChange={(e) => setKind(e.target.value as ReferenceSheetKind)} className="rounded px-2 py-1 text-sm">{Object.entries(KIND_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select><input aria-label="Reference name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Name" className="min-w-0 flex-1 rounded px-2 py-1 text-sm" /><button type="button" disabled={!name.trim()} onClick={() => create.mutate({ kind, name })} className="flex items-center gap-1 rounded bg-indigo-600 px-3 py-1 text-xs text-white disabled:opacity-50"><Plus size={12} />Add sheet</button></div>{query.isLoading && <p className="text-xs text-zinc-400">Loading references…</p>}{query.isError && <p role="alert" className="text-xs text-red-400">Failed to load references.</p>}<div className="grid gap-3 lg:grid-cols-2">{query.data?.map((sheet) => <SheetEditor key={sheet.id} projectId={projectId} sheet={sheet} />)}</div></section></CollapsibleSection></div>;
 }

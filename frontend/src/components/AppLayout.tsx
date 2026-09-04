@@ -16,6 +16,7 @@ import { PanelRight } from "lucide-react";
 import StageRail, { ThemeControl } from "./StageRail";
 import Inspector from "./Inspector";
 import ProjectSwitcher from "./ProjectSwitcher";
+import ProjectRunProgress from "./ProjectRunProgress";
 import StageErrorBoundary from "./StageErrorBoundary";
 import { useAppState, useAppDispatch } from "../store/useProjectStore";
 
@@ -86,6 +87,7 @@ export default function AppLayout() {
         <TopBar />
         <div className="flex min-h-0 flex-1 flex-col">
           <ProjectSwitcher />
+          <ProjectRunProgress />
           <main className="min-h-0 flex-1 overflow-y-auto">
             <StageErrorBoundary>
               <Outlet />
@@ -107,6 +109,7 @@ export default function AppLayout() {
       <div className="flex min-w-0 flex-1 flex-col">
         <TopBar />
         <ProjectSwitcher />
+          <ProjectRunProgress />
         <main className="min-h-0 flex-1 overflow-y-auto">
           <StageErrorBoundary>
             <Outlet />

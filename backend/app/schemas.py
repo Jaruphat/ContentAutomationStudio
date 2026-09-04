@@ -953,6 +953,11 @@ class GenerationJobResponse(BaseModel):
     #: The batch this job was created in. Null only on jobs written before
     #: runs existed and not yet reached by the backfill.
     run_id: Optional[str] = None
+    #: How far a running job has got, 0..1, and what it is doing in words.
+    #: Both come from the provider; the stage is empty when it will not say,
+    #: so the UI shows elapsed time rather than inventing one.
+    progress: float = 0.0
+    progress_stage: str = ""
     workflow_id: Optional[str]
     workflow_version: str
     workflow_snapshot_path: Optional[str] = None

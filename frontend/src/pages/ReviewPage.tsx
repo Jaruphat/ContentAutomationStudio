@@ -356,7 +356,7 @@ export default function ReviewPage() {
   if (!currentProjectId) {
     return (
       <div className="flex h-full flex-col items-center justify-center px-8 text-center">
-        <CheckCircle size={32} className="mb-3 text-zinc-600" />
+        <CheckCircle size={32} className="mb-3 text-zinc-500" />
         <h2 className="text-lg font-semibold text-zinc-300">
           No Project Selected
         </h2>
@@ -497,7 +497,7 @@ export default function ReviewPage() {
       {/* Empty */}
       {filtered && filtered.length === 0 && (
         <div className="flex flex-col items-center py-16 text-center">
-          <Image size={28} className="mb-2 text-zinc-600" />
+          <Image size={28} className="mb-2 text-zinc-500" />
           <p className="text-sm text-zinc-500">
             {filter === "all"
               ? runId

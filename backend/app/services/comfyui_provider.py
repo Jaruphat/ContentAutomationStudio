@@ -10,14 +10,18 @@ supplied. This provider handles only the transport layer; workflow parameter
 injection is handled by the workflow_registry module.
 """
 
+import asyncio
+import json
 import logging
 import os
 from typing import Any
 
 import httpx
+import websockets
 
 from app import paths
 from app.services.media_probe import probe_media_file
+from app.services.progress_tracker import ProgressTracker
 from app.services.comfyui_adapter import (
     ComfyUIProvider,
     HealthStatus,
@@ -29,7 +33,13 @@ from app.services.comfyui_adapter import (
 logger = logging.getLogger("cas.comfyui_provider")
 
 DEFAULT_COMFYUI_URL = "http://127.0.0.1:8000"
+#: ComfyUI sends live progress only to the client id that submitted the
+#: prompt, so every job shares one id and one socket; frames carry the prompt
+#: id, which is what tells the runs apart.
+CLIENT_ID = "content-automation-studio"
 HTTP_TIMEOUT = 10.0
+#: How long to wait before dialling the progress socket again after a drop.
+PROGRESS_RECONNECT_SEC = 5.0
 # /object_info is a few MB and can be slow on a cold start.
 OBJECT_INFO_TIMEOUT = 60.0
 
@@ -49,7 +59,69 @@ class RealComfyUIProvider(ComfyUIProvider):
         self._output_dir = output_base_dir
         os.makedirs(self._output_dir, exist_ok=True)
         self._object_info: dict[str, Any] | None = None
+        self._progress = ProgressTracker()
+        self._listener: asyncio.Task | None = None
         logger.info("RealComfyUIProvider initialized: %s", self._base_url)
+
+    # -- live progress ----------------------------------------------------
+
+    def _ensure_listener(self) -> None:
+        """Start the progress socket if it is not already running.
+
+        Started lazily on the first submission rather than at construction, so
+        a provider that is only ever health-checked opens no socket, and a
+        ComfyUI that is down costs nothing until there is work for it.
+        """
+        if self._listener is not None and not self._listener.done():
+            return
+        try:
+            self._listener = asyncio.ensure_future(self._listen_for_progress())
+        except RuntimeError:
+            # No running loop (a synchronous caller). Progress is a nicety;
+            # generation does not depend on it.
+            self._listener = None
+
+    async def _listen_for_progress(self) -> None:
+        """Fold ComfyUI's websocket frames into the tracker until cancelled.
+
+        Every failure here is logged at debug and retried: losing this socket
+        must cost a progress bar and nothing else.
+        """
+        url = self._base_url.replace("https://", "wss://").replace("http://", "ws://")
+        url = f"{url}/ws?clientId={CLIENT_ID}"
+        while True:
+            try:
+                async with websockets.connect(url, max_size=None) as socket:
+                    logger.info("Progress socket connected: %s", url)
+                    async for raw in socket:
+                        if isinstance(raw, bytes):
+                            continue  # preview images; not progress
+                        self._progress.handle(json.loads(raw))
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                logger.debug("Progress socket dropped (%s); retrying", exc)
+            await asyncio.sleep(PROGRESS_RECONNECT_SEC)
+
+    @staticmethod
+    def _describe(live: Any) -> str:
+        """The running stage in words, or empty when nothing is known."""
+        if live is None:
+            return ""
+        if live.total:
+            node = f" in {live.node}" if live.node else ""
+            return f"step {live.step} of {live.total}{node}"
+        return live.node or ""
+
+    async def close(self) -> None:
+        """Stop the progress socket. Safe to call when none was started."""
+        if self._listener is not None:
+            self._listener.cancel()
+            try:
+                await self._listener
+            except (asyncio.CancelledError, Exception):
+                pass
+            self._listener = None
 
     async def get_object_info(self) -> dict[str, Any] | None:
         """Fetch and cache the instance's node catalogue.
@@ -161,9 +233,10 @@ class RealComfyUIProvider(ComfyUIProvider):
         """
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
+                self._ensure_listener()
                 body = {
                     "prompt": workflow_payload,
-                    "client_id": f"cas-{job_id}",
+                    "client_id": CLIENT_ID,
                 }
                 resp = await client.post(f"{self._base_url}/prompt", json=body)
                 resp.raise_for_status()
@@ -265,12 +338,18 @@ class RealComfyUIProvider(ComfyUIProvider):
                 if queue_resp.status_code == 200:
                     queue_data = queue_resp.json()
 
-                    # Check running queue
+                    # Check running queue. Progress comes from the websocket,
+                    # because /history holds nothing until a prompt finishes -
+                    # REST can tell "running" from "done" and no more. Without
+                    # a live frame this reports 0.0 rather than the half it
+                    # used to claim: a made-up number is worse than none.
                     for item in queue_data.get("queue_running", []):
                         if len(item) >= 2 and item[1] == prompt_id:
+                            live = self._progress.snapshot(prompt_id)
                             return JobStatus(
                                 status=JobStatusEnum.RUNNING,
-                                progress=0.5,
+                                progress=live.fraction if live else 0.0,
+                                stage=self._describe(live),
                             )
 
                     # Check pending queue
@@ -279,6 +358,7 @@ class RealComfyUIProvider(ComfyUIProvider):
                             return JobStatus(
                                 status=JobStatusEnum.QUEUED,
                                 progress=0.0,
+                                stage="waiting for the GPU",
                             )
 
                 # Not found anywhere - might still be processing

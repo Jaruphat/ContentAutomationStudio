@@ -176,7 +176,12 @@ describe("subtitle project isolation", () => {
   it("shows actionable GET, PUT, and download errors", async () => {
     apiMocks.getSettings.mockRejectedValueOnce(new Error("Project subtitles are unavailable"));
     renderSection("project-a");
-    await flush();
+    // A rejected query needs more than one tick to reach the rendered error,
+    // and one tick is all a bare flush buys - which made this pass alone and
+    // fail whenever the rest of the suite was competing for the CPU.
+    await waitFor(() =>
+      container.textContent?.includes("Load subtitle settings failed.") ?? false,
+    );
     expect(container.textContent).toContain("Load subtitle settings failed.");
     expect(container.textContent).toContain("Project subtitles are unavailable");
     expect(button("Save settings").disabled).toBe(true);

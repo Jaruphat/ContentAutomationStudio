@@ -207,7 +207,7 @@ function ShotRow({
     >
       <td className="px-2 py-2 text-center">
         <div className="flex items-center justify-center gap-1">
-          <GripVertical size={12} className="text-zinc-600" />
+          <GripVertical size={12} className="text-zinc-500" />
           <span className="text-xs text-zinc-500">{shot.order + 1}</span>
         </div>
       </td>
@@ -430,7 +430,7 @@ export default function StoryboardPage() {
   if (!currentProjectId) {
     return (
       <div className="flex h-full flex-col items-center justify-center text-center px-8">
-        <LayoutGrid size={32} className="mb-3 text-zinc-600" />
+        <LayoutGrid size={32} className="mb-3 text-zinc-500" />
         <h2 className="text-lg font-semibold text-zinc-300">No Project Selected</h2>
         <p className="mt-1 text-sm text-zinc-500">
           Go to the Story page and create or select a project first.
@@ -501,7 +501,7 @@ export default function StoryboardPage() {
       {/* Empty */}
       {scenesQ.data && scenesQ.data.length === 0 && (
         <div className="flex flex-col items-center justify-center py-16 text-center">
-          <LayoutGrid size={28} className="mb-2 text-zinc-600" />
+          <LayoutGrid size={28} className="mb-2 text-zinc-500" />
           <p className="text-sm text-zinc-500">
             No scenes yet. Click "Add Scene" to start building your storyboard.
           </p>

@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
+import { ChevronDown, ChevronRight } from "lucide-react";
+import { useSectionFold } from "./useSectionFold";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { AlertTriangle, Bot, CheckCircle2, Loader2, WandSparkles } from "lucide-react";
 import { ai, toAIError } from "../api/client";
@@ -78,15 +80,27 @@ export default function AIGenerationPanel<T extends AITaskRequest>({
   const error = mutation.isError ? toAIError(mutation.error) : null;
   const selectedHealth = health.data?.providers[0];
 
+  const [open, setOpen] = useSectionFold(`ai.${title}`, true);
+
   return (
     <section className="rounded-lg border border-indigo-800/60 bg-indigo-950/20 p-4 space-y-3">
-      <div className="flex items-start gap-2">
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-label={`${open ? "Collapse" : "Expand"} ${title}`}
+        onClick={() => setOpen(!open)}
+        className="flex w-full items-start gap-2 text-left"
+      >
         <Bot size={16} className="mt-0.5 text-indigo-400" />
         <div>
           <h2 className="text-sm font-semibold text-zinc-200">{title}</h2>
           <p className="text-xs text-zinc-500">{description}</p>
         </div>
-      </div>
+        <span className="ml-auto mt-0.5 text-zinc-400">
+          {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+        </span>
+      </button>
+      {open && (<>
 
       <div className="grid grid-cols-2 gap-3">
         <label className="text-xs text-zinc-400">
@@ -142,6 +156,7 @@ export default function AIGenerationPanel<T extends AITaskRequest>({
           )}
         </div>
       )}
+      </>)}
     </section>
   );
 }

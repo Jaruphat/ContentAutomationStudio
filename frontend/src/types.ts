@@ -403,6 +403,10 @@ export interface GenerationJob {
   run_id: string | null;
   workflow_id: string | null;
   workflow_version: string;
+  /** How far a running job has got, 0..1, as the provider last reported it. */
+  progress: number;
+  /** What it is doing in words, or empty when the provider will not say. */
+  progress_stage: string;
   /** Exact graph submitted for this job, kept for reproducibility. */
   workflow_snapshot_path: string | null;
   /** SHA-256 of the registered workflow the snapshot was built from. */

@@ -237,7 +237,7 @@ export default function ExportPage() {
   if (!currentProjectId) {
     return (
       <div className="flex h-full flex-col items-center justify-center text-center px-8">
-        <Download size={32} className="mb-3 text-zinc-600" />
+        <Download size={32} className="mb-3 text-zinc-500" />
         <h2 className="text-lg font-semibold text-zinc-300">No Project Selected</h2>
         <p className="mt-1 text-sm text-zinc-500">
           Go to the Story page and create or select a project first.

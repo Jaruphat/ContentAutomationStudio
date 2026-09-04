@@ -344,6 +344,7 @@ class QueueManager:
                 return
 
             status = await provider.get_job_status(prompt_id)
+            await self._record_progress(db, job, status)
 
             if status.status == JobStatusEnum.COMPLETED:
                 await self._complete_job(db, job, shot, provider, prompt_id)
@@ -359,6 +360,25 @@ class QueueManager:
 
             # Still running or queued -- keep polling
             await asyncio.sleep(POLL_INTERVAL_SEC)
+
+    async def _record_progress(
+        self, db: Session, job: GenerationJob, status: Any
+    ) -> None:
+        """Keep the job's progress in step with what the provider reports.
+
+        Written on every poll so a long render can be watched from the app
+        rather than from ComfyUI. The stage is cleared once the job stops
+        running: a finished job still advertising "step 3 of 8" would be a
+        worse answer than none.
+        """
+        fraction = float(getattr(status, "progress", 0.0) or 0.0)
+        running = getattr(status, "status", None) == JobStatusEnum.RUNNING
+        stage = str(getattr(status, "stage", "") or "") if running else ""
+        if job.progress == fraction and (job.progress_stage or "") == stage:
+            return
+        job.progress = fraction
+        job.progress_stage = stage
+        db.commit()
 
     async def _complete_job(
         self,

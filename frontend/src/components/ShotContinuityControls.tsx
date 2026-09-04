@@ -4,6 +4,7 @@ import { Link2, Loader2, RefreshCw, Unlink } from "lucide-react";
 import api from "../api/client";
 import type { CharacterSet, ContinuityCandidate } from "../types";
 import ActionError from "./ActionError";
+import ImagePreview from "./ImagePreview";
 
 export function ShotCharacterBinding({ sets, assignedIds, onChange }: {
   sets: CharacterSet[];
@@ -177,7 +178,7 @@ export function ShotContinuityControls({ projectId, sceneId, shotId }: {
           {status.frame && (
             <div className="grid gap-3 rounded bg-zinc-800 p-3 sm:grid-cols-[8rem_1fr]">
               {status.frame.url ? (
-                <img src={status.frame.url} alt={`Continuity source from ${status.source_shot_label}`} className="h-20 w-32 rounded object-cover" />
+                <ImagePreview src={status.frame.url} alt={`Continuity source from ${status.source_shot_label}`} className="h-20 w-32" />
               ) : (
                 <div className="flex h-20 w-32 items-center justify-center rounded bg-zinc-900 text-xs text-zinc-500">Thumbnail unavailable</div>
               )}
@@ -233,7 +234,7 @@ export function ShotContinuityControls({ projectId, sceneId, shotId }: {
             {status.end_frame && (
               <div className="grid gap-3 rounded bg-zinc-800 p-3 sm:grid-cols-[8rem_1fr]">
                 {status.end_frame.url ? (
-                  <img src={status.end_frame.url} alt={`End frame from ${status.end_frame_shot_label}`} className="h-20 w-32 rounded object-cover" />
+                  <ImagePreview src={status.end_frame.url} alt={`End frame from ${status.end_frame_shot_label}`} className="h-20 w-32" />
                 ) : (
                   <div className="flex h-20 w-32 items-center justify-center rounded bg-zinc-900 text-xs text-zinc-500">Thumbnail unavailable</div>
                 )}
