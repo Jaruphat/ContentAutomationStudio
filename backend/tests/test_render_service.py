@@ -1182,3 +1182,114 @@ class TestProbeMedia:
         _create_placeholder_png(media, 640, 360)
         probe = render_service.probe_media(media)
         assert (probe["width"], probe["height"]) == (640, 360)
+
+
+# ---------------------------------------------------------------------------
+# Narration
+# ---------------------------------------------------------------------------
+
+class _SilentVoice:
+    """A speech engine that writes correctly-timed silence.
+
+    The point of these tests is the mux and the reporting, not the sound of a
+    platform voice, and a real one would make them slow and machine-dependent.
+    """
+
+    def __init__(self, seconds_per_word: float = 0.3):
+        self.seconds_per_word = seconds_per_word
+        self.spoken: list[str] = []
+
+    def speak(self, text: str, out_path: str) -> float:
+        import wave
+
+        from app.services import narration as narration_module
+
+        self.spoken.append(text)
+        duration = max(0.2, len(text.split()) * self.seconds_per_word)
+        with wave.open(out_path, "wb") as handle:
+            handle.setnchannels(1)
+            handle.setsampwidth(2)
+            handle.setframerate(narration_module.SAMPLE_RATE)
+            handle.writeframes(b"\x00\x00" * int(duration * narration_module.SAMPLE_RATE))
+        return duration
+
+
+@ffmpeg_required
+class TestNarration:
+    def test_a_render_without_narration_asked_for_stays_silent_about_it(
+        self, db_session, sample_project, sample_shot, tmp_path
+    ):
+        media = str(tmp_path / "frame.png")
+        _create_placeholder_png(media, 320, 180)
+        sample_shot.dialogue = "They gave her the smallest desk."
+        add_approved_take_on_timeline(
+            db_session, sample_project.id, sample_shot.id, media, duration=2.0
+        )
+
+        result = render_service.render_review_video(db_session, sample_project.id)
+
+        assert result["rendered"] is True
+        assert result["narration"] == {"present": False}
+
+    def test_narration_gives_a_silent_film_a_voice(
+        self, db_session, sample_project, sample_shot, tmp_path
+    ):
+        """A still has no audio of its own, so the voice becomes the track.
+
+        Without this the render would stay video-only and the spoken film
+        would have to be assembled outside the app.
+        """
+        media = str(tmp_path / "frame.png")
+        _create_placeholder_png(media, 320, 180)
+        sample_shot.dialogue = "They gave her the smallest desk in the survey office."
+        add_approved_take_on_timeline(
+            db_session, sample_project.id, sample_shot.id, media, duration=3.0
+        )
+        voice = _SilentVoice()
+
+        result = render_service.render_review_video(
+            db_session, sample_project.id, narrate=True, voice=voice,
+        )
+
+        assert result["rendered"] is True, result.get("reason")
+        assert result["narration"]["present"] is True
+        assert result["has_audio"] is True
+        assert voice.spoken == ["They gave her the smallest desk in the survey office."]
+
+    def test_a_shot_with_nothing_to_say_produces_no_narration(
+        self, db_session, sample_project, sample_shot, tmp_path
+    ):
+        media = str(tmp_path / "frame.png")
+        _create_placeholder_png(media, 320, 180)
+        sample_shot.dialogue = ""
+        add_approved_take_on_timeline(
+            db_session, sample_project.id, sample_shot.id, media, duration=2.0
+        )
+        voice = _SilentVoice()
+
+        result = render_service.render_review_video(
+            db_session, sample_project.id, narrate=True, voice=voice,
+        )
+
+        assert result["narration"] == {"present": False}
+        assert voice.spoken == []
+
+    def test_an_overrunning_line_is_reported_on_the_render(
+        self, db_session, sample_project, sample_shot, tmp_path
+    ):
+        """The user is told which lines to rewrite, rather than finding out
+        by watching a voice run over the cut."""
+        media = str(tmp_path / "frame.png")
+        _create_placeholder_png(media, 320, 180)
+        sample_shot.dialogue = "A line with far too many words for one very short shot"
+        add_approved_take_on_timeline(
+            db_session, sample_project.id, sample_shot.id, media, duration=1.0
+        )
+
+        result = render_service.render_review_video(
+            db_session, sample_project.id, narrate=True,
+            voice=_SilentVoice(seconds_per_word=1.0),
+        )
+
+        assert result["narration"]["overruns"], result["narration"]
+        assert any("run past the shot" in w for w in result["warnings"]), result["warnings"]

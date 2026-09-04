@@ -1133,6 +1133,12 @@ class TimelineUpdateRequest(BaseModel):
 # Preflight / Generation control
 # ============================================================================
 
+class RenderRequest(BaseModel):
+    """Body for a render. Narration is opt-in: it takes time and is a choice."""
+
+    narrate: bool = False
+
+
 class RenderResult(BaseModel):
     project_id: str
     rendered: bool
@@ -1149,6 +1155,10 @@ class RenderResult(BaseModel):
     #: take on the timeline had any.
     has_audio: bool = False
     audio_codec: str = ""
+    #: What was spoken over the film: whether a narration track was mixed in,
+    #: how long it ran, and any line that overran its shot or could not be
+    #: spoken. Reported rather than hidden, because both are worth rewriting.
+    narration: dict[str, Any] = Field(default_factory=lambda: {"present": False})
     #: Sidecar holding the provenance stripped out of the delivered MP4.
     provenance_path: str = ""
     #: Non-muxer container tags still present in the delivered MP4. Keys only -

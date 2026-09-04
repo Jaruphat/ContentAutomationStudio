@@ -56,9 +56,14 @@ from app.services.media_probe import (  # noqa: F401
     run_captured,
 )
 from app.services.timeline_service import aspect_override_warnings, get_timeline_manifest
-from app.services import generation_planning, subtitle_service
+from app.services import generation_planning, narration, subtitle_service
 
 logger = logging.getLogger("cas.render_service")
+
+#: How far the takes' own audio is pushed down under the narration. Enough for
+#: a voice to sit clearly on top, not so far that the scene goes silent behind
+#: it - the room tone is part of what the video model produced.
+NARRATION_DUCK_DB = -11.0
 
 #: Every segment that carries audio is normalised to this layout so the concat
 #: demuxer can stream-copy them into one file.
@@ -361,8 +366,16 @@ def write_render_provenance(
     return sidecar
 
 
-def render_review_video(db: Session, project_id: str) -> dict[str, Any]:
-    """Assemble the approved takes on the timeline into a review MP4."""
+def render_review_video(
+    db: Session, project_id: str, *, narrate: bool = False, voice: Any = None
+) -> dict[str, Any]:
+    """Assemble the approved takes on the timeline into a review MP4.
+
+    With ``narrate`` set, the shots' dialogue is spoken and mixed over the
+    takes' own audio, so a narrated short comes out of the app complete rather
+    than needing a voice muxed onto it afterwards. ``voice`` overrides the
+    platform speech engine, which is how this is tested without one.
+    """
     project = db.query(Project).filter(Project.id == project_id).first()
     if project is None:
         raise ValueError(f"Project not found: {project_id}")
@@ -581,6 +594,60 @@ def render_review_video(db: Session, project_id: str) -> dict[str, Any]:
     if not ok:
         return _blocked(project_id, f"FFmpeg concat failed: {err}")
 
+    narration_report: dict[str, Any] = {"present": False}
+    if narrate:
+        track = None
+        try:
+            track = narration.build_track(
+                narration.cues_for_project(db, project_id),
+                os.path.join(out_dir, "narration.wav"),
+                voice=voice,
+            )
+        except Exception as exc:  # a voice engine is not worth losing a render
+            warnings.append(f"Narration could not be produced: {exc}")
+        narration_report = narration.describe(track)
+        if track is not None:
+            narrated = os.path.join(out_dir, "review.narrated.mp4")
+            if keep_audio:
+                mix_cmd = [
+                    ffmpeg, "-y", "-loglevel", "error",
+                    "-i", concat_output, "-i", track.path,
+                    "-filter_complex",
+                    f"[0:a]volume={NARRATION_DUCK_DB:g}dB[bed];"
+                    f"[bed][1:a]amix=inputs=2:duration=first:normalize=0[aout]",
+                    "-map", "0:v", "-map", "[aout]",
+                    "-c:v", "copy", "-c:a", "aac", "-b:a", AUDIO_BITRATE,
+                    narrated,
+                ]
+            else:
+                # Nothing on the timeline had audio, so the voice becomes the
+                # programme's only track and the render now carries audio.
+                mix_cmd = [
+                    ffmpeg, "-y", "-loglevel", "error",
+                    "-i", concat_output, "-i", track.path,
+                    "-map", "0:v", "-map", "1:a", "-shortest",
+                    "-c:v", "copy", "-c:a", "aac", "-b:a", AUDIO_BITRATE,
+                    narrated,
+                ]
+            ok, err = _run(mix_cmd)
+            if not ok:
+                return _blocked(project_id, f"FFmpeg narration mix failed: {err}")
+            try:
+                os.remove(concat_output)
+            except OSError:
+                pass
+            concat_output = narrated
+            keep_audio = True
+            if track.overruns:
+                warnings.append(
+                    f"{len(track.overruns)} narration line(s) run past the shot "
+                    f"they belong to; the picture was left in step."
+                )
+            if track.failures:
+                warnings.append(
+                    f"{len(track.failures)} narration line(s) could not be spoken."
+                )
+
     if keep_audio:
         input_measurement = _measure_loudness(ffmpeg, concat_output)
         if input_measurement is None:
@@ -760,6 +827,8 @@ def render_review_video(db: Session, project_id: str) -> dict[str, Any]:
         "size_bytes": os.path.getsize(output_path),
         "has_audio": bool(probe.get("has_audio")) if probe else keep_audio,
         "audio_codec": probe.get("audio_codec", "aac" if keep_audio else ""),
+        # What was spoken over the film, and which lines did not go cleanly.
+        "narration": narration_report,
         "provenance_path": provenance_path,
         "embedded_metadata_keys": leaked,
         "metadata_status": metadata_status,

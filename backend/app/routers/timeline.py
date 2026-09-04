@@ -9,6 +9,7 @@ from app.database import get_db
 from app.models import Project, TimelineItem
 from app.schemas import (
     RenderPlan,
+    RenderRequest,
     RenderResult,
     TimelineItemResponse,
     TimelineManifest,
@@ -176,7 +177,11 @@ def generate_render_plan(project_id: str, db: Session = Depends(get_db)):
 
 
 @router.post("/render", response_model=RenderResult)
-def render_review(project_id: str, db: Session = Depends(get_db)):
+def render_review(
+    project_id: str,
+    payload: RenderRequest | None = None,
+    db: Session = Depends(get_db),
+):
     """
     Render a review video from the current timeline using FFmpeg.
 
@@ -186,7 +191,9 @@ def render_review(project_id: str, db: Session = Depends(get_db)):
     """
     _get_project_or_404(db, project_id)
     try:
-        result = render_service.render_review_video(db, project_id)
+        result = render_service.render_review_video(
+            db, project_id, narrate=bool(payload and payload.narrate),
+        )
     except timeline_service.StaleTimelineError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     return RenderResult(**result)

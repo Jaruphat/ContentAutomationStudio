@@ -1,7 +1,6 @@
 """Validated project subtitle settings and deterministic sidecar generation."""
 
 from __future__ import annotations
-
 import hashlib
 import html
 import math
@@ -19,6 +18,11 @@ from app import paths
 from app.models import Project, Shot
 from app.services.generation_planning import parse_resolution
 from app.services.timeline_service import get_timeline_manifest
+
+#: The Shot field a spoken line comes from. Named here because the narration
+#: track reads the same one: a line must not be sayable but unshowable, or the
+#: reverse, and a shared constant is what keeps that from drifting.
+DIALOGUE_FIELD = "dialogue"
 
 SubtitleMode = Literal["off", "soft", "burn_in"]
 SubtitlePreset = Literal["clean", "cinematic", "social_bold", "thai_friendly"]
@@ -221,7 +225,7 @@ def build_subtitle_cues(
         timeline_cursor = cue_end
 
         shot = shots.get(item.get("shot_id"))
-        raw = (shot.dialogue if shot is not None else "") or ""
+        raw = (getattr(shot, DIALOGUE_FIELD, "") if shot is not None else "") or ""
         normalized = raw.strip()
         if not normalized:
             continue
