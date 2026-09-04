@@ -299,6 +299,10 @@ export const continuity = {
     http.put<ShotContinuityStatus>(`/projects/${projectId}/scenes/${sceneId}/shots/${shotId}/continuity`, { source_take_id: sourceTakeId }).then((r) => r.data),
   clear: (projectId: string, sceneId: string, shotId: string) =>
     http.delete<ShotContinuityStatus>(`/projects/${projectId}/scenes/${sceneId}/shots/${shotId}/continuity`).then((r) => r.data),
+  bindEndFrame: (projectId: string, sceneId: string, shotId: string, sourceTakeId: string) =>
+    http.put<ShotContinuityStatus>(`/projects/${projectId}/scenes/${sceneId}/shots/${shotId}/end-frame`, { source_take_id: sourceTakeId }).then((r) => r.data),
+  clearEndFrame: (projectId: string, sceneId: string, shotId: string) =>
+    http.delete<ShotContinuityStatus>(`/projects/${projectId}/scenes/${sceneId}/shots/${shotId}/end-frame`).then((r) => r.data),
 };
 
 // ── Workflows ────────────────────────────────────────────────────────────

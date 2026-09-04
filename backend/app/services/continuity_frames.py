@@ -521,3 +521,103 @@ def source_fingerprint(db: Session, shot: Any) -> dict[str, Any]:
         # hashes differently from one pointing at nothing.
         "sha256": (frame.sha256 or "") if frame is not None else "unresolved",
     }
+
+
+# ---------------------------------------------------------------------------
+# The other end: the frame a clip has to land on
+# ---------------------------------------------------------------------------
+
+def bind_end_frame(
+    db: Session, project_id: str, shot: Any, take_id: str
+) -> Any:
+    """Wire ``shot`` to finish on the captured frame of ``take_id``.
+
+    The same conditions as a start frame, for the same reasons: the take is in
+    this project, it is not one of this shot's own - a clip cannot end on a
+    frame cut from itself - it is approved, and its frame has already been
+    captured, so the binding names something that exists now.
+    """
+    take = db.query(Take).filter(Take.id == take_id).first()
+    if take is None or _project_id_for_take(db, take) != project_id:
+        raise ContinuityFrameError(
+            "That take does not exist in this project.", "take_not_found"
+        )
+    if take.shot_id == shot.id:
+        raise ContinuityFrameError(
+            "A shot cannot end on a frame from its own take. Choose the take "
+            "of the shot this one has to meet.",
+            "self_continuity",
+        )
+    if (take.review_status or "") != "Approved":
+        raise ContinuityFrameError(
+            "Only an approved take can be selected as an end frame.",
+            "take_not_approved",
+        )
+    _assert_current_take(db, take)
+    frame = get_frame(db, take.id)
+    if frame is None:
+        raise ContinuityFrameError(
+            "That take has no captured frame yet. Capture the approved image "
+            "or extract the approved video's end frame first.",
+            "no_continuity_frame",
+        )
+    if frame.project_id != project_id:
+        raise ContinuityFrameError(
+            "That captured frame belongs to another project.", "take_not_found"
+        )
+
+    shot.end_frame_take_id = take.id
+    db.commit()
+    db.refresh(shot)
+    return shot
+
+
+def clear_end_frame(db: Session, shot: Any) -> Any:
+    """Stop constraining where this shot finishes.
+
+    Leaves the start frame alone: the two ends are bound separately because
+    they are separate decisions.
+    """
+    shot.end_frame_take_id = None
+    shot.end_frame_sha256 = ""
+    db.commit()
+    db.refresh(shot)
+    return shot
+
+
+def resolve_end_frame_image(
+    db: Session, project_id: str, shot: Any
+) -> tuple[ReferenceImage | None, list[str]]:
+    """The image a bound shot has to finish on, or why it cannot be used."""
+    take_id = getattr(shot, "end_frame_take_id", None) or ""
+    if not take_id:
+        return None, []
+
+    frame = get_frame(db, take_id)
+    if frame is None or frame.project_id != project_id:
+        return None, [
+            "The end frame this shot lands on no longer exists. Pick another "
+            "approved take, or clear the end frame."
+        ]
+
+    images, problems = reference_bible.resolve_images(
+        db, project_id, [frame.reference_image_id or ""]
+    )
+    if problems:
+        return None, [
+            "The end frame this shot lands on cannot be used: "
+            + problems[0].message
+        ]
+    return images[0], []
+
+
+def end_frame_fingerprint(db: Session, shot: Any) -> dict[str, Any]:
+    """What the shot's end-frame binding amounts to, for hashing."""
+    take_id = getattr(shot, "end_frame_take_id", None) or ""
+    if not take_id:
+        return {}
+    frame = get_frame(db, take_id)
+    return {
+        "end_frame_take_id": take_id,
+        "end_frame_sha256": (frame.sha256 or "") if frame is not None else "",
+    }

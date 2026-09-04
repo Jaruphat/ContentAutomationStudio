@@ -47,6 +47,12 @@ WIDTH = "width"
 HEIGHT = "height"
 FRAMES = "frames"
 REFERENCE_IMAGE = "referenceImage"
+#: The frame a clip has to land on. Deliberately not a reference slot: a
+#: reference conditions the render, while this fixes where the motion stops,
+#: and a workflow binds them to different node inputs. Sharing a name would let
+#: a canonical character view arrive at `last_frame` and end the clip on a
+#: studio portrait, with every hash and lineage entry still correct.
+END_FRAME_IMAGE = "endFrameImage"
 ASPECT_RATIO = "aspectRatio"
 OUTPUT_PREFIX = "outputPrefix"
 
@@ -96,6 +102,7 @@ LOGICAL_FIELDS: tuple[str, ...] = (
     HEIGHT,
     FRAMES,
     *REFERENCE_IMAGE_FIELDS,
+    END_FRAME_IMAGE,
     ASPECT_RATIO,
     OUTPUT_PREFIX,
 )

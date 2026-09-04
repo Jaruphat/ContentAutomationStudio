@@ -67,3 +67,45 @@ describe("shot character and continuity controls", () => {
     expect(html).not.toContain("value=\"take-x\"");
   });
 });
+
+describe("the frame a clip has to land on", () => {
+  const landing = {
+    ...status,
+    problems: [],
+    end_frame_take_id: "take-land",
+    end_frame_shot_id: "shot-3",
+    end_frame_shot_label: "Shot 3",
+    end_frame: {
+      id: "frame-land", project_id: "project-1", take_id: "take-land", shot_id: "shot-3",
+      reference_image_id: "image-land", frame_time_sec: 0, selection: "source_image",
+      source_type: "approved_image_take", sha256: "landingsha256", width: 864, height: 480,
+      source_duration_sec: 0, url: "/landing.png",
+      created_at: "2026-09-04T00:00:00Z", updated_at: "2026-09-04T00:01:00Z",
+    },
+  } as unknown as ShotContinuityStatus;
+
+  function render(value: ShotContinuityStatus) {
+    const client = new QueryClient({ defaultOptions: { queries: { enabled: false } } });
+    client.setQueryData(["continuity", "project-1", "scene-1", "shot-2"], value);
+    return renderToStaticMarkup(
+      <QueryClientProvider client={client}>
+        <ShotContinuityControls projectId="project-1" sceneId="scene-1" shotId="shot-2" />
+      </QueryClientProvider>,
+    );
+  }
+
+  it("offers the landing as its own choice, separate from the start frame", () => {
+    // Both ends are bound separately because they are separate decisions: a
+    // shot often continues from one clip and has to meet a different one.
+    const html = render({ ...status, problems: [], end_frame_take_id: null, end_frame: null } as unknown as ShotContinuityStatus);
+    expect(html).toContain("End frame");
+    expect(html).toContain("Use as the frame this clip lands on");
+  });
+
+  it("shows which shot the landing came from, and its hash", () => {
+    const html = render(landing);
+    expect(html).toContain("Shot 3");
+    expect(html).toContain("landingsha");
+    expect(html).toContain("Clear end frame");
+  });
+});

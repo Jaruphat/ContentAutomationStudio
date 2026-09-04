@@ -413,6 +413,41 @@ other models resident, the first attempt failed inside the reference node with
 `HostBuffer.read_file_slice failed`; the same graph ran unchanged after
 ComfyUI's `/free` released what it was holding.
 
+### The frame a clip has to land on
+
+Continuity so far has been about where a shot *starts*. That leaves the other
+end unconstrained, so each clip drifts and the shot after it inherits the
+drift. When both ends are already approved -- one still opens the shot, another
+opens the next one -- a shot can say so, and the model interpolates between two
+fixed frames instead of guessing where to finish.
+
+`MiniMaxH3ImageToVideo` has always taken a `last_frame`; the exported graph
+never wired one. `scripts/derive_end_frame_workflow.py` adds the loader:
+
+```bash
+python scripts/derive_end_frame_workflow.py path/to/i2v_workflow.json
+```
+
+Map its output to **`endFrameImage`**, never to `referenceImage2`. Reference
+slots are positional and the resolver fills them with canonical character
+views; sending one of those to `last_frame` would end every clip on a studio
+portrait, with correct hashes and correct lineage throughout. `endFrameImage`
+is a separate logical field for that reason, is not counted as reference
+capacity, and a shot that binds an end frame on a workflow with no
+`endFrameImage` mapping is refused rather than run without it.
+
+Bind it under Explicit shot continuity, beside the start frame. The two ends
+are separate decisions -- a shot often continues from one clip and has to meet
+a different one -- so they are bound, cleared and blocked independently, though
+both follow the same rule: a source whose approval is withdrawn stops the run.
+
+Verified against a live ComfyUI. Given a still of the character at the left
+edge of a rooftop and another at the right edge, the generated clip's first
+frame scored 4.70 against the opening still and 36.41 against the landing;
+its final frame scored 3.60 against the landing and 33.32 against the opening
+(mean absolute luma difference, 0 identical). It starts and ends where it was
+told.
+
 
 ### UX Layout
 

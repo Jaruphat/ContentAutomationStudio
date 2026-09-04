@@ -91,6 +91,7 @@ export function ShotContinuityControls({ projectId, sceneId, shotId }: {
   const queryClient = useQueryClient();
   const [selectedImageTakeId, setSelectedImageTakeId] = useState("");
   const [selectedVideoTakeId, setSelectedVideoTakeId] = useState("");
+  const [selectedEndTakeId, setSelectedEndTakeId] = useState("");
   const key = ["continuity", projectId, sceneId, shotId];
   const query = useQuery({
     queryKey: key,
@@ -112,13 +113,28 @@ export function ShotContinuityControls({ projectId, sceneId, shotId }: {
     mutationFn: () => api.continuity.clear(projectId, sceneId, shotId),
     onSuccess: refresh,
   });
+  const captureAndLand = useMutation({
+    mutationFn: async (takeId: string) => {
+      await api.continuity.extract(projectId, takeId);
+      return api.continuity.bindEndFrame(projectId, sceneId, shotId, takeId);
+    },
+    onSuccess: refresh,
+  });
+  const clearLanding = useMutation({
+    mutationFn: () => api.continuity.clearEndFrame(projectId, sceneId, shotId),
+    onSuccess: refresh,
+  });
 
   const status = query.data;
   const usable = status?.candidates.filter((candidate) => candidate.usable) ?? [];
   const images = usable.filter((candidate) => candidate.source_type === IMAGE_SOURCE);
   const videos = usable.filter((candidate) => candidate.source_type === VIDEO_SOURCE);
   const boundImage = status?.source_type === IMAGE_SOURCE;
-  const mutationError = captureAndBind.error ?? extract.error ?? clear.error;
+  const mutationError = captureAndBind.error ?? extract.error ?? clear.error
+    ?? captureAndLand.error ?? clearLanding.error;
+  // Anything approved can be a landing, including a still from a later shot -
+  // which is the usual case: the clip has to arrive where the next shot opens.
+  const landings = usable.filter((candidate) => candidate.take_id !== status?.source_take_id);
 
   return (
     <section aria-label="Shot continuity" className="space-y-3 rounded border border-zinc-700 p-3">
@@ -189,6 +205,52 @@ export function ShotContinuityControls({ projectId, sceneId, shotId }: {
               </div>
             </div>
           )}
+          <div className="space-y-2 rounded bg-zinc-900/40 p-2">
+            <h4 className="text-[11px] font-semibold uppercase text-zinc-300">End frame</h4>
+            <p className="text-[11px] text-zinc-500">
+              Optional, and only for workflows that accept one. Given both ends the model interpolates between two approved frames, so the cut lands exactly where the next shot opens instead of drifting.
+            </p>
+            <label className="block text-xs text-zinc-400">
+              Choose the approved take this clip has to finish on
+              <select aria-label="End frame source" value={selectedEndTakeId} onChange={(event) => setSelectedEndTakeId(event.target.value)} className="mt-1 w-full rounded px-2 py-1">
+                <option value="">Choose a landing take…</option>
+                {landings.map((candidate) => (
+                  <option key={candidate.take_id} value={candidate.take_id}>
+                    {candidate.source_label} · {candidate.shot_label} · take {candidate.take_id.slice(0, 8)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button
+              type="button"
+              disabled={!selectedEndTakeId || captureAndLand.isPending}
+              onClick={() => captureAndLand.mutate(selectedEndTakeId)}
+              className="rounded bg-indigo-600 px-3 py-1.5 text-xs text-white disabled:opacity-50"
+            >
+              Use as the frame this clip lands on
+            </button>
+            {landings.length === 0 && <p className="text-xs text-zinc-500">No other approved take is available to land on.</p>}
+            {status.end_frame && (
+              <div className="grid gap-3 rounded bg-zinc-800 p-3 sm:grid-cols-[8rem_1fr]">
+                {status.end_frame.url ? (
+                  <img src={status.end_frame.url} alt={`End frame from ${status.end_frame_shot_label}`} className="h-20 w-32 rounded object-cover" />
+                ) : (
+                  <div className="flex h-20 w-32 items-center justify-center rounded bg-zinc-900 text-xs text-zinc-500">Thumbnail unavailable</div>
+                )}
+                <div className="space-y-1 text-xs">
+                  <p className="font-medium text-zinc-200">
+                    Lands on: {status.end_frame_shot_label} · take {status.end_frame_take_id?.slice(0, 8)}
+                  </p>
+                  <p className="text-[10px] text-zinc-500">
+                    {status.end_frame.width}×{status.end_frame.height} · SHA {status.end_frame.sha256.slice(0, 12)}
+                  </p>
+                  <button type="button" onClick={() => clearLanding.mutate()} className="flex items-center gap-1 rounded bg-zinc-700 px-2 py-1">
+                    <Unlink size={11} />Clear end frame
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
           {status.problems.length > 0 && (
             <div role="alert" className="rounded border border-red-800 bg-red-950/30 p-2 text-xs text-red-300">
               <strong>Preflight blocker</strong>

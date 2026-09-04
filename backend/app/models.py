@@ -477,6 +477,14 @@ class Shot(Base):
     #: character-set digests are: judging "did the hand-off move?" must be a
     #: value comparison, not a re-derivation that needs a database session.
     continuity_source_sha256 = Column(String, default="")
+    #: The approved take whose captured frame this shot has to finish on, for
+    #: a workflow that accepts a last frame. Bound separately from the start
+    #: frame because the two ends are separate decisions: a shot often
+    #: continues from one clip and has to meet a different one.
+    end_frame_take_id = Column(String, nullable=True)
+    #: The hash that binding currently resolves to, kept beside it so "did the
+    #: landing move?" stays a value comparison.
+    end_frame_sha256 = Column(String, default="")
     workflow_preset_id = Column(String, nullable=True)
     image_provider_id = Column(String, default="comfyui")
     image_model = Column(String, default="workflow")

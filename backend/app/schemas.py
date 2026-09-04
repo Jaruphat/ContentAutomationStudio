@@ -605,6 +605,13 @@ class ShotContinuityStatus(BaseModel):
     source_shot_id: str = ""
     source_shot_label: str = ""
     source_type: str = ""
+    #: The frame this shot has to land on, when one is bound. Reported beside
+    #: the start frame rather than inside it: a shot often continues from one
+    #: clip and has to meet a different one, so they are two bindings.
+    end_frame_take_id: Optional[str] = None
+    end_frame: Optional[ContinuityFrameResponse] = None
+    end_frame_shot_id: str = ""
+    end_frame_shot_label: str = ""
     #: Why this shot cannot be generated from its bound source, if it cannot.
     problems: list[str] = Field(default_factory=list)
     candidates: list[ContinuitySourceOption] = Field(default_factory=list)

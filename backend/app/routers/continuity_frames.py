@@ -114,8 +114,24 @@ def _status(db: Session, project_id: str, shot: Shot) -> ShotContinuityStatus:
     source_shot = None
     if frame is not None:
         source_shot = db.query(Shot).filter(Shot.id == frame.shot_id).first()
+    end_frame = (
+        continuity_frames.get_frame(db, shot.end_frame_take_id)
+        if getattr(shot, "end_frame_take_id", None)
+        else None
+    )
+    end_shot = (
+        db.query(Shot).filter(Shot.id == end_frame.shot_id).first()
+        if end_frame is not None
+        else None
+    )
     return ShotContinuityStatus(
         shot_id=shot.id,
+        end_frame_take_id=getattr(shot, "end_frame_take_id", None),
+        end_frame=(
+            ContinuityFrameResponse.model_validate(end_frame) if end_frame else None
+        ),
+        end_frame_shot_id=end_shot.id if end_shot else "",
+        end_frame_shot_label=f"Shot {end_shot.order}" if end_shot else "",
         mode=shot.continuity_source_mode or continuity_frames.MODE_NONE,
         source_take_id=shot.continuity_source_take_id,
         frame=ContinuityFrameResponse.model_validate(frame) if frame else None,
@@ -209,6 +225,49 @@ def clear_shot_continuity(
 ):
     shot = _shot(db, project_id, scene_id, shot_id)
     continuity_frames.clear_source(db, shot)
+    revisions.refresh_project(db, project_id)
+    db.refresh(shot)
+    return _status(db, project_id, shot)
+
+
+_END_FRAME_PATH = (
+    "/api/projects/{project_id}/scenes/{scene_id}/shots/{shot_id}/end-frame"
+)
+
+
+@router.put(_END_FRAME_PATH, response_model=ShotContinuityStatus)
+def bind_shot_end_frame(
+    project_id: str,
+    scene_id: str,
+    shot_id: str,
+    payload: ContinuitySourceUpdate,
+    db: Session = Depends(get_db),
+):
+    """Say which approved frame this shot has to finish on, or clear it."""
+    shot = _shot(db, project_id, scene_id, shot_id)
+    try:
+        if payload.source_take_id:
+            continuity_frames.bind_end_frame(
+                db, project_id, shot, payload.source_take_id
+            )
+        else:
+            continuity_frames.clear_end_frame(db, shot)
+    except continuity_frames.ContinuityFrameError as exc:
+        raise _error(exc) from exc
+    revisions.refresh_project(db, project_id)
+    db.refresh(shot)
+    return _status(db, project_id, shot)
+
+
+@router.delete(_END_FRAME_PATH, response_model=ShotContinuityStatus)
+def clear_shot_end_frame(
+    project_id: str,
+    scene_id: str,
+    shot_id: str,
+    db: Session = Depends(get_db),
+):
+    shot = _shot(db, project_id, scene_id, shot_id)
+    continuity_frames.clear_end_frame(db, shot)
     revisions.refresh_project(db, project_id)
     db.refresh(shot)
     return _status(db, project_id, shot)

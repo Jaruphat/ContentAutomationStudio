@@ -610,6 +610,32 @@ class QueueManager:
         provenance["images"] = [
             uploads.get(id(candidate), candidate) for candidate in conceptual_images
         ]
+
+        # The landing goes to its own input. Sending it through a reference
+        # slot would start the clip where it was meant to finish.
+        landing = provenance.get("end_frame")
+        if isinstance(landing, dict) and landing.get("file_path"):
+            mapping = parameter_mapping.get(job_payload.END_FRAME_IMAGE)
+            if not mapping:
+                raise WorkflowValidationError(
+                    "This shot has an end frame bound, but the selected "
+                    "workflow has no endFrameImage mapping to put it in."
+                )
+            file_path = str(landing["file_path"])
+            if not os.path.isfile(file_path):
+                raise WorkflowValidationError(
+                    f"End frame image file is missing: {file_path}"
+                )
+            extension = os.path.splitext(file_path)[1].lower()
+            uploaded = await provider.upload_reference_image(
+                file_path,
+                upload_name=f"cas/{job.id}/end_{landing.get('image_id')}{extension}",
+                mime_type=str(landing.get("mime_type") or "application/octet-stream"),
+            )
+            landing = {**landing, "comfyui": {**uploaded, "mapping": dict(mapping)}}
+            provenance["end_frame"] = landing
+            parameter_values[job_payload.END_FRAME_IMAGE] = uploaded["workflow_value"]
+
         job.reference_provenance = provenance
         job.parameter_map = {**dict(job.parameter_map or {}), **parameter_values}
         db.commit()

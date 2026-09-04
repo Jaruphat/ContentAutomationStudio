@@ -44,6 +44,10 @@ logger = logging.getLogger("cas.shot_conditioning")
 SOURCE_CONTINUITY = "continuity"
 SOURCE_CHARACTER_SET = "character_set"
 SOURCE_REFERENCE = "reference"
+#: The frame the clip has to land on. Kept out of the reference list on
+#: purpose: it maps to its own logical field, so counting it as a reference
+#: would push a canonical view out of a workflow that binds only a few.
+SOURCE_END_FRAME = "end_frame"
 
 
 @dataclass
@@ -71,6 +75,11 @@ class ShotConditioning:
     character_set_sha256s: list[str] = field(default_factory=list)
     continuity_source_take_id: str = ""
     continuity_source_sha256: str = ""
+    #: The frame this shot has to finish on, when one is bound. Held apart from
+    #: ``images`` because it is not conditioning; it is a destination.
+    end_frame: ConditioningImage | None = None
+    end_frame_take_id: str = ""
+    end_frame_sha256: str = ""
 
     @property
     def image_count(self) -> int:
@@ -185,6 +194,55 @@ def _resolve_continuity(
     return entry, [], take_id, sha256
 
 
+def _resolve_end_frame(
+    db: Session, project_id: str, shot: Shot
+) -> tuple[ConditioningImage | None, list[str], str, str]:
+    """The frame this shot has to land on, or why it cannot land there.
+
+    Approval can be withdrawn and the upstream shot edited after a frame is
+    cut, and neither changes the bytes on disk. So the take is re-checked here
+    rather than trusting that a hash which still matches still means something
+    somebody approved.
+    """
+    take_id = getattr(shot, "end_frame_take_id", None) or ""
+    if not take_id:
+        return None, [], "", ""
+
+    image, problems = continuity_frames.resolve_end_frame_image(db, project_id, shot)
+    if problems:
+        return None, problems, take_id, ""
+
+    take = db.query(Take).filter(Take.id == take_id).first()
+    if take is None:
+        return None, [
+            "The take this shot ends on no longer exists. Pick another "
+            "approved take, or clear the end frame."
+        ], take_id, ""
+
+    frame = continuity_frames.get_frame(db, take_id)
+    sha256 = (frame.sha256 or "") if frame is not None else ""
+    take_problems = [
+        problem.replace("continues from", "ends on").replace(
+            "start frame", "end frame"
+        )
+        for problem in _continuity_problems(db, take)
+    ]
+    if take_problems:
+        return None, take_problems, take_id, sha256
+
+    return ConditioningImage(
+        image=image,
+        source=SOURCE_END_FRAME,
+        detail={
+            "take_id": take_id,
+            "shot_id": take.shot_id,
+            "frame_time_sec": frame.frame_time_sec if frame else 0.0,
+            "source_type": continuity_frames.source_type(frame),
+        },
+        selection_reason="the frame this clip has to land on",
+    ), [], take_id, sha256
+
+
 # ---------------------------------------------------------------------------
 # Identity
 # ---------------------------------------------------------------------------
@@ -252,6 +310,13 @@ def resolve(db: Session, project_id: str, shot: Shot) -> ShotConditioning:
     resolved.continuity_source_sha256 = frame_sha
     resolved.problems.extend(continuity_problems)
 
+    end_entry, end_problems, end_take_id, end_sha = _resolve_end_frame(
+        db, project_id, shot
+    )
+    resolved.end_frame_take_id = end_take_id
+    resolved.end_frame_sha256 = end_sha
+    resolved.problems.extend(end_problems)
+
     set_ids = [str(value) for value in (shot.character_set_ids or []) if value]
     resolved.character_set_ids = set_ids
     identity_entries, identity_problems, digests = _resolve_character_sets(
@@ -293,6 +358,7 @@ def resolve(db: Session, project_id: str, shot: Shot) -> ShotConditioning:
     if resolved.problems:
         return resolved
 
+    resolved.end_frame = end_entry
     if continuity_entry is not None:
         resolved.images.append(continuity_entry)
     resolved.images.extend(identity_entries)
@@ -495,5 +561,23 @@ def provenance(resolved: ShotConditioning) -> dict[str, Any]:
                 "selection_reason": entry.selection_reason,
             }
             for entry in resolved.images
-        ]
+        ],
+        # Kept apart from `images`: that list is what the render was
+        # conditioned on and is counted against the workflow's reference
+        # slots. Where the clip has to finish is neither.
+        "end_frame": (
+            {
+                "image_id": resolved.end_frame.image.id,
+                "sheet_id": resolved.end_frame.image.sheet_id,
+                "file_path": resolved.end_frame.image.file_path,
+                "sha256": resolved.end_frame.image.sha256,
+                "mime_type": resolved.end_frame.image.mime_type,
+                "width": resolved.end_frame.image.width,
+                "height": resolved.end_frame.image.height,
+                "take_id": resolved.end_frame_take_id,
+                "detail": dict(resolved.end_frame.detail),
+            }
+            if resolved.end_frame is not None
+            else None
+        ),
     }

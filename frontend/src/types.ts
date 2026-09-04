@@ -179,6 +179,11 @@ export interface ShotContinuityStatus {
   shot_id: string; mode: "none" | "start_frame" | "end_frame" | string;
   source_take_id: string | null; frame: ContinuityFrame | null;
   source_shot_id: string; source_shot_label: string; source_type: string;
+  /** The frame this shot has to land on. Bound separately from the start
+   *  frame: a shot often continues from one clip and has to meet another. */
+  end_frame_take_id: string | null;
+  end_frame: ContinuityFrame | null;
+  end_frame_shot_id: string; end_frame_shot_label: string;
   problems: string[];
   candidates: ContinuityCandidate[];
 }
