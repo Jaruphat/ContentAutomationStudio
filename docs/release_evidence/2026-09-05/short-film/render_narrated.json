@@ -1,0 +1,31 @@
+{
+  "project_id": "cb5ffdc1-c54e-4d22-adfa-aa82ba26664b",
+  "rendered": true,
+  "output_path": "C:\\Users\\jongp\\Desktop\\Thinkpad_and_PC_Sync\\ContentAutomationStudio\\backend\\data\\exports\\cb5ffdc1-c54e-4d22-adfa-aa82ba26664b\\review.mp4",
+  "reason": "",
+  "warnings": [
+    "Audio could not reach -16 LUFS without exceeding the true-peak ceiling; measured -16.69 LUFS and -0.22 dBTP."
+  ],
+  "segment_count": 23,
+  "width": 864,
+  "height": 480,
+  "duration_sec": 184.021,
+  "codec": "h264",
+  "size_bytes": 24244253,
+  "has_audio": true,
+  "audio_codec": "aac",
+  "narration": {
+    "present": true,
+    "duration_sec": 184.0,
+    "overruns": [],
+    "failures": []
+  },
+  "provenance_path": "C:\\Users\\jongp\\Desktop\\Thinkpad_and_PC_Sync\\ContentAutomationStudio\\backend\\data\\exports\\cb5ffdc1-c54e-4d22-adfa-aa82ba26664b\\review.provenance.json",
+  "embedded_metadata_keys": [],
+  "metadata_status": "clean",
+  "warning_metadata": [],
+  "delivery_validation": {
+    "pipeline_pass": true,
+    "delivery_spec_pass": true
+  }
+}

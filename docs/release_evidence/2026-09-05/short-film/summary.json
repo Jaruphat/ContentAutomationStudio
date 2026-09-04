@@ -1,0 +1,44 @@
+{
+  "title": "The Cartographer of Small Things",
+  "project_id": "cb5ffdc1-c54e-4d22-adfa-aa82ba26664b",
+  "shots": 23,
+  "approved_takes": 23,
+  "route": "MiniMax H3 reference-to-video, one canonical character view per shot",
+  "seconds_per_shot": 8,
+  "measured_seconds_per_shot": 155,
+  "duration_sec": 184.021,
+  "narration": {
+    "present": true,
+    "duration_sec": 184.0,
+    "overruns": [],
+    "failures": []
+  },
+  "subtitles": "burn_in, cinematic preset, from Shot.dialogue",
+  "voice": "Windows SAPI (local, no metered spend)",
+  "probe": {
+    "programs": [],
+    "stream_groups": [],
+    "streams": [
+      {
+        "codec_name": "h264",
+        "width": 864,
+        "height": 480,
+        "r_frame_rate": "24/1"
+      },
+      {
+        "codec_name": "aac",
+        "sample_rate": "48000",
+        "channels": 2,
+        "r_frame_rate": "0/0"
+      }
+    ],
+    "format": {
+      "duration": "184.021000",
+      "size": "24244253",
+      "bit_rate": "1053977"
+    }
+  },
+  "warnings": [
+    "Audio could not reach -16 LUFS without exceeding the true-peak ceiling; measured -16.69 LUFS and -0.22 dBTP."
+  ]
+}

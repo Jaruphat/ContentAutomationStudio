@@ -66,3 +66,39 @@ Runtime: 23 x 8s = 184 seconds.
   price on it and is left to the user.
 - Subtitles come from each shot's dialogue field through the app's own
   subtitle service, burned or soft as configured.
+
+## What was actually produced
+
+Rendered 2026-09-05 from project `cb5ffdc1`. 23 shots, 23 approved takes,
+184.0 seconds, 864x480 h264 at 24fps with AAC stereo, 24 MB. Narration
+present, no line overran its shot and none failed to be spoken. Evidence and
+the contact sheet are under `docs/release_evidence/2026-09-05/short-film/`.
+
+Each shot took about 155 seconds end to end, so the film cost roughly an hour
+of GPU. Reference-to-video is what made that possible: measured against the
+image-to-video route on the same machine it is four times faster (80s against
+349s) and needs no key image at all.
+
+### What did not come out well
+
+Worth recording, because none of it is a pipeline fault and all of it is
+fixable in the next pass.
+
+- **Invented lettering.** Shots that call for a painted sign get one, and the
+  model cannot spell: a shop front reads "ILVA REREIM", a pediment "NERDA
+  KRRSEIM". The prompt asked for no text and got some anyway, because the
+  scene description asked for a sign. Either accept it, describe signage
+  without naming it, or composite real lettering afterwards.
+- **The child in shot 22 reads as an adult.** Every shot is conditioned on the
+  same canonical adult, so a second, younger character has nowhere to come
+  from. A second character set, approved and bound only to that shot, is the
+  fix - which is exactly what character sets are for.
+- **Shot 3 is legible but not literal.** "Where the light fell at four in the
+  afternoon" came back as a lit floor rather than a floor with chalk marks
+  tracking the light. A more concrete description would land it.
+
+### The one real limitation found
+
+A shot cannot be given more than one character set on a one-reference
+workflow, so a scene with two named characters needs a multi-reference video
+route. The image side already has one; the video side does not yet.
