@@ -162,19 +162,24 @@ export interface CharacterSetGenerateRequest {
 export interface ContinuityFrame {
   id: string; project_id: string; take_id: string; shot_id: string;
   reference_image_id: string | null; frame_time_sec: number;
-  selection: "last" | "explicit"; sha256: string; width: number; height: number;
+  selection: "last" | "explicit" | "source_image";
+  source_type: "approved_image_take" | "approved_video_end_frame";
+  sha256: string; width: number; height: number;
   source_duration_sec: number; url: string | null; created_at: string; updated_at: string;
 }
 
 export interface ContinuityCandidate {
   take_id: string; shot_id: string; shot_label: string; scene_id: string;
-  frame: ContinuityFrame; usable: boolean; reason: string;
+  source_type: "approved_image_take" | "approved_video_end_frame";
+  source_label: string; frame: ContinuityFrame | null; captured: boolean;
+  usable: boolean; reason: string;
 }
 
 export interface ShotContinuityStatus {
-  shot_id: string; mode: "none" | "previous_approved_end_frame" | string;
+  shot_id: string; mode: "none" | "start_frame" | "end_frame" | string;
   source_take_id: string | null; frame: ContinuityFrame | null;
-  source_shot_id: string; source_shot_label: string; problems: string[];
+  source_shot_id: string; source_shot_label: string; source_type: string;
+  problems: string[];
   candidates: ContinuityCandidate[];
 }
 

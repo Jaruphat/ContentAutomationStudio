@@ -1,5 +1,7 @@
 """API for extracting, selecting and clearing explicit continuity frames."""
 
+import os
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
@@ -60,27 +62,43 @@ def _error(exc: continuity_frames.ContinuityFrameError) -> HTTPException:
     return HTTPException(status_code=status, detail=str(exc))
 
 
-def _candidate(db: Session, frame) -> ContinuitySourceOption:
-    take = db.query(Take).filter(Take.id == frame.take_id).first()
-    source_shot = db.query(Shot).filter(Shot.id == frame.shot_id).first()
-    usable = take is not None and (take.review_status or "") == "Approved"
+def _candidate(db: Session, take: Take) -> ContinuitySourceOption:
+    frame = continuity_frames.get_frame(db, take.id)
+    source_shot = db.query(Shot).filter(Shot.id == take.shot_id).first()
+    usable = (take.review_status or "") == "Approved"
     reason = ""
-    if take is None:
-        usable, reason = False, "The source take no longer exists."
-    elif not usable:
+    if not usable:
         reason = "The source take is no longer approved."
     elif source_shot is not None and (
         revisions.take_lineage_state(take, source_shot) == revisions.LINEAGE_STALE
     ):
         usable, reason = False, "The source take is out of date."
+    elif not take.file_path or not os.path.isfile(take.file_path):
+        usable, reason = False, "The source take file is missing."
+    kind = (
+        continuity_frames.source_type(frame)
+        if frame is not None
+        else (
+            continuity_frames.SOURCE_TYPE_VIDEO_END_FRAME
+            if continuity_frames.is_video(take)
+            else continuity_frames.SOURCE_TYPE_IMAGE_TAKE
+        )
+    )
     return ContinuitySourceOption(
-        take_id=frame.take_id,
-        shot_id=frame.shot_id,
+        take_id=take.id,
+        shot_id=take.shot_id,
         shot_label=(
             f"Shot {source_shot.order}" if source_shot is not None else "Deleted shot"
         ),
         scene_id=source_shot.scene_id if source_shot is not None else "",
-        frame=ContinuityFrameResponse.model_validate(frame),
+        source_type=kind,
+        source_label=(
+            "Approved scene image"
+            if kind == continuity_frames.SOURCE_TYPE_IMAGE_TAKE
+            else "Previous approved video end frame"
+        ),
+        frame=ContinuityFrameResponse.model_validate(frame) if frame else None,
+        captured=frame is not None,
         usable=usable,
         reason=reason,
     )
@@ -103,10 +121,11 @@ def _status(db: Session, project_id: str, shot: Shot) -> ShotContinuityStatus:
         frame=ContinuityFrameResponse.model_validate(frame) if frame else None,
         source_shot_id=source_shot.id if source_shot else "",
         source_shot_label=f"Shot {source_shot.order}" if source_shot else "",
+        source_type=continuity_frames.source_type(frame) if frame else "",
         problems=list(resolved.problems),
         candidates=[
             _candidate(db, candidate)
-            for candidate in continuity_frames.candidates(db, project_id, shot)
+            for candidate in continuity_frames.candidate_takes(db, project_id, shot)
         ],
     )
 

@@ -1,5 +1,5 @@
 """
-End-frame continuity.
+Explicit start-frame continuity.
 
 An image-to-video shot has to start from a picture. When that picture is the
 last frame of the previous shot, a pile of clips becomes a sequence - and that
@@ -7,9 +7,8 @@ is the one continuity constraint no amount of prompt text can express.
 
 Three rules hold throughout:
 
-* **Only an approved video take hands off.** A pending take is not a decision,
-  and a still has no end frame. Both are refused with a reason, because a shot
-  built on either would be built on something nobody chose.
+* **Only an approved, current take hands off.** A scene still is copied byte for
+  byte as time zero; a video is decoded to its true final frame.
 * **The frame is an ordinary reference image.** The extracted bytes are stored
   through :mod:`app.services.reference_bible`, so a continuity frame reaches a
   provider by the same validated, ownership-checked path as a hand-uploaded
@@ -38,10 +37,15 @@ logger = logging.getLogger("cas.continuity_frames")
 #: How the frame's timestamp was chosen.
 SELECTION_LAST = "last"
 SELECTION_EXPLICIT = "explicit"
+SELECTION_SOURCE_IMAGE = "source_image"
+
+SOURCE_TYPE_IMAGE_TAKE = "approved_image_take"
+SOURCE_TYPE_VIDEO_END_FRAME = "approved_video_end_frame"
 
 #: What a shot's ``continuity_source_mode`` may hold.
 MODE_NONE = "none"
 MODE_END_FRAME = "end_frame"
+MODE_START_FRAME = "start_frame"
 
 #: The name of the per-project sheet extracted frames are filed under. Held as
 #: a constant because it is also how the sheet is found again.
@@ -90,8 +94,8 @@ def continuity_sheet(db: Session, project_id: str) -> ReferenceSheet:
         kind=reference_bible.KIND_CONTINUITY,
         name=CONTINUITY_SHEET_NAME,
         notes=(
-            "End frames lifted from approved takes, used to seed the first "
-            "frame of the shots that continue from them."
+            "Approved scene images and end frames lifted from approved videos, "
+            "used to seed the first frame of explicitly linked shots."
         ),
     )
 
@@ -121,6 +125,31 @@ def is_video(take: Take) -> bool:
     """
     extension = os.path.splitext(take.file_path or "")[1].lower()
     return extension in media_probe.VIDEO_EXTENSIONS
+
+
+def source_type(frame: ContinuityFrame | None) -> str:
+    """The kind of approved media represented by a stored hand-off."""
+    if frame is not None and frame.selection == SELECTION_SOURCE_IMAGE:
+        return SOURCE_TYPE_IMAGE_TAKE
+    return SOURCE_TYPE_VIDEO_END_FRAME
+
+
+def _assert_current_take(db: Session, take: Take) -> None:
+    """Refuse a take whose source shot has moved since generation."""
+    from app.models import Shot
+    from app.services import revisions
+
+    shot = db.query(Shot).filter(Shot.id == take.shot_id).first()
+    if shot is None:
+        raise ContinuityFrameError(
+            "The shot this take came from no longer exists.", "take_stale"
+        )
+    if revisions.take_lineage_state(take, shot) == revisions.LINEAGE_STALE:
+        raise ContinuityFrameError(
+            "This take is out of date because its shot changed after generation. "
+            "Regenerate and approve a current take first.",
+            "take_stale",
+        )
 
 
 def _clip_duration(take: Take) -> float:
@@ -180,7 +209,7 @@ def _cut_frame(file_path: str, destination: str, at_sec: float | None) -> bool:
 def extract_frame(
     db: Session, take: Take, *, at_sec: float | None = None
 ) -> ContinuityFrame:
-    """Lift a still out of an approved video take and file it as a reference.
+    """Store an approved image itself, or lift a frame from an approved video.
 
     ``at_sec`` of None takes the final frame - the usual hand-off. Passing a
     timestamp records the choice as explicit, because "the last frame" and
@@ -193,12 +222,7 @@ def extract_frame(
             "take in Review first, or pick a different one.",
             "take_not_approved",
         )
-    if not is_video(take):
-        raise ContinuityFrameError(
-            "This take is a still image, so it has no end frame. Use it as an "
-            "ordinary reference instead.",
-            "not_a_video",
-        )
+    _assert_current_take(db, take)
     if not take.file_path or not os.path.isfile(take.file_path):
         raise ContinuityFrameError(
             "The media file for this take is missing from disk, so no frame "
@@ -212,8 +236,15 @@ def extract_frame(
             "This take is not attached to a project.", "project_missing"
         )
 
-    duration = _clip_duration(take)
-    if at_sec is not None:
+    video = is_video(take)
+    duration = _clip_duration(take) if video else 0.0
+    if not video and at_sec not in (None, 0, 0.0):
+        raise ContinuityFrameError(
+            "An approved scene image is a start frame at 0.00s; it has no other "
+            "timestamp to extract.",
+            "timestamp_out_of_range",
+        )
+    if video and at_sec is not None:
         if at_sec < 0:
             raise ContinuityFrameError(
                 "A frame time cannot be negative.", "timestamp_out_of_range"
@@ -225,39 +256,58 @@ def extract_frame(
                 "timestamp_out_of_range",
             )
 
-    with tempfile.TemporaryDirectory(prefix="cas-endframe-") as tmp:
-        destination = os.path.join(tmp, "frame.png")
-        if not _cut_frame(take.file_path, destination, at_sec):
-            raise ContinuityFrameError(
-                "FFmpeg could not read a frame out of this take. The file may "
-                "be truncated; regenerate the shot and try again.",
-                "extraction_failed",
-            )
-        with open(destination, "rb") as f:
+    if video:
+        with tempfile.TemporaryDirectory(prefix="cas-endframe-") as tmp:
+            destination = os.path.join(tmp, "frame.png")
+            if not _cut_frame(take.file_path, destination, at_sec):
+                raise ContinuityFrameError(
+                    "FFmpeg could not read a frame out of this take. The file may "
+                    "be truncated; regenerate the shot and try again.",
+                    "extraction_failed",
+                )
+            with open(destination, "rb") as f:
+                data = f.read()
+        selection = SELECTION_LAST if at_sec is None else SELECTION_EXPLICIT
+        original_filename = f"endframe-{take.id[:8]}.png"
+        content_type = "image/png"
+        caption = f"End frame of take {take.id[:8]}"
+        # The final frame's exact PTS is not known without a full decode.
+        frame_time = duration if at_sec is None else float(at_sec)
+    else:
+        with open(take.file_path, "rb") as f:
             data = f.read()
-
-    selection = SELECTION_LAST if at_sec is None else SELECTION_EXPLICIT
-    # The last frame's own timestamp is not knowable without decoding the whole
-    # clip, so the clip's duration is recorded as where the hand-off sits.
-    frame_time = duration if at_sec is None else float(at_sec)
+        selection = SELECTION_SOURCE_IMAGE
+        original_filename = os.path.basename(take.file_path)
+        content_type = ""
+        caption = f"Approved scene image take {take.id[:8]}"
+        frame_time = 0.0
 
     sheet = continuity_sheet(db, project_id)
-    image = reference_bible.store_image(
-        db,
-        sheet=sheet,
-        data=data,
-        original_filename=f"endframe-{take.id[:8]}.png",
-        content_type="image/png",
-        role="canonical",
-        caption=f"End frame of take {take.id[:8]}",
-        source="continuity_frame",
-        source_detail={
-            "take_id": take.id,
-            "shot_id": take.shot_id,
-            "selection": selection,
-            "frame_time_sec": round(frame_time, 3),
-        },
-    )
+    try:
+        image = reference_bible.store_image(
+            db,
+            sheet=sheet,
+            data=data,
+            original_filename=original_filename,
+            content_type=content_type,
+            role="canonical",
+            caption=caption,
+            source="continuity_frame",
+            source_detail={
+                "take_id": take.id,
+                "shot_id": take.shot_id,
+                "selection": selection,
+                "source_type": (
+                    SOURCE_TYPE_VIDEO_END_FRAME if video else SOURCE_TYPE_IMAGE_TAKE
+                ),
+                "frame_time_sec": round(frame_time, 3),
+            },
+        )
+    except reference_bible.ReferenceBibleError as exc:
+        raise ContinuityFrameError(
+            "The take cannot be used as a start frame: " + str(exc),
+            "invalid_image",
+        ) from exc
 
     frame = (
         db.query(ContinuityFrame)
@@ -337,10 +387,25 @@ def candidates(db: Session, project_id: str, shot: Any) -> list[ContinuityFrame]
     return [frame for frame in query.all() if frame.shot_id != shot_id]
 
 
+def candidate_takes(db: Session, project_id: str, shot: Any) -> list[Take]:
+    """Project takes a user may explicitly capture and select for ``shot``."""
+    from app.models import Scene, Shot
+
+    shot_id = getattr(shot, "id", None) if shot is not None else None
+    return (
+        db.query(Take)
+        .join(Shot, Take.shot_id == Shot.id)
+        .join(Scene, Shot.scene_id == Scene.id)
+        .filter(Scene.project_id == project_id, Take.shot_id != shot_id)
+        .order_by(Take.created_at)
+        .all()
+    )
+
+
 def bind_source(
     db: Session, project_id: str, shot: Any, take_id: str
 ) -> Any:
-    """Wire ``shot`` to start from the end frame of ``take_id``.
+    """Wire ``shot`` to start from the captured frame of ``take_id``.
 
     Refused unless the take belongs to this project, is not one of this shot's
     own, and already has an extracted frame: binding names a frame that exists
@@ -357,16 +422,30 @@ def bind_source(
             "shot that comes before it.",
             "self_continuity",
         )
+    if (take.review_status or "") != "Approved":
+        raise ContinuityFrameError(
+            "Only an approved take can be selected as a start frame.",
+            "take_not_approved",
+        )
+    _assert_current_take(db, take)
     frame = get_frame(db, take.id)
     if frame is None:
         raise ContinuityFrameError(
-            "That take has no extracted end frame yet. Cut one in Review "
-            "first, then bind it here.",
+            "That take has no captured start-frame source yet. Capture the "
+            "approved image or extract the approved video's end frame first.",
             "no_continuity_frame",
+        )
+    if frame.project_id != project_id:
+        raise ContinuityFrameError(
+            "That captured frame belongs to another project.", "take_not_found"
         )
 
     shot.continuity_source_take_id = take.id
-    shot.continuity_source_mode = MODE_END_FRAME
+    shot.continuity_source_mode = (
+        MODE_START_FRAME
+        if frame.selection == SELECTION_SOURCE_IMAGE
+        else MODE_END_FRAME
+    )
     db.commit()
     db.refresh(shot)
     return shot
@@ -395,7 +474,9 @@ def resolve_source_image(
     file has to reach preflight as a blocker instead of quietly producing a
     clip that starts somewhere else.
     """
-    if (shot.continuity_source_mode or MODE_NONE) != MODE_END_FRAME:
+    if (shot.continuity_source_mode or MODE_NONE) not in {
+        MODE_END_FRAME, MODE_START_FRAME,
+    }:
         return None, []
     take_id = shot.continuity_source_take_id or ""
     if not take_id:
@@ -429,7 +510,7 @@ def source_fingerprint(db: Session, shot: Any) -> dict[str, Any]:
     exactly the shots that start from it stale - and nothing else.
     """
     mode = shot.continuity_source_mode or MODE_NONE
-    if mode != MODE_END_FRAME:
+    if mode not in {MODE_END_FRAME, MODE_START_FRAME}:
         return {"mode": MODE_NONE, "take_id": "", "sha256": ""}
     take_id = shot.continuity_source_take_id or ""
     frame = get_frame(db, take_id) if take_id else None

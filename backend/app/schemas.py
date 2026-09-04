@@ -557,6 +557,15 @@ class ContinuityFrameResponse(BaseModel):
 
     @computed_field
     @property
+    def source_type(self) -> str:
+        return (
+            "approved_image_take"
+            if self.selection == "source_image"
+            else "approved_video_end_frame"
+        )
+
+    @computed_field
+    @property
     def url(self) -> Optional[str]:
         if not self.reference_image_id:
             return None
@@ -570,7 +579,10 @@ class ContinuitySourceOption(BaseModel):
     shot_id: str
     shot_label: str = ""
     scene_id: str = ""
-    frame: ContinuityFrameResponse
+    source_type: str = "approved_video_end_frame"
+    source_label: str = "Previous approved video end frame"
+    frame: Optional[ContinuityFrameResponse] = None
+    captured: bool = False
     #: False when the take is no longer approved or has been left behind by
     #: its own shot, with ``reason`` saying which.
     usable: bool = True
@@ -592,6 +604,7 @@ class ShotContinuityStatus(BaseModel):
     frame: Optional[ContinuityFrameResponse] = None
     source_shot_id: str = ""
     source_shot_label: str = ""
+    source_type: str = ""
     #: Why this shot cannot be generated from its bound source, if it cannot.
     problems: list[str] = Field(default_factory=list)
     candidates: list[ContinuitySourceOption] = Field(default_factory=list)

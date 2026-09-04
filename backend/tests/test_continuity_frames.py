@@ -20,6 +20,7 @@ The properties asserted here are what the feature stands on:
   frame in place, and the hash moving is what makes descendants stale.
 """
 
+import hashlib
 import os
 import uuid
 
@@ -27,7 +28,7 @@ import pytest
 from sqlalchemy.orm import Session
 
 from app.models import ContinuityFrame, Project, Scene, Shot, Take
-from app.services import continuity_frames
+from app.services import continuity_frames, revisions
 
 
 @pytest.fixture()
@@ -48,6 +49,27 @@ def video_take(db_session: Session, sample_shot: Shot, tmp_path, synthesise_clip
     db_session.add(take)
     db_session.commit()
     db_session.refresh(take)
+    return take
+
+
+def _approved_current_image_take(db, shot, path, data):
+    with open(path, "wb") as f:
+        f.write(data)
+    revisions.refresh_project(db, shot.scene.project_id)
+    db.refresh(shot)
+    take = Take(
+        id=str(uuid.uuid4()), shot_id=shot.id, file_path=path,
+        duration_sec=0.0, width=96, height=64, review_status="Approved",
+        prompt_revision=shot.prompt_revision, prompt_sha256=shot.prompt_sha256,
+        content_sha256=shot.content_sha256, lineage={"job_id": "image-job"},
+        reference_image_ids=list(shot.reference_asset_ids or []),
+        reference_sha256s=list(shot.reference_sha256s or []),
+        character_set_ids=list(shot.character_set_ids or []),
+        character_set_sha256s=list(shot.character_set_sha256s or []),
+    )
+    db.add(take)
+    db.commit()
+    db.refresh(take)
     return take
 
 
@@ -111,22 +133,74 @@ def test_an_unapproved_take_cannot_hand_off(db_session: Session, video_take):
     assert exc.value.code == "take_not_approved"
 
 
-def test_a_still_take_has_no_end_frame(
+def test_an_approved_current_image_take_is_copied_losslessly_as_time_zero(
+    db_session: Session, sample_project: Project, sample_shot: Shot, png_bytes,
+    tmp_path,
+):
+    data = png_bytes(96, 64)
+    take = _approved_current_image_take(
+        db_session, sample_shot, os.path.join(str(tmp_path), "scene-still.png"), data
+    )
+
+    frame = continuity_frames.extract_frame(db_session, take)
+
+    assert frame.selection == continuity_frames.SELECTION_SOURCE_IMAGE
+    assert frame.frame_time_sec == 0.0
+    assert frame.source_duration_sec == 0.0
+    assert frame.sha256 == hashlib.sha256(data).hexdigest()
+    assert frame.image.sha256 == frame.sha256
+    assert frame.image.mime_type == "image/png"
+    with open(frame.image.file_path, "rb") as stored:
+        assert stored.read() == data
+    assert frame.image.provenance == {
+        "source": "continuity_frame",
+        "sha256": frame.sha256,
+        "mime_type": "image/png",
+        "width": 96,
+        "height": 64,
+        "size_bytes": len(data),
+        "original_filename": "scene-still.png",
+        "take_id": take.id,
+        "shot_id": sample_shot.id,
+        "selection": continuity_frames.SELECTION_SOURCE_IMAGE,
+        "source_type": continuity_frames.SOURCE_TYPE_IMAGE_TAKE,
+        "frame_time_sec": 0.0,
+    }
+
+
+def test_a_stale_image_take_cannot_be_captured(
     db_session: Session, sample_shot: Shot, png_bytes, tmp_path
 ):
-    path = os.path.join(str(tmp_path), "still.png")
-    with open(path, "wb") as f:
-        f.write(png_bytes(64, 64))
-    take = Take(
-        id=str(uuid.uuid4()), shot_id=sample_shot.id, file_path=path,
-        duration_sec=0.0, review_status="Approved",
+    take = _approved_current_image_take(
+        db_session, sample_shot, os.path.join(str(tmp_path), "stale.png"),
+        png_bytes(96, 64),
     )
-    db_session.add(take)
+    sample_shot.image_prompt = "changed after the still was generated"
     db_session.commit()
+    revisions.refresh_project(db_session, sample_shot.scene.project_id)
 
     with pytest.raises(continuity_frames.ContinuityFrameError) as exc:
         continuity_frames.extract_frame(db_session, take)
-    assert exc.value.code == "not_a_video"
+    assert exc.value.code == "take_stale"
+
+
+@pytest.mark.parametrize("contents", [None, b"not an image"])
+def test_a_missing_or_corrupt_image_take_cannot_be_captured(
+    db_session: Session, sample_shot: Shot, png_bytes, tmp_path, contents
+):
+    path = os.path.join(str(tmp_path), "bad.png")
+    take = _approved_current_image_take(
+        db_session, sample_shot, path, png_bytes(96, 64)
+    )
+    if contents is None:
+        os.remove(path)
+    else:
+        with open(path, "wb") as f:
+            f.write(contents)
+
+    with pytest.raises(continuity_frames.ContinuityFrameError) as exc:
+        continuity_frames.extract_frame(db_session, take)
+    assert exc.value.code in {"media_missing", "invalid_image"}
 
 
 def test_recutting_replaces_the_hand_off_instead_of_adding_one(
@@ -173,6 +247,25 @@ def test_binding_a_source_take_is_explicit_and_reversible(
     continuity_frames.clear_source(db_session, next_shot)
     assert next_shot.continuity_source_take_id is None
     assert next_shot.continuity_source_mode == continuity_frames.MODE_NONE
+
+
+def test_binding_an_image_take_records_start_frame_mode(
+    db_session: Session, sample_project: Project, sample_scene: Scene,
+    sample_shot: Shot, png_bytes, tmp_path,
+):
+    take = _approved_current_image_take(
+        db_session, sample_shot, os.path.join(str(tmp_path), "opening.png"),
+        png_bytes(96, 64),
+    )
+    continuity_frames.extract_frame(db_session, take)
+    target = Shot(id=str(uuid.uuid4()), scene_id=sample_scene.id, order=2)
+    db_session.add(target)
+    db_session.commit()
+
+    continuity_frames.bind_source(db_session, sample_project.id, target, take.id)
+
+    assert target.continuity_source_take_id == take.id
+    assert target.continuity_source_mode == continuity_frames.MODE_START_FRAME
 
 
 def test_a_shot_cannot_be_seeded_by_its_own_take(

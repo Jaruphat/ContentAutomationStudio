@@ -6,6 +6,7 @@ import uuid
 import pytest
 
 from app.models import Project, Scene, Shot, Take
+from app.services import revisions
 
 
 @pytest.fixture()
@@ -125,3 +126,58 @@ def test_extract_refuses_an_unapproved_take_without_creating_a_frame(
     )
     assert response.status_code == 409
     assert "approved" in response.json()["detail"].lower()
+
+
+def test_capture_and_bind_an_approved_scene_image_over_the_same_routes(
+    client, db_session, sample_project, sample_scene, sample_shot, png_bytes,
+    tmp_path,
+):
+    path = os.path.join(str(tmp_path), "approved-scene.png")
+    data = png_bytes(96, 64)
+    with open(path, "wb") as f:
+        f.write(data)
+    revisions.refresh_project(db_session, sample_project.id)
+    db_session.refresh(sample_shot)
+    take = Take(
+        id=str(uuid.uuid4()), shot_id=sample_shot.id, file_path=path,
+        review_status="Approved", prompt_revision=sample_shot.prompt_revision,
+        prompt_sha256=sample_shot.prompt_sha256,
+        content_sha256=sample_shot.content_sha256,
+        lineage={"job_id": "scene-image"},
+    )
+    target = Shot(
+        id=str(uuid.uuid4()), scene_id=sample_scene.id, order=2,
+        generation_mode="image-to-video", video_prompt="animate exact still",
+    )
+    db_session.add_all([take, target])
+    db_session.commit()
+
+    url = _shot_continuity_url(sample_project, sample_scene, target)
+    before_capture = client.get(url)
+    assert before_capture.status_code == 200, before_capture.text
+    option = before_capture.json()["candidates"][0]
+    assert option["take_id"] == take.id
+    assert option["source_type"] == "approved_image_take"
+    assert option["captured"] is False
+    assert option["frame"] is None
+
+    captured = client.post(
+        f"/api/projects/{sample_project.id}/takes/{take.id}/continuity-frame",
+        json={},
+    )
+    assert captured.status_code == 201, captured.text
+    assert captured.json()["selection"] == "source_image"
+    assert captured.json()["source_type"] == "approved_image_take"
+    assert captured.json()["frame_time_sec"] == 0.0
+
+    status = client.get(url)
+    assert status.status_code == 200, status.text
+    candidate = status.json()["candidates"][0]
+    assert candidate["captured"] is True
+    assert candidate["source_type"] == "approved_image_take"
+    assert candidate["source_label"] == "Approved scene image"
+
+    bound = client.put(url, json={"source_take_id": take.id})
+    assert bound.status_code == 200, bound.text
+    assert bound.json()["mode"] == "start_frame"
+    assert bound.json()["source_type"] == "approved_image_take"

@@ -464,11 +464,12 @@ class Shot(Base):
     #: binding order. Kept beside the ids so "the identity moved" is a value
     #: comparison rather than a walk back through every approved version.
     character_set_sha256s = Column(JSON, default=list)
-    #: The approved take whose end frame seeds this shot's first frame. Always
+    #: The approved image take or video take whose captured frame seeds this
+    #: shot's first frame. Always
     #: chosen explicitly: inferring it from shot order would silently rewire a
     #: cut when a shot is reordered or deleted.
     continuity_source_take_id = Column(String, nullable=True)
-    #: none / end_frame. Held separately from the take id so "continuity was
+    #: none / start_frame / end_frame. Held separately from the take id so "continuity was
     #: turned off" is distinguishable from "the source take went away".
     continuity_source_mode = Column(String, default="none")
     #: The hash of the frame that binding currently resolves to, as of the last
@@ -703,7 +704,7 @@ class Take(Base):
 # ---------------------------------------------------------------------------
 
 class ContinuityFrame(Base):
-    """A still lifted out of an approved video take, to seed the next shot.
+    """An approved image or video frame captured to seed another shot.
 
     One row per take. Re-extracting at a different timestamp updates it in
     place rather than accumulating rows: a take has exactly one frame that is
@@ -735,11 +736,10 @@ class ContinuityFrame(Base):
     reference_image_id = Column(
         String, ForeignKey("reference_images.id"), nullable=True
     )
-    #: Where in the clip the frame was taken from, in seconds.
+    #: Where in the source the frame was taken from, in seconds (zero for an image).
     frame_time_sec = Column(Float, nullable=False, default=0.0)
-    #: last / explicit - whether the user chose the timestamp or accepted the
-    #: final frame. Recorded because "the last frame" is a different promise
-    #: from "this frame", and only the first one moves when a take is replaced.
+    #: last / explicit / source_image - whether the user chose a timestamp,
+    #: accepted the final video frame, or captured the exact approved still.
     selection = Column(String, nullable=False, default="last")
     #: Mirrors the stored image hash. Duplicated here so staleness for every
     #: shot seeded from this frame is one column read.

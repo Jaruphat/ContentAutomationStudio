@@ -212,3 +212,71 @@ def test_generate_records_the_bound_end_frame_as_the_i2v_provider_input(
     assert image["image_id"] == frame.reference_image_id
     assert image["source"] == "continuity"
     assert image["detail"]["take_id"] == take.id
+
+
+def test_generate_uses_the_exact_approved_scene_image_as_first_i2v_reference(
+    client, db_session, sample_project, sample_shot, sample_scene,
+    sample_workflow_json, tmp_path, png_bytes,
+):
+    path = os.path.join(str(tmp_path), "scene-image.png")
+    data = png_bytes(96, 64)
+    with open(path, "wb") as f:
+        f.write(data)
+    revisions.refresh_project(db_session, sample_project.id)
+    db_session.refresh(sample_shot)
+    take = Take(
+        id=str(uuid.uuid4()), shot_id=sample_shot.id, file_path=path,
+        review_status="Approved", prompt_revision=sample_shot.prompt_revision,
+        prompt_sha256=sample_shot.prompt_sha256,
+        content_sha256=sample_shot.content_sha256,
+        lineage={"job_id": "scene-image"},
+    )
+    db_session.add(take)
+    db_session.commit()
+    frame = continuity_frames.extract_frame(db_session, take)
+
+    next_shot = client.post(
+        f"/api/projects/{sample_project.id}/scenes/{sample_scene.id}/shots",
+        json={"order": 2, "generation_mode": "image-to-video",
+              "video_prompt": "animate exact still", "status": "Ready"},
+    ).json()
+    record = workflow_registry.import_workflow(
+        raw_bytes=sample_workflow_json, name="I2V image", purpose="video"
+    )
+    workflow = Workflow(**record)
+    workflow.parameter_mapping = {
+        job_payload.POSITIVE_PROMPT: {"nodeId": "6", "field": "text"},
+        job_payload.SEED: {"nodeId": "3", "field": "seed"},
+        job_payload.REFERENCE_IMAGE: {"nodeId": "4", "field": "ckpt_name"},
+    }
+    workflow.output_mapping = [{"nodeId": "9", "type": "video"}]
+    db_session.add(workflow)
+    sample_project.default_video_workflow_id = workflow.id
+    db_session.commit()
+    revisions.refresh_project(db_session, sample_project.id)
+    db_session.refresh(sample_shot)
+    take.prompt_revision = sample_shot.prompt_revision
+    take.prompt_sha256 = sample_shot.prompt_sha256
+    take.content_sha256 = sample_shot.content_sha256
+    db_session.commit()
+
+    bound = client.put(
+        f"/api/projects/{sample_project.id}/scenes/{sample_scene.id}"
+        f"/shots/{next_shot['id']}/continuity",
+        json={"source_take_id": take.id},
+    )
+    assert bound.status_code == 200, bound.text
+    response = client.post(
+        f"/api/projects/{sample_project.id}/generate",
+        json={"shot_ids": [next_shot["id"]]},
+    )
+    assert response.status_code == 200, response.text
+    job = response.json()[0]
+    assert job["continuity_source_take_id"] == take.id
+    assert job["continuity_source_sha256"] == frame.sha256
+    first = job["reference_provenance"]["images"][0]
+    assert first["image_id"] == frame.reference_image_id
+    assert first["sha256"] == frame.sha256
+    assert first["source"] == "continuity"
+    assert first["detail"]["source_type"] == "approved_image_take"
+    assert first["detail"]["selection"] == "source_image"

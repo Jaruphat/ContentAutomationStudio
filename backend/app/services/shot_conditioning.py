@@ -79,7 +79,7 @@ class ShotConditioning:
         for entry in self.images:
             counts[entry.source] = counts.get(entry.source, 0) + 1
         labels = {
-            SOURCE_CONTINUITY: "continuity end frame",
+            SOURCE_CONTINUITY: "continuity start frame",
             SOURCE_CHARACTER_SET: "character-set view",
             SOURCE_REFERENCE: "reference image",
         }
@@ -104,10 +104,15 @@ def _continuity_problems(db: Session, take: Take) -> list[str]:
     cannot catch.
     """
     problems: list[str] = []
+    source_name = (
+        "approved scene image"
+        if not continuity_frames.is_video(take)
+        else "video end frame"
+    )
     if (take.review_status or "") != "Approved":
         problems.append(
             "The take this shot continues from is no longer approved, so its "
-            "end frame cannot be used. Approve it again in Review, choose a "
+            f"{source_name} cannot be used. Approve it again in Review, choose a "
             "different source, or turn continuity off."
         )
         return problems
@@ -115,7 +120,7 @@ def _continuity_problems(db: Session, take: Take) -> list[str]:
     source_shot = db.query(Shot).filter(Shot.id == take.shot_id).first()
     if source_shot is None:
         problems.append(
-            "The shot this take came from no longer exists, so its end frame "
+            f"The shot this take came from no longer exists, so its {source_name} "
             "cannot be used. Choose a different source, or turn continuity off."
         )
         return problems
@@ -124,7 +129,7 @@ def _continuity_problems(db: Session, take: Take) -> list[str]:
         problems.append(
             "The take this shot continues from is out of date: the shot it "
             "came from changed after it was generated. Regenerate and approve "
-            "that shot, then re-cut the end frame."
+            "that shot, then capture its start-frame source again."
         )
     return problems
 
@@ -134,7 +139,10 @@ def _resolve_continuity(
 ) -> tuple[ConditioningImage | None, list[str], str, str]:
     """The hand-off frame this shot starts from, or why it cannot start."""
     mode = getattr(shot, "continuity_source_mode", None) or continuity_frames.MODE_NONE
-    if mode != continuity_frames.MODE_END_FRAME:
+    if mode not in {
+        continuity_frames.MODE_END_FRAME,
+        continuity_frames.MODE_START_FRAME,
+    }:
         return None, [], "", ""
 
     take_id = shot.continuity_source_take_id or ""
@@ -163,6 +171,7 @@ def _resolve_continuity(
             "shot_id": take.shot_id,
             "frame_time_sec": frame.frame_time_sec if frame else 0.0,
             "selection": frame.selection if frame else "",
+            "source_type": continuity_frames.source_type(frame),
         },
     )
     return entry, [], take_id, sha256

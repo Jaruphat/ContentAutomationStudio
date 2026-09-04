@@ -10,23 +10,32 @@ const sets = [
   { id: "draft", name: "Cy", approved_version_id: null, approved_version_is_current: false },
 ] as CharacterSet[];
 
-const status: ShotContinuityStatus = {
-  shot_id: "shot-2", mode: "previous_approved_end_frame", source_take_id: "take-1",
+const status = {
+  shot_id: "shot-2", mode: "start_frame", source_take_id: "take-image",
+  source_type: "approved_image_take",
   source_shot_id: "shot-1", source_shot_label: "Shot 1", problems: ["The source take is out of date."],
-  frame: { id: "frame-1", project_id: "project-1", take_id: "take-1", shot_id: "shot-1",
-    reference_image_id: "image-1", frame_time_sec: 4.8, selection: "last", sha256: "frame-sha",
-    width: 1280, height: 720, source_duration_sec: 5, url: "/frame.png",
+  frame: { id: "frame-image", project_id: "project-1", take_id: "take-image", shot_id: "shot-1",
+    reference_image_id: "image-1", frame_time_sec: 0, selection: "source_image", source_type: "approved_image_take", sha256: "image-sha",
+    width: 1280, height: 720, source_duration_sec: 0, url: "/scene-image.png",
     created_at: "2026-09-04T00:00:00Z", updated_at: "2026-09-04T00:01:00Z" },
-  candidates: [{ take_id: "take-1", shot_id: "shot-1", shot_label: "Shot 1", scene_id: "scene-1",
-    usable: true, reason: "", frame: { id: "frame-1", project_id: "project-1", take_id: "take-1", shot_id: "shot-1",
+  candidates: [{ take_id: "take-image", shot_id: "shot-1", shot_label: "Shot 1", scene_id: "scene-1",
+    source_type: "approved_image_take", source_label: "Approved scene image",
+    usable: true, reason: "", frame: { id: "frame-image", project_id: "project-1", take_id: "take-image", shot_id: "shot-1",
+      reference_image_id: "image-1", frame_time_sec: 0, selection: "source_image", source_type: "approved_image_take", sha256: "image-sha",
+      width: 1280, height: 720, source_duration_sec: 0, url: "/scene-image.png",
+      created_at: "2026-09-04T00:00:00Z", updated_at: "2026-09-04T00:01:00Z" } },
+    { take_id: "take-1", shot_id: "shot-video", shot_label: "Shot 0", scene_id: "scene-1",
+    source_type: "approved_video_end_frame", source_label: "Previous approved video end frame",
+    usable: true, reason: "", frame: { id: "frame-1", project_id: "project-1", take_id: "take-1", shot_id: "shot-video",
       reference_image_id: "image-1", frame_time_sec: 4.8, selection: "last", sha256: "frame-sha",
       width: 1280, height: 720, source_duration_sec: 5, url: "/frame.png",
       created_at: "2026-09-04T00:00:00Z", updated_at: "2026-09-04T00:01:00Z" } },
     { take_id: "take-x", shot_id: "shot-x", shot_label: "Shot 9", scene_id: "scene-x", usable: false,
+      source_type: "approved_video_end_frame", source_label: "Previous approved video end frame",
       reason: "The source take is no longer approved.", frame: { id: "frame-x", project_id: "project-1", take_id: "take-x", shot_id: "shot-x", reference_image_id: null,
         frame_time_sec: 2, selection: "last", sha256: "x", width: 0, height: 0, source_duration_sec: 2,
         url: null, created_at: "2026-09-04T00:00:00Z", updated_at: "2026-09-04T00:00:00Z" } }],
-};
+} as unknown as ShotContinuityStatus;
 
 function wrapper(children: React.ReactNode) {
   return renderToStaticMarkup(<QueryClientProvider client={new QueryClient()}>{children}</QueryClientProvider>);
@@ -45,11 +54,13 @@ describe("shot character and continuity controls", () => {
     const client = new QueryClient({ defaultOptions: { queries: { enabled: false } } });
     client.setQueryData(["continuity", "project-1", "scene-2", "shot-2"], status);
     const html = renderToStaticMarkup(<QueryClientProvider client={client}><ShotContinuityControls projectId="project-1" sceneId="scene-2" shotId="shot-2" /></QueryClientProvider>);
-    expect(html).toContain("Use previous approved shot end frame");
-    expect(html).toContain("Choose an eligible previous approved video take");
+    expect(html).toContain("Use approved scene image as start frame");
+    expect(html).toContain("Use previous approved video end frame");
+    expect(html).toContain("Approved scene image · Shot 1");
+    expect(html).toContain("Previous approved video end frame · Shot 0");
     expect(html).toContain("Shot 1");
-    expect(html).toContain("Extracted at 4.80s");
-    expect(html).toContain("Re-extract end frame");
+    expect(html).toContain("Exact approved scene image · start at 0.00s");
+    expect(html).toContain("Re-capture approved image");
     expect(html).toContain("Clear continuity");
     expect(html).toContain("Preflight blocker");
     expect(html).toContain("The source take is out of date.");
