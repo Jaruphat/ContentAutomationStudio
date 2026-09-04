@@ -372,6 +372,47 @@ the face and wardrobe. An establishing shot, which has only its identity to go
 on, stays on the one-slot workflow -- routing is per shot, so both fit in one
 project.
 
+### Reference-to-video (MiniMax H3 R2V)
+
+Image-to-video animates a picture it is given. Reference-to-video is a
+different thing: it is told *who is in the clip* and composes the shot itself,
+so a character can appear in a scene no still of them exists for yet. That is
+the shape a character set was made for.
+
+It needs two files beyond the image-to-video set, both from
+[Comfy-Org/MiniMax-H3](https://huggingface.co/Comfy-Org/MiniMax-H3):
+
+| File | Size | Folder |
+|------|------|--------|
+| `minimax_h3_ref2va_pruned_int8_convrot.safetensors` | 19.5 GiB | `models/diffusion_models/` |
+| `minimax_h3_ref2v_turbo_4step_v0.1_comfyui_bf16.safetensors` | 1.8 GiB | `models/loras/` |
+
+The text encoder and both VAEs are the ones the image-to-video workflow already
+uses. The `MiniMaxH3ReferenceToVideo` node takes up to nine reference images,
+so the workflow's mapping decides how many a shot may bind.
+
+ComfyUI ships the workflow as a template (`video_minimax_h3_r2v`); export it as
+API format and map:
+
+| Logical field | Node | Input |
+|---------------|------|-------|
+| `positivePrompt` | the prompt primitive feeding the node | `value` |
+| `seed` | `RandomNoise` | `noise_seed` |
+| `width` / `height` / `frames` | `MiniMaxH3ReferenceToVideo` | `width` / `height` / `length` |
+| `referenceImage` | first `LoadImage` | `image` |
+| `referenceImage2` | second `LoadImage` | `image` |
+| `outputPrefix` | `SaveVideo` | `filename_prefix` |
+
+Set such a shot's `generation_mode` to **`video`**, not `image-to-video`. The
+start-frame rule is right about image-to-video and would be wrong here: an R2V
+shot has no first frame to animate, and refusing it for lacking one would block
+the case the model exists to serve.
+
+Loading a 19.5 GiB model needs the memory to be there. On a 16 GB card with
+other models resident, the first attempt failed inside the reference node with
+`HostBuffer.read_file_slice failed`; the same graph ran unchanged after
+ComfyUI's `/free` released what it was holding.
+
 
 ### UX Layout
 
