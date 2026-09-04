@@ -653,6 +653,14 @@ export interface RenderResult {
   /** Structured form of any waiver carried by the rendered takes. */
   warning_metadata: DeliveryWarning[];
   delivery_validation: DeliveryValidation;
+  /** Whether a spoken narration was mixed in, and which lines did not go
+   *  cleanly - a line that overran its shot, or that could not be spoken. */
+  narration?: {
+    present: boolean;
+    duration_sec?: number;
+    overruns?: string[];
+    failures?: string[];
+  };
 }
 
 /** Queue counters returned by the pause/resume endpoints. */

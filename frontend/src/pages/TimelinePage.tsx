@@ -383,8 +383,10 @@ export default function TimelinePage() {
     },
   });
 
+  // Off by default: speaking a film takes time and is a choice, not a default.
+  const [narrate, setNarrate] = useState(false);
   const renderMut = useMutation({
-    mutationFn: (projectId: string) => api.timeline.render(projectId),
+    mutationFn: (projectId: string) => api.timeline.render(projectId, narrate),
     onSuccess: (data, projectId) => {
       if (currentProjectRef.current === projectId) {
         setScopedRenderResult({ projectId, data });
@@ -452,6 +454,17 @@ export default function TimelinePage() {
             )}
             Render Plan
           </button>
+          <label
+            title="Speak each shot's dialogue over the film, using this machine's own voice"
+            className="flex items-center gap-1.5 text-xs text-zinc-400"
+          >
+            <input
+              type="checkbox"
+              checked={narrate}
+              onChange={(event) => setNarrate(event.target.checked)}
+            />
+            Narrate
+          </label>
           <button
             onClick={() => renderMut.mutate(currentProjectId)}
             disabled={renderMut.isPending || items.length === 0}

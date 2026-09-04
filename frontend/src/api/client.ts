@@ -494,9 +494,9 @@ export const timeline = {
       .then((r) => r.data),
 
   /** Executes the render. Reports why it was skipped rather than faking one. */
-  render: (projectId: string) =>
+  render: (projectId: string, narrate = false) =>
     http
-      .post<RenderResult>(`/projects/${projectId}/render`)
+      .post<RenderResult>(`/projects/${projectId}/render`, { narrate })
       .then((r) => r.data),
 };
 
