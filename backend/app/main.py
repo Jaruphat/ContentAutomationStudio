@@ -20,6 +20,8 @@ from app.database import SessionLocal, init_db
 from app.models import Workflow
 from app.routers import (
     ai,
+    character_sets,
+    continuity_frames,
     exports,
     generation,
     media,
@@ -159,8 +161,10 @@ app.add_middleware(
 app.include_router(projects.router)
 app.include_router(story.router)
 app.include_router(references.router)
+app.include_router(character_sets.router)
 app.include_router(scenes.router)
 app.include_router(shots.router)
+app.include_router(continuity_frames.router)
 app.include_router(workflows.router)
 app.include_router(generation.router)
 app.include_router(review.router)

@@ -399,6 +399,15 @@ class CharacterSetView(Base):
     version = relationship("CharacterSetVersion", back_populates="views")
     image = relationship("ReferenceImage", foreign_keys=[reference_image_id])
 
+    @property
+    def sha256(self) -> str:
+        """The stored image's hash, or empty before this view is generated.
+
+        Read straight off the image rather than duplicated onto the view: one
+        of the two would eventually be wrong, and it would be this one.
+        """
+        return (self.image.sha256 or "") if self.image is not None else ""
+
 
 # ---------------------------------------------------------------------------
 # Scene and Shot

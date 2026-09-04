@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import Project, Scene, Shot
+from app.models import CharacterSet, Project, Scene, Shot
 from app.schemas import ShotCreate, ShotReorderRequest, ShotResponse, ShotUpdate
 from app.services import reference_bible, revisions
 
@@ -40,6 +40,28 @@ def _check_references(
         )
 
 
+def _check_character_sets(
+    db: Session, project_id: str, character_set_ids: list[str] | None
+) -> None:
+    """All bound sets must exist in this project; duplicate bindings are invalid."""
+    ids = [str(value) for value in (character_set_ids or []) if value]
+    if len(ids) != len(set(ids)):
+        raise HTTPException(status_code=400, detail="A character set can be bound once.")
+    if not ids:
+        return
+    found = {
+        value.id: value
+        for value in db.query(CharacterSet).filter(CharacterSet.id.in_(ids)).all()
+    }
+    if any(found[value].project_id != project_id for value in ids if value in found):
+        raise HTTPException(
+            status_code=400,
+            detail="A selected character set belongs to another project.",
+        )
+    if any(value not in found for value in ids):
+        raise HTTPException(status_code=400, detail="A selected character set no longer exists.")
+
+
 def _get_scene_or_404(
     db: Session, project_id: str, scene_id: str
 ) -> Scene:
@@ -65,6 +87,7 @@ def create_shot(
 ):
     _get_scene_or_404(db, project_id, scene_id)
     _check_references(db, project_id, payload.reference_asset_ids)
+    _check_character_sets(db, project_id, payload.character_set_ids)
 
     # Auto-assign order if not provided or zero
     if payload.order == 0:
@@ -142,6 +165,8 @@ def update_shot(
     changes = payload.model_dump(exclude_unset=True)
     if "reference_asset_ids" in changes:
         _check_references(db, project_id, changes["reference_asset_ids"])
+    if "character_set_ids" in changes:
+        _check_character_sets(db, project_id, changes["character_set_ids"])
 
     for key, value in changes.items():
         setattr(shot, key, value)

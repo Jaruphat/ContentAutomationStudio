@@ -24,8 +24,8 @@ from app.services import (
     job_payload,
     media_providers,
     prompt_context,
-    reference_bible,
     revisions,
+    shot_conditioning,
     workflow_registry,
 )
 
@@ -304,15 +304,13 @@ def regenerate_shot(
     if plan.blockers:
         raise HTTPException(status_code=409, detail=" ".join(plan.blockers))
 
-    resolved_references, reference_problems = reference_bible.resolve_images(
-        db, project.id, list(shot.reference_asset_ids or [])
-    )
-    if reference_problems:
+    conditioning = shot_conditioning.resolve(db, project.id, shot)
+    if conditioning.problems:
         raise HTTPException(
             status_code=409,
-            detail=" ".join(problem.message for problem in reference_problems),
+            detail=" ".join(conditioning.problems),
         )
-    if shot.generation_mode == "image-to-video" and not resolved_references:
+    if shot.generation_mode == "image-to-video" and not conditioning.images:
         raise HTTPException(
             status_code=409, detail="Image-to-video requires a reference image."
         )
@@ -347,7 +345,7 @@ def regenerate_shot(
                 status_code=409,
                 detail="Assigned workflow mapping is invalid: " + "; ".join(details),
             )
-    if resolved_references and plan.provider_id == media_providers.COMFYUI:
+    if conditioning.images and plan.provider_id == media_providers.COMFYUI:
         if not workflow or job_payload.REFERENCE_IMAGE not in (
             workflow.parameter_mapping or {}
         ):
@@ -358,7 +356,7 @@ def regenerate_shot(
                     "referenceImage workflow mapping."
                 ),
             )
-        if len(resolved_references) != 1:
+        if len(conditioning.images) != 1:
             raise HTTPException(
                 status_code=409,
                 detail="The selected workflow accepts exactly one reference image.",
@@ -416,22 +414,13 @@ def regenerate_shot(
         prompt_revision=shot.prompt_revision,
         prompt_sha256=shot.prompt_sha256,
         content_sha256=shot.content_sha256,
-        reference_image_ids=[image.id for image in resolved_references],
-        reference_sha256s=[image.sha256 for image in resolved_references],
-        reference_provenance={
-            "images": [
-                {
-                    "image_id": image.id,
-                    "sheet_id": image.sheet_id,
-                    "file_path": image.file_path,
-                    "sha256": image.sha256,
-                    "mime_type": image.mime_type,
-                    "width": image.width,
-                    "height": image.height,
-                }
-                for image in resolved_references
-            ]
-        },
+        reference_image_ids=conditioning.reference_image_ids,
+        reference_sha256s=conditioning.reference_sha256s,
+        reference_provenance=shot_conditioning.provenance(conditioning),
+        character_set_ids=conditioning.character_set_ids,
+        character_set_sha256s=conditioning.character_set_sha256s,
+        continuity_source_take_id=conditioning.continuity_source_take_id or None,
+        continuity_source_sha256=conditioning.continuity_source_sha256,
         seed=seed,
         status="Queued",
         attempts=0,

@@ -64,3 +64,50 @@ async def test_openai_image_provider_rejects_video_without_network(tmp_path):
     provider = OpenAIImageProvider(api_key="test-only", output_base_dir=str(tmp_path))
     with pytest.raises(ValueError, match="image shots"):
         await provider.submit_job({}, "job-1", context={"generation_mode": "video"})
+
+
+@pytest.mark.asyncio
+async def test_openai_image_provider_uses_edits_for_exact_reference_inputs(tmp_path):
+    first = tmp_path / "front.png"
+    second = tmp_path / "continuity.png"
+    first.write_bytes(b"front-view-bytes")
+    second.write_bytes(b"continuity-frame-bytes")
+    observed = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        observed["path"] = request.url.path
+        observed["content_type"] = request.headers.get("content-type", "")
+        observed["body"] = request.content
+        return httpx.Response(
+            200,
+            json={
+                "id": "edit-1",
+                "data": [{"b64_json": "aW1hZ2U="}],
+            },
+        )
+
+    provider = OpenAIImageProvider(
+        api_key="test-only",
+        output_base_dir=str(tmp_path),
+        transport=httpx.MockTransport(handler),
+    )
+    await provider.submit_job(
+        {"positivePrompt": "same character, next scene"},
+        "job-1",
+        context={
+            "generation_mode": "image",
+            "reference_inputs": [
+                {"image_id": "front", "file_path": str(first)},
+                {"image_id": "continuity", "file_path": str(second)},
+            ],
+        },
+    )
+
+    assert observed["path"] == "/v1/images/edits"
+    assert "multipart/form-data" in observed["content_type"]
+    assert b"front-view-bytes" in observed["body"]
+    assert b"continuity-frame-bytes" in observed["body"]
+    provenance = provider.get_provenance("edit-1")
+    assert provenance["request_params"]["reference_image_ids"] == [
+        "front", "continuity"
+    ]

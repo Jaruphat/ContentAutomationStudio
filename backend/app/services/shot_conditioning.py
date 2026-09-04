@@ -1,0 +1,297 @@
+"""
+Everything that conditions one shot's generation, resolved in one place.
+
+A shot can be conditioned from three directions at once: images someone
+attached by hand, the canonical views of the character sets it binds, and the
+end frame of the take it continues from. Preflight, Generate and Regenerate all
+have to agree about which images those are, in what order, and why a shot
+cannot run - otherwise the run a user confirmed is not the run that executes.
+
+Three rules hold here:
+
+* **One ordered answer.** The continuity frame leads, because for an
+  image-to-video shot it *is* the first frame. Identity views follow, then the
+  hand-attached plates. The order is what a provider receives, so it is fixed
+  rather than incidental.
+* **Every refusal is a blocker, never a skip.** A character set with nothing
+  approved, or a source take that was rejected after its frame was cut, stops
+  the run. Rendering something unconditioned instead would deliver a shot
+  nobody asked for and charge for it.
+* **The lists stay separate.** ``reference_image_ids`` remains the shot's own
+  hand-attached references. Take lineage compares that list against the shot's,
+  so folding identity and continuity images into it would read as a permanent
+  mismatch and mark every take stale.
+"""
+
+import logging
+from dataclasses import dataclass, field
+from typing import Any
+
+from sqlalchemy.orm import Session
+
+from app.models import ReferenceImage, Scene, Shot, Take
+from app.services import (
+    character_sets,
+    continuity_frames,
+    reference_bible,
+    revisions,
+)
+
+logger = logging.getLogger("cas.shot_conditioning")
+
+#: Which of the three roles an image is playing in this generation.
+SOURCE_CONTINUITY = "continuity"
+SOURCE_CHARACTER_SET = "character_set"
+SOURCE_REFERENCE = "reference"
+
+
+@dataclass
+class ConditioningImage:
+    """One image a provider will be given, and where it came from."""
+
+    image: ReferenceImage
+    source: str
+    detail: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class ShotConditioning:
+    """The complete conditioning input set for one shot."""
+
+    images: list[ConditioningImage] = field(default_factory=list)
+    #: Why this shot cannot be generated as bound, in plain words.
+    problems: list[str] = field(default_factory=list)
+    #: The shot's own hand-attached references, kept separate on purpose.
+    reference_image_ids: list[str] = field(default_factory=list)
+    reference_sha256s: list[str] = field(default_factory=list)
+    character_set_ids: list[str] = field(default_factory=list)
+    character_set_sha256s: list[str] = field(default_factory=list)
+    continuity_source_take_id: str = ""
+    continuity_source_sha256: str = ""
+
+    @property
+    def image_count(self) -> int:
+        return len(self.images)
+
+    def describe_sources(self) -> str:
+        """A human summary of what made up the set, for blocker messages."""
+        counts: dict[str, int] = {}
+        for entry in self.images:
+            counts[entry.source] = counts.get(entry.source, 0) + 1
+        labels = {
+            SOURCE_CONTINUITY: "continuity end frame",
+            SOURCE_CHARACTER_SET: "character-set view",
+            SOURCE_REFERENCE: "reference image",
+        }
+        parts = [
+            f"{count} {labels[source]}" + ("s" if count > 1 else "")
+            for source, count in counts.items()
+        ]
+        return ", ".join(parts)
+
+
+# ---------------------------------------------------------------------------
+# Continuity
+# ---------------------------------------------------------------------------
+
+def _continuity_problems(db: Session, take: Take) -> list[str]:
+    """Why a bound source take can no longer hand off, if it cannot.
+
+    Extraction already refuses an unapproved take, but approval can be withdrawn
+    afterwards and the upstream shot can be edited after the fact. Both leave a
+    frame on disk that still hashes the same while no longer standing for
+    anything anybody approved, which is exactly the case a hash comparison
+    cannot catch.
+    """
+    problems: list[str] = []
+    if (take.review_status or "") != "Approved":
+        problems.append(
+            "The take this shot continues from is no longer approved, so its "
+            "end frame cannot be used. Approve it again in Review, choose a "
+            "different source, or turn continuity off."
+        )
+        return problems
+
+    source_shot = db.query(Shot).filter(Shot.id == take.shot_id).first()
+    if source_shot is None:
+        problems.append(
+            "The shot this take came from no longer exists, so its end frame "
+            "cannot be used. Choose a different source, or turn continuity off."
+        )
+        return problems
+
+    if revisions.take_lineage_state(take, source_shot) == revisions.LINEAGE_STALE:
+        problems.append(
+            "The take this shot continues from is out of date: the shot it "
+            "came from changed after it was generated. Regenerate and approve "
+            "that shot, then re-cut the end frame."
+        )
+    return problems
+
+
+def _resolve_continuity(
+    db: Session, project_id: str, shot: Shot
+) -> tuple[ConditioningImage | None, list[str], str, str]:
+    """The hand-off frame this shot starts from, or why it cannot start."""
+    mode = getattr(shot, "continuity_source_mode", None) or continuity_frames.MODE_NONE
+    if mode != continuity_frames.MODE_END_FRAME:
+        return None, [], "", ""
+
+    take_id = shot.continuity_source_take_id or ""
+    image, problems = continuity_frames.resolve_source_image(db, project_id, shot)
+    if problems:
+        return None, problems, take_id, ""
+
+    take = db.query(Take).filter(Take.id == take_id).first()
+    if take is None:
+        return None, [
+            "The take this shot continues from no longer exists. Pick another "
+            "approved take, or turn continuity off."
+        ], take_id, ""
+
+    take_problems = _continuity_problems(db, take)
+    frame = continuity_frames.get_frame(db, take_id)
+    sha256 = (frame.sha256 or "") if frame is not None else ""
+    if take_problems:
+        return None, take_problems, take_id, sha256
+
+    entry = ConditioningImage(
+        image=image,
+        source=SOURCE_CONTINUITY,
+        detail={
+            "take_id": take_id,
+            "shot_id": take.shot_id,
+            "frame_time_sec": frame.frame_time_sec if frame else 0.0,
+            "selection": frame.selection if frame else "",
+        },
+    )
+    return entry, [], take_id, sha256
+
+
+# ---------------------------------------------------------------------------
+# Identity
+# ---------------------------------------------------------------------------
+
+def _resolve_character_sets(
+    db: Session, project_id: str, set_ids: list[str]
+) -> tuple[list[ConditioningImage], list[str], list[str]]:
+    """The canonical views of the bound sets, plus why any of them cannot be used."""
+    if not set_ids:
+        return [], [], []
+
+    problems = character_sets.canonical_problems(db, project_id, set_ids)
+    digests = [
+        character_sets.canonical_digest(db, character_set)
+        if character_set is not None
+        else ""
+        for character_set in (
+            character_sets.get_set(db, project_id, set_id) for set_id in set_ids
+        )
+    ]
+    if problems:
+        return [], problems, digests
+
+    entries: list[ConditioningImage] = []
+    for set_id in set_ids:
+        character_set = character_sets.get_set(db, project_id, set_id)
+        if character_set is None:
+            continue
+        version = character_sets.approved_version(db, character_set)
+        if version is None:
+            continue
+        for view in character_sets.list_views(db, version):
+            if view.image is None:
+                continue
+            entries.append(ConditioningImage(
+                image=view.image,
+                source=SOURCE_CHARACTER_SET,
+                detail={
+                    "character_set_id": character_set.id,
+                    "character_set_name": character_set.name,
+                    "character_set_version": version.version,
+                    "character_set_version_id": version.id,
+                    "view_slot": view.slot,
+                },
+            ))
+    return entries, [], digests
+
+
+# ---------------------------------------------------------------------------
+# Resolution
+# ---------------------------------------------------------------------------
+
+def resolve(db: Session, project_id: str, shot: Shot) -> ShotConditioning:
+    """Resolve every image this shot would be generated from, in send order."""
+    if not project_id:
+        scene = db.query(Scene).filter(Scene.id == shot.scene_id).first()
+        project_id = scene.project_id if scene else ""
+
+    resolved = ShotConditioning()
+
+    continuity_entry, continuity_problems, take_id, frame_sha = _resolve_continuity(
+        db, project_id, shot
+    )
+    resolved.continuity_source_take_id = take_id
+    resolved.continuity_source_sha256 = frame_sha
+    resolved.problems.extend(continuity_problems)
+
+    set_ids = [str(value) for value in (shot.character_set_ids or []) if value]
+    resolved.character_set_ids = set_ids
+    identity_entries, identity_problems, digests = _resolve_character_sets(
+        db, project_id, set_ids
+    )
+    resolved.character_set_sha256s = digests
+    resolved.problems.extend(identity_problems)
+
+    reference_ids = [
+        str(value) for value in (shot.reference_asset_ids or []) if value
+    ]
+    reference_images, reference_problems = reference_bible.resolve_images(
+        db, project_id, reference_ids
+    )
+    resolved.problems.extend(problem.message for problem in reference_problems)
+    resolved.reference_image_ids = [image.id for image in reference_images]
+    resolved.reference_sha256s = [image.sha256 or "" for image in reference_images]
+
+    # Nothing is offered to a provider while any part of the set is refused:
+    # a partially conditioned render is a different shot, not a degraded one.
+    if resolved.problems:
+        return resolved
+
+    if continuity_entry is not None:
+        resolved.images.append(continuity_entry)
+    resolved.images.extend(identity_entries)
+    resolved.images.extend(
+        ConditioningImage(
+            image=image,
+            source=SOURCE_REFERENCE,
+            detail={"sheet_id": image.sheet_id},
+        )
+        for image in reference_images
+    )
+    return resolved
+
+
+def provenance(resolved: ShotConditioning) -> dict[str, Any]:
+    """The record a job carries of what it was actually conditioned on.
+
+    Shaped like the reference provenance the queue already uploads from, with
+    the role each image played added, so an existing job path keeps working
+    while a take can still be explained image by image.
+    """
+    return {
+        "images": [
+            {
+                "image_id": entry.image.id,
+                "sheet_id": entry.image.sheet_id,
+                "file_path": entry.image.file_path,
+                "sha256": entry.image.sha256,
+                "mime_type": entry.image.mime_type,
+                "width": entry.image.width,
+                "height": entry.image.height,
+                "source": entry.source,
+                "detail": dict(entry.detail),
+            }
+            for entry in resolved.images
+        ]
+    }

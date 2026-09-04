@@ -366,6 +366,238 @@ class ReferenceSheetResponse(BaseModel):
 
 
 # ============================================================================
+# Character sets
+# ============================================================================
+
+class CharacterSetCreate(BaseModel):
+    name: str
+    character_id: Optional[str] = None
+    appearance: str = ""
+    proportions: str = ""
+    wardrobe: str = ""
+    palette: str = ""
+    identity_tokens: str = ""
+    negative_tokens: str = ""
+    notes: str = ""
+
+    @field_validator("name")
+    @classmethod
+    def _check_name(cls, value):
+        if not (value or "").strip():
+            raise ValueError(
+                "A character set needs a name so it can be recognised in the "
+                "storyboard."
+            )
+        return value.strip()
+
+
+class CharacterSetUpdate(BaseModel):
+    name: Optional[str] = None
+    character_id: Optional[str] = None
+    appearance: Optional[str] = None
+    proportions: Optional[str] = None
+    wardrobe: Optional[str] = None
+    palette: Optional[str] = None
+    identity_tokens: Optional[str] = None
+    negative_tokens: Optional[str] = None
+    notes: Optional[str] = None
+
+    @field_validator("name")
+    @classmethod
+    def _check_name(cls, value):
+        if value is not None and not value.strip():
+            raise ValueError("A character set needs a name.")
+        return value.strip() if value is not None else None
+
+
+class CharacterSetVersionCreate(BaseModel):
+    """Which canonical views the next version should contain."""
+
+    slots: list[str] = Field(default_factory=list)
+    notes: str = ""
+
+
+class CharacterSetGenerateRequest(BaseModel):
+    """How to generate a drafted version's views.
+
+    Provider and model are chosen per request rather than stored on the set:
+    generating a sheet is a routing decision with a price, and it is made at the
+    moment of spending, not months earlier.
+    """
+
+    provider_id: Optional[str] = None
+    model: str = ""
+    workflow_id: Optional[str] = None
+    seed: Optional[int] = None
+    width: int = 1024
+    height: int = 1024
+    #: Required before anything metered runs, exactly as for shot generation.
+    confirm_paid_generation: bool = False
+
+    @field_validator("provider_id")
+    @classmethod
+    def _check_provider(cls, value):
+        return _validated_provider_id(value)
+
+
+class CharacterSetViewResponse(BaseModel):
+    """One canonical view, with everything the gallery needs to show it."""
+
+    model_config = {"from_attributes": True}
+
+    id: str
+    version_id: str
+    character_set_id: str
+    slot: str
+    label: str = ""
+    order: int = 0
+    view_prompt: str = ""
+    status: str = "Pending"
+    reference_image_id: Optional[str] = None
+    provider_id: str = ""
+    model: str = ""
+    workflow_id: Optional[str] = None
+    seed: Optional[int] = None
+    request_params: dict[str, Any] = Field(default_factory=dict)
+    provenance: dict[str, Any] = Field(default_factory=dict)
+    error_message: str = ""
+    #: Mirrors the stored image's hash, so the gallery can show that two
+    #: versions of a view really are different bytes and not just re-runs.
+    sha256: str = ""
+    created_at: datetime
+
+    @computed_field
+    @property
+    def url(self) -> Optional[str]:
+        """Where the gallery loads the bytes from, or null before generation.
+
+        The absolute path is never exposed: a browser cannot open it, and the
+        server's directory layout is nobody's business.
+        """
+        if not self.reference_image_id:
+            return None
+        return f"/api/media/references/{self.reference_image_id}/file"
+
+
+class CharacterSetVersionResponse(BaseModel):
+    model_config = {"from_attributes": True}
+
+    id: str
+    character_set_id: str
+    project_id: str
+    version: int
+    status: str
+    spec_snapshot: dict[str, Any] = Field(default_factory=dict)
+    spec_sha256: str = ""
+    content_sha256: str = ""
+    provider_id: str = ""
+    model: str = ""
+    workflow_id: Optional[str] = None
+    seed: Optional[int] = None
+    estimated_cost_usd: Optional[float] = None
+    notes: str = ""
+    approved_at: Optional[datetime] = None
+    created_at: datetime
+    views: list[CharacterSetViewResponse] = Field(default_factory=list)
+
+
+class CharacterSetResponse(BaseModel):
+    model_config = {"from_attributes": True}
+
+    id: str
+    project_id: str
+    character_id: Optional[str] = None
+    reference_sheet_id: Optional[str] = None
+    name: str
+    appearance: str = ""
+    proportions: str = ""
+    wardrobe: str = ""
+    palette: str = ""
+    identity_tokens: str = ""
+    negative_tokens: str = ""
+    notes: str = ""
+    approved_version_id: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+
+    versions: list[CharacterSetVersionResponse] = Field(default_factory=list)
+    #: False when the identity text has been edited since the canonical views
+    #: were generated. Surfaced, never auto-corrected: regenerating a sheet
+    #: costs money and only the user decides to spend it.
+    approved_version_is_current: bool = False
+
+
+# ============================================================================
+# Continuity frames
+# ============================================================================
+
+class ContinuityFrameExtractRequest(BaseModel):
+    """Where in the clip to cut. Omit ``at_sec`` for the final frame."""
+
+    at_sec: Optional[float] = None
+
+
+class ContinuityFrameResponse(BaseModel):
+    model_config = {"from_attributes": True}
+
+    id: str
+    project_id: str
+    take_id: str
+    shot_id: str
+    reference_image_id: Optional[str] = None
+    frame_time_sec: float = 0.0
+    #: last / explicit - whether the timestamp was chosen or the end accepted.
+    selection: str = "last"
+    sha256: str = ""
+    width: int = 0
+    height: int = 0
+    source_duration_sec: float = 0.0
+    created_at: datetime
+    updated_at: datetime
+
+    @computed_field
+    @property
+    def url(self) -> Optional[str]:
+        if not self.reference_image_id:
+            return None
+        return f"/api/media/references/{self.reference_image_id}/file"
+
+
+class ContinuitySourceOption(BaseModel):
+    """One take this shot could continue from, as the picker shows it."""
+
+    take_id: str
+    shot_id: str
+    shot_label: str = ""
+    scene_id: str = ""
+    frame: ContinuityFrameResponse
+    #: False when the take is no longer approved or has been left behind by
+    #: its own shot, with ``reason`` saying which.
+    usable: bool = True
+    reason: str = ""
+
+
+class ContinuitySourceUpdate(BaseModel):
+    """Bind or clear this shot's hand-off. ``source_take_id`` null clears it."""
+
+    source_take_id: Optional[str] = None
+
+
+class ShotContinuityStatus(BaseModel):
+    """Everything the continuity control on a shot needs in one response."""
+
+    shot_id: str
+    mode: str = "none"
+    source_take_id: Optional[str] = None
+    frame: Optional[ContinuityFrameResponse] = None
+    source_shot_id: str = ""
+    source_shot_label: str = ""
+    #: Why this shot cannot be generated from its bound source, if it cannot.
+    problems: list[str] = Field(default_factory=list)
+    candidates: list[ContinuitySourceOption] = Field(default_factory=list)
+
+
+# ============================================================================
 # Scene
 # ============================================================================
 
@@ -443,6 +675,8 @@ class ShotCreate(BaseModel):
     video_prompt: str = ""
     negative_prompt: str = ""
     reference_asset_ids: list[str] = Field(default_factory=list)
+    #: Character sets whose approved canonical views condition this shot.
+    character_set_ids: list[str] = Field(default_factory=list)
     workflow_preset_id: Optional[str] = None
     image_provider_id: str = "comfyui"
     image_model: str = "workflow"
@@ -471,6 +705,7 @@ class ShotUpdate(BaseModel):
     video_prompt: Optional[str] = None
     negative_prompt: Optional[str] = None
     reference_asset_ids: Optional[list[str]] = None
+    character_set_ids: Optional[list[str]] = None
     workflow_preset_id: Optional[str] = None
     image_provider_id: Optional[str] = None
     image_model: Optional[str] = None
@@ -509,6 +744,15 @@ class ShotResponse(BaseModel):
     seed_policy: str
     status: str
 
+    #: Canonical identity and hand-off continuity. Defaulted for the same
+    #: reason the revision columns below are: a row an ALTER TABLE could only
+    #: add these to as NULL still has to serialise.
+    character_set_ids: list[str] = Field(default_factory=list)
+    character_set_sha256s: list[str] = Field(default_factory=list)
+    continuity_source_take_id: Optional[str] = None
+    continuity_source_mode: str = "none"
+    continuity_source_sha256: str = ""
+
     #: Content revision tracking. ``is_stale`` is what the storyboard badges:
     #: the shot has been generated, and something it depends on has changed
     #: since. Defaulted so a row migrated from an older database still
@@ -526,6 +770,8 @@ class ShotResponse(BaseModel):
     @field_validator(
         "prompt_revision", "generated_revision", "is_stale",
         "prompt_sha256", "content_sha256", "reference_sha256s",
+        "character_set_ids", "character_set_sha256s",
+        "continuity_source_mode", "continuity_source_sha256",
         mode="before",
     )
     @classmethod
@@ -704,6 +950,10 @@ class GenerationJobResponse(BaseModel):
     reference_image_ids: list[str] = Field(default_factory=list)
     reference_sha256s: list[str] = Field(default_factory=list)
     reference_provenance: dict[str, Any] = Field(default_factory=dict)
+    character_set_ids: list[str] = Field(default_factory=list)
+    character_set_sha256s: list[str] = Field(default_factory=list)
+    continuity_source_take_id: Optional[str] = None
+    continuity_source_sha256: str = ""
     seed: Optional[int]
     comfyui_prompt_id: Optional[str]
     status: str
@@ -742,6 +992,15 @@ class TakeResponse(BaseModel):
     usage: Optional[dict[str, Any]] = None
     estimated_cost_usd: Optional[float] = None
     provenance: Optional[dict[str, Any]] = None
+    prompt_revision: int = 0
+    prompt_sha256: str = ""
+    content_sha256: str = ""
+    reference_image_ids: list[str] = Field(default_factory=list)
+    reference_sha256s: list[str] = Field(default_factory=list)
+    character_set_ids: list[str] = Field(default_factory=list)
+    character_set_sha256s: list[str] = Field(default_factory=list)
+    continuity_source_take_id: Optional[str] = None
+    continuity_source_sha256: str = ""
     review_status: str
     rating: Optional[int]
     notes: str

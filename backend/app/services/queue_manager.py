@@ -266,7 +266,7 @@ class QueueManager:
             if (
                 provider_id == media_providers.COMFYUI
                 and provider.requires_workflow_payload
-                and job.reference_image_ids
+                and (job.reference_provenance or {}).get("images")
             ):
                 await self._prepare_reference_inputs(db, job, provider)
 
@@ -412,6 +412,10 @@ class QueueManager:
                 content_sha256=job.content_sha256,
                 reference_image_ids=list(job.reference_image_ids or []),
                 reference_sha256s=list(job.reference_sha256s or []),
+                character_set_ids=list(job.character_set_ids or []),
+                character_set_sha256s=list(job.character_set_sha256s or []),
+                continuity_source_take_id=job.continuity_source_take_id,
+                continuity_source_sha256=job.continuity_source_sha256 or "",
                 lineage={"job_id": job.id},
                 review_status="Pending",
             )
@@ -714,6 +718,11 @@ class QueueManager:
             "model": job.media_model or "workflow",
             "size": request_params.get("size"),
             "quality": request_params.get("quality"),
+            "reference_inputs": [
+                dict(image)
+                for image in (job.reference_provenance or {}).get("images", [])
+                if isinstance(image, dict)
+            ],
         }
         if shot:
             scene = db.query(Scene).filter(Scene.id == shot.scene_id).first()

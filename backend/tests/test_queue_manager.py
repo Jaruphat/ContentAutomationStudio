@@ -224,6 +224,10 @@ class TestExecuteJob:
             reference_image_ids=["image-1"],
             reference_sha256s=["d" * 64],
             reference_provenance={"images": [{"image_id": "image-1"}]},
+            character_set_ids=["set-1"],
+            character_set_sha256s=["e" * 64],
+            continuity_source_take_id="source-take",
+            continuity_source_sha256="f" * 64,
         )
         manager._running = True
 
@@ -235,6 +239,10 @@ class TestExecuteJob:
         assert take.content_sha256 == "c" * 64
         assert take.reference_image_ids == ["image-1"]
         assert take.reference_sha256s == ["d" * 64]
+        assert take.character_set_ids == ["set-1"]
+        assert take.character_set_sha256s == ["e" * 64]
+        assert take.continuity_source_take_id == "source-take"
+        assert take.continuity_source_sha256 == "f" * 64
         assert take.provenance["references"] == job.reference_provenance
 
     @pytest.mark.asyncio

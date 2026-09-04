@@ -35,8 +35,8 @@ from app.services import (
     generation_runs,
     job_payload,
     media_providers,
-    reference_bible,
     revisions,
+    shot_conditioning,
     workflow_registry,
 )
 from app.services.workflow_format import WorkflowFormat
@@ -277,11 +277,9 @@ async def preflight_validation(project_id: str, db: Session = Depends(get_db)):
             shot_issues.append(project_format_issue)
         plan = plans[shot.id]
 
-        _resolved_references, reference_problems = reference_bible.resolve_images(
-            db, project_id, list(shot.reference_asset_ids or [])
-        )
-        shot_issues.extend(problem.message for problem in reference_problems)
-        if shot.generation_mode == "image-to-video" and not shot.reference_asset_ids:
+        conditioning = shot_conditioning.resolve(db, project_id, shot)
+        shot_issues.extend(conditioning.problems)
+        if shot.generation_mode == "image-to-video" and not conditioning.images:
             shot_issues.append("Image-to-video requires a reference image")
         if shot.is_stale:
             shot_issues.append(
@@ -316,7 +314,7 @@ async def preflight_validation(project_id: str, db: Session = Depends(get_db)):
                 shot_issues.append(
                     f"Assigned workflow '{workflow_id}' failed mapping validation"
                 )
-            elif shot.reference_asset_ids:
+            elif conditioning.images:
                 workflow = db.query(Workflow).filter(Workflow.id == workflow_id).first()
                 if workflow and job_payload.REFERENCE_IMAGE not in (
                     workflow.parameter_mapping or {}
@@ -498,7 +496,7 @@ def start_generation(
     # page enforces through preflight, and the batch is refused as a whole:
     # queueing the valid half of a run would charge for work the user cannot
     # use, and leave a run whose shot list does not describe it.
-    references: dict[str, list[Any]] = {}
+    references: dict[str, shot_conditioning.ShotConditioning] = {}
     blocked: list[str] = []
     continuity_by_shot = _continuity_issues_by_shot(db, project_id, selected)
     for shot in selected:
@@ -518,12 +516,10 @@ def start_generation(
             shot_blockers.append(
                 "recurring prop continuity missing " + ", ".join(finding["missing"])
             )
-        resolved_references, reference_problems = reference_bible.resolve_images(
-            db, project_id, list(shot.reference_asset_ids or [])
-        )
-        references[shot.id] = resolved_references
-        shot_blockers.extend(problem.message for problem in reference_problems)
-        if shot.generation_mode == "image-to-video" and not resolved_references:
+        conditioning = shot_conditioning.resolve(db, project_id, shot)
+        references[shot.id] = conditioning
+        shot_blockers.extend(conditioning.problems)
+        if shot.generation_mode == "image-to-video" and not conditioning.images:
             shot_blockers.append("Image-to-video requires a reference image.")
         if plan.provider_id == media_providers.COMFYUI and plan.workflow_id:
             workflow = db.query(Workflow).filter(Workflow.id == plan.workflow_id).first()
@@ -538,7 +534,7 @@ def start_generation(
                         "Assigned workflow mapping is invalid: "
                         + "; ".join(workflow_errors)
                     )
-        if resolved_references and plan.provider_id == media_providers.COMFYUI:
+        if conditioning.images and plan.provider_id == media_providers.COMFYUI:
             workflow = (
                 db.query(Workflow).filter(Workflow.id == plan.workflow_id).first()
                 if plan.workflow_id
@@ -551,7 +547,7 @@ def start_generation(
                     "Reference-conditioned generation requires the "
                     "referenceImage workflow mapping."
                 )
-            elif len(resolved_references) != 1:
+            elif len(conditioning.images) != 1:
                 shot_blockers.append(
                     "The selected workflow accepts exactly one reference image."
                 )
@@ -587,7 +583,7 @@ def start_generation(
         workflow_id = plan.workflow_id
         workflow_version = plan.workflow_version
         # Already resolved and validated for the whole batch above.
-        resolved_references = references[shot.id]
+        conditioning = references[shot.id]
 
         # Compile prompt
         scene = db.query(Scene).filter(Scene.id == shot.scene_id).first()
@@ -671,22 +667,15 @@ def start_generation(
             prompt_revision=shot.prompt_revision,
             prompt_sha256=shot.prompt_sha256,
             content_sha256=shot.content_sha256,
-            reference_image_ids=[image.id for image in resolved_references],
-            reference_sha256s=[image.sha256 for image in resolved_references],
-            reference_provenance={
-                "images": [
-                    {
-                        "image_id": image.id,
-                        "sheet_id": image.sheet_id,
-                        "file_path": image.file_path,
-                        "sha256": image.sha256,
-                        "mime_type": image.mime_type,
-                        "width": image.width,
-                        "height": image.height,
-                    }
-                    for image in resolved_references
-                ]
-            },
+            reference_image_ids=conditioning.reference_image_ids,
+            reference_sha256s=conditioning.reference_sha256s,
+            reference_provenance=shot_conditioning.provenance(conditioning),
+            character_set_ids=conditioning.character_set_ids,
+            character_set_sha256s=conditioning.character_set_sha256s,
+            continuity_source_take_id=(
+                conditioning.continuity_source_take_id or None
+            ),
+            continuity_source_sha256=conditioning.continuity_source_sha256,
             seed=seed,
             status="Queued",
             attempts=0,

@@ -19,6 +19,7 @@ Two rules shape this file:
 """
 
 import base64
+from contextlib import ExitStack
 import logging
 import os
 from typing import Any
@@ -179,9 +180,40 @@ class OpenAIImageProvider(MediaProvider):
             # folded into the prompt rather than silently dropped.
             payload["prompt"] = f"{prompt}\n\nAvoid: {negative}"
 
+        reference_inputs = [
+            dict(item)
+            for item in (context.get("reference_inputs") or [])
+            if isinstance(item, dict)
+        ]
+        for item in reference_inputs:
+            path = str(item.get("file_path") or "")
+            if not path or not os.path.isfile(path):
+                raise ValueError(
+                    "A reference image selected for this job is missing from disk."
+                )
+
         try:
             async with self._client() as client:
-                response = await client.post("/images/generations", json=payload)
+                if reference_inputs:
+                    with ExitStack() as stack:
+                        files = [
+                            (
+                                "image[]",
+                                (
+                                    os.path.basename(str(item["file_path"])),
+                                    stack.enter_context(open(str(item["file_path"]), "rb")),
+                                    str(item.get("mime_type") or "image/png"),
+                                ),
+                            )
+                            for item in reference_inputs
+                        ]
+                        response = await client.post(
+                            "/images/edits",
+                            data={key: str(value) for key, value in payload.items()},
+                            files=files,
+                        )
+                else:
+                    response = await client.post("/images/generations", json=payload)
                 response.raise_for_status()
                 data = response.json()
                 items = data.get("data") or []
@@ -243,6 +275,9 @@ class OpenAIImageProvider(MediaProvider):
                     "quality": quality,
                     "n": 1,
                     "negative_prompt_folded_in": bool(negative),
+                    "reference_image_ids": [
+                        str(item.get("image_id") or "") for item in reference_inputs
+                    ],
                 },
                 "usage": usage,
                 "estimated_cost_usd": estimate.amount_usd,
