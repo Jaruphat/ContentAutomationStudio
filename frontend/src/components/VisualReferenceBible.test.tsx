@@ -55,6 +55,7 @@ describe("Visual Reference Bible", () => {
   it("renders project-scoped character, recurring prop, and location sheets with canonical truth", () => {
     const html = renderBible();
     expect(html).toContain("Visual Reference Bible");
+    expect(html).toContain("Character Set Generator");
     expect(html).toContain("Character");
     expect(html).toContain("Recurring prop");
     expect(html).toContain("Location");

@@ -112,6 +112,72 @@ export interface Character {
   updated_at: string;
 }
 
+export type CharacterViewSlot =
+  | "front" | "three_quarter" | "side" | "back" | "full_body" | "expression";
+
+export interface CharacterSetView {
+  id: string; version_id: string; character_set_id: string;
+  slot: CharacterViewSlot; label: string; order: number; view_prompt: string;
+  status: string; reference_image_id: string | null; provider_id: string;
+  model: string; workflow_id: string | null; seed: number | null;
+  request_params: Record<string, unknown>; provenance: Record<string, unknown>;
+  error_message: string; sha256: string; url: string | null; created_at: string;
+}
+
+export interface CharacterSetVersion {
+  id: string; character_set_id: string; project_id: string; version: number;
+  status: string; spec_snapshot: Record<string, unknown>; spec_sha256: string;
+  content_sha256: string; provider_id: string; model: string;
+  workflow_id: string | null; seed: number | null; estimated_cost_usd: number | null;
+  notes: string; approved_at: string | null; created_at: string;
+  views: CharacterSetView[];
+}
+
+export interface CharacterSet {
+  id: string; project_id: string; character_id: string | null;
+  reference_sheet_id: string | null; name: string; appearance: string;
+  proportions: string; wardrobe: string; palette: string; identity_tokens: string;
+  negative_tokens: string; notes: string; approved_version_id: string | null;
+  approved_version_is_current: boolean; versions: CharacterSetVersion[];
+  created_at: string; updated_at: string;
+}
+
+export type CharacterSetCreate = Pick<CharacterSet, "name"> & Partial<Pick<
+  CharacterSet,
+  "character_id" | "appearance" | "proportions" | "wardrobe" | "palette" |
+  "identity_tokens" | "negative_tokens" | "notes"
+>>;
+
+export interface CharacterSetVersionCreate {
+  slots: CharacterViewSlot[];
+  notes?: string;
+}
+
+export interface CharacterSetGenerateRequest {
+  provider_id?: MediaProviderId; model?: string; workflow_id?: string | null;
+  seed?: number | null; width?: number; height?: number;
+  confirm_paid_generation?: boolean;
+}
+
+export interface ContinuityFrame {
+  id: string; project_id: string; take_id: string; shot_id: string;
+  reference_image_id: string | null; frame_time_sec: number;
+  selection: "last" | "explicit"; sha256: string; width: number; height: number;
+  source_duration_sec: number; url: string | null; created_at: string; updated_at: string;
+}
+
+export interface ContinuityCandidate {
+  take_id: string; shot_id: string; shot_label: string; scene_id: string;
+  frame: ContinuityFrame; usable: boolean; reason: string;
+}
+
+export interface ShotContinuityStatus {
+  shot_id: string; mode: "none" | "previous_approved_end_frame" | string;
+  source_take_id: string | null; frame: ContinuityFrame | null;
+  source_shot_id: string; source_shot_label: string; problems: string[];
+  candidates: ContinuityCandidate[];
+}
+
 export interface Location {
   id: string;
   project_id: string;
@@ -218,6 +284,11 @@ export interface Shot {
   video_prompt: string;
   negative_prompt: string;
   reference_asset_ids: string[];
+  character_set_ids: string[];
+  character_set_sha256s: string[];
+  continuity_source_take_id: string | null;
+  continuity_source_mode: string;
+  continuity_source_sha256: string;
   workflow_preset_id: string | null;
   /** Which provider generates this shot's stills. Video always uses ComfyUI. */
   image_provider_id: MediaProviderId;

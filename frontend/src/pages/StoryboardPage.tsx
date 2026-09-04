@@ -24,6 +24,7 @@ import StatusBadge from "../components/StatusBadge";
 import AIGenerationPanel from "../components/AIGenerationPanel";
 import MediaProviderFields from "../components/MediaProviderFields";
 import { ShotReferenceAssignment } from "../components/VisualReferenceBible";
+import { ShotCharacterBinding, ShotContinuityControls } from "../components/ShotContinuityControls";
 import type { MediaProviderId, Scene, Shot, ShotCreate } from "../types";
 
 // ── Shot row ─────────────────────────────────────────────────────────────
@@ -56,10 +57,16 @@ function ShotRow({
   );
   const [imageModel, setImageModel] = useState(shot.image_model || "workflow");
   const [referenceAssetIds, setReferenceAssetIds] = useState(shot.reference_asset_ids);
+  const [characterSetIds, setCharacterSetIds] = useState(shot.character_set_ids ?? []);
 
   const referencesQ = useQuery({
     queryKey: ["references", projectId],
     queryFn: () => api.references.list(projectId),
+  });
+
+  const characterSetsQ = useQuery({
+    queryKey: ["character-sets", projectId],
+    queryFn: () => api.characterSets.list(projectId),
   });
 
   const mediaProvidersQ = useQuery({
@@ -140,6 +147,16 @@ function ShotRow({
               onChange={setReferenceAssetIds}
               revision={shot}
             />
+            <ShotCharacterBinding
+              sets={characterSetsQ.data ?? []}
+              assignedIds={characterSetIds}
+              onChange={setCharacterSetIds}
+            />
+            <ShotContinuityControls
+              projectId={projectId}
+              sceneId={sceneId}
+              shotId={shot.id}
+            />
             <div>
               <label className="text-[10px] text-zinc-500 uppercase">Image Prompt</label>
               <textarea value={imagePrompt} onChange={(e) => setImagePrompt(e.target.value)} className="w-full rounded px-2 py-1 text-xs" rows={2} />
@@ -165,6 +182,7 @@ function ShotRow({
                     image_provider_id: imageProviderId,
                     image_model: imageModel,
                     reference_asset_ids: referenceAssetIds,
+                    character_set_ids: characterSetIds,
                   })
                 }
                 disabled={updateMut.isPending}

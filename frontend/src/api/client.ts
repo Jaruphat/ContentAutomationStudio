@@ -44,6 +44,13 @@ import type {
   TimelineManifest,
   SubtitleSettings,
   HealthStatus,
+  CharacterSet,
+  CharacterSetCreate,
+  CharacterSetVersion,
+  CharacterSetVersionCreate,
+  CharacterSetGenerateRequest,
+  ContinuityFrame,
+  ShotContinuityStatus,
 } from "../types";
 
 const http = axios.create({
@@ -180,6 +187,29 @@ export const references = {
   imageUrl: (image: ReferenceImage) => image.url,
 };
 
+export const characterSets = {
+  list: (projectId: string) =>
+    http.get<CharacterSet[]>(`/projects/${projectId}/character-sets`).then((r) => r.data),
+  get: (projectId: string, setId: string) =>
+    http.get<CharacterSet>(`/projects/${projectId}/character-sets/${setId}`).then((r) => r.data),
+  create: (projectId: string, data: CharacterSetCreate) =>
+    http.post<CharacterSet>(`/projects/${projectId}/character-sets`, data).then((r) => r.data),
+  update: (projectId: string, setId: string, data: Partial<CharacterSetCreate>) =>
+    http.put<CharacterSet>(`/projects/${projectId}/character-sets/${setId}`, data).then((r) => r.data),
+  delete: (projectId: string, setId: string, force = false) =>
+    http.delete(`/projects/${projectId}/character-sets/${setId}`, { params: { force } }).then((r) => r.data),
+  createVersion: (projectId: string, setId: string, data: CharacterSetVersionCreate) =>
+    http.post<CharacterSetVersion>(`/projects/${projectId}/character-sets/${setId}/versions`, data).then((r) => r.data),
+  getVersion: (projectId: string, setId: string, versionId: string) =>
+    http.get<CharacterSetVersion>(`/projects/${projectId}/character-sets/${setId}/versions/${versionId}`).then((r) => r.data),
+  generateVersion: (projectId: string, setId: string, versionId: string, data: CharacterSetGenerateRequest) =>
+    http.post<CharacterSetVersion>(`/projects/${projectId}/character-sets/${setId}/versions/${versionId}/generate`, data).then((r) => r.data),
+  approveVersion: (projectId: string, setId: string, versionId: string) =>
+    http.post<CharacterSetVersion>(`/projects/${projectId}/character-sets/${setId}/versions/${versionId}/approve`).then((r) => r.data),
+  unapproveVersion: (projectId: string, setId: string, versionId: string) =>
+    http.post<CharacterSetVersion>(`/projects/${projectId}/character-sets/${setId}/versions/${versionId}/unapprove`).then((r) => r.data),
+};
+
 // ── Scenes ───────────────────────────────────────────────────────────────
 
 export const scenes = {
@@ -256,6 +286,19 @@ export const shots = {
         shots: shotIds.map((id, order) => ({ id, order })),
       })
       .then((r) => r.data),
+};
+
+export const continuity = {
+  get: (projectId: string, sceneId: string, shotId: string) =>
+    http.get<ShotContinuityStatus>(`/projects/${projectId}/scenes/${sceneId}/shots/${shotId}/continuity`).then((r) => r.data),
+  extract: (projectId: string, takeId: string, atSec?: number) =>
+    http.post<ContinuityFrame>(`/projects/${projectId}/takes/${takeId}/continuity-frame`, atSec == null ? {} : { at_sec: atSec }).then((r) => r.data),
+  getFrame: (projectId: string, takeId: string) =>
+    http.get<ContinuityFrame>(`/projects/${projectId}/takes/${takeId}/continuity-frame`).then((r) => r.data),
+  bind: (projectId: string, sceneId: string, shotId: string, sourceTakeId: string) =>
+    http.put<ShotContinuityStatus>(`/projects/${projectId}/scenes/${sceneId}/shots/${shotId}/continuity`, { source_take_id: sourceTakeId }).then((r) => r.data),
+  clear: (projectId: string, sceneId: string, shotId: string) =>
+    http.delete<ShotContinuityStatus>(`/projects/${projectId}/scenes/${sceneId}/shots/${shotId}/continuity`).then((r) => r.data),
 };
 
 // ── Workflows ────────────────────────────────────────────────────────────
@@ -581,8 +624,10 @@ const api = {
   locations,
   styles,
   references,
+  characterSets,
   scenes,
   shots,
+  continuity,
   workflows,
   generation,
   review,
