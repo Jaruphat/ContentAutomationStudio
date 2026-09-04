@@ -89,8 +89,10 @@ const generateChecks = await evaluate(`(() => {
     // Structural, not fixture-bound: these once named one sample project and
     // silently went false for every other one, reporting a regression that was
     // only a different project being selected.
-    namedShots: /Shot \d+ - \S/.test(text),
-    runCounts: /\d+ completed/.test(text) && /\d+ queued/.test(text),
+    // Double-escaped: this source sits inside a template literal, so a single
+    // backslash is eaten before the browser ever compiles the pattern.
+    namedShots: /Shot \\d+ - \\S/.test(text),
+    runCounts: /\\d+ completed/.test(text) && /\\d+ queued/.test(text),
     reviewAction: !!document.querySelector('[aria-label="Production stages"] button[title="Review"]'),
     noPageError: !text.includes('Something went wrong'),
     excerpt: text.slice(0, 3000)
