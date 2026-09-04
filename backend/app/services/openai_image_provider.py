@@ -54,6 +54,7 @@ class OpenAIImageProvider(MediaProvider):
     #: No ComfyUI graph is involved, so the queue passes the job's logical
     #: values straight through instead of building a node-mapped payload.
     requires_workflow_payload = False
+    max_reference_images = None
 
     def __init__(
         self,

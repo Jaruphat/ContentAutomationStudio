@@ -38,15 +38,19 @@ from app.services import (
 # helpers
 # ---------------------------------------------------------------------------
 
-def _approved_set(db, project_id, character_id, png_bytes, *, name, seed=1):
+def _approved_set(
+    db, project_id, character_id, png_bytes, *, name, seed=1, slots=None
+):
     character_set = character_sets.create_set(
         db, project_id=project_id, name=name, character_id=character_id,
         appearance="Close-cropped silver hair.",
     )
-    version = character_sets.create_version(db, character_set, slots=["front"])
-    for view in character_sets.list_views(db, version):
+    version = character_sets.create_version(
+        db, character_set, slots=slots or ["front"]
+    )
+    for index, view in enumerate(character_sets.list_views(db, version)):
         character_sets.attach_view_image(
-            db, view, data=png_bytes(64 + seed, 64),
+            db, view, data=png_bytes(64 + seed + index, 64),
             content_type="image/png", original_filename="front.png",
             provenance={"provider_id": "mock", "seed": seed},
         )
@@ -177,6 +181,143 @@ def test_provenance_names_every_image_and_the_role_it_played(
     assert entry["detail"]["view_slot"] == "front"
     # The queue uploads from this record, so the path has to be in it.
     assert entry["file_path"] == resolved.images[0].image.file_path
+
+
+def test_single_input_scene_selects_full_body_but_preserves_all_conceptual_views(
+    db_session: Session, sample_project: Project, sample_scene: Scene,
+    sample_character: Character, png_bytes,
+):
+    character_set = _approved_set(
+        db_session,
+        sample_project.id,
+        sample_character.id,
+        png_bytes,
+        name="Mara",
+        slots=["front", "expression", "full_body"],
+    )
+    shot = _shot(db_session, sample_scene, character_set_ids=[character_set.id])
+    resolved = shot_conditioning.resolve(db_session, sample_project.id, shot)
+
+    selected = shot_conditioning.select_for_submission(resolved, max_images=1)
+    provenance = shot_conditioning.provenance(selected)
+
+    assert selected.problems == []
+    assert [entry.detail["view_slot"] for entry in selected.submitted_images] == [
+        "full_body"
+    ]
+    assert [item["detail"]["view_slot"] for item in provenance["images"]] == [
+        "front", "expression", "full_body"
+    ]
+    assert [item["submitted"] for item in provenance["images"]] == [False, False, True]
+    assert provenance["images"][2]["selection_reason"] == (
+        "primary canonical character-set view (full_body preferred)"
+    )
+    assert selected.character_set_sha256s == [
+        character_sets.canonical_digest(db_session, character_set)
+    ]
+
+
+def test_single_input_continuity_is_sole_submission_while_identity_stays_conceptual(
+    db_session: Session, sample_project: Project, sample_scene: Scene,
+    sample_character: Character, approved_video_take, png_bytes,
+):
+    frame = continuity_frames.extract_frame(db_session, approved_video_take)
+    character_set = _approved_set(
+        db_session, sample_project.id, sample_character.id, png_bytes,
+        name="Mara", slots=["front", "full_body"],
+    )
+    shot = _shot(
+        db_session, sample_scene, generation_mode="image-to-video",
+        video_prompt="continue", character_set_ids=[character_set.id],
+    )
+    continuity_frames.bind_source(
+        db_session, sample_project.id, shot, approved_video_take.id
+    )
+
+    selected = shot_conditioning.select_for_submission(
+        shot_conditioning.resolve(db_session, sample_project.id, shot), max_images=1
+    )
+    provenance = shot_conditioning.provenance(selected)
+
+    assert selected.problems == []
+    assert [entry.image.id for entry in selected.submitted_images] == [
+        frame.reference_image_id
+    ]
+    assert [item["submitted"] for item in provenance["images"]] == [True, False, False]
+    assert provenance["images"][0]["selection_reason"] == (
+        "explicit continuity frame is the workflow input"
+    )
+    assert selected.character_set_sha256s == [
+        character_sets.canonical_digest(db_session, character_set)
+    ]
+
+
+def test_single_input_blocks_multiple_character_sets_without_continuity(
+    db_session: Session, sample_project: Project, sample_scene: Scene,
+    sample_character: Character, png_bytes,
+):
+    first = _approved_set(
+        db_session, sample_project.id, sample_character.id, png_bytes, name="Mara"
+    )
+    second = _approved_set(
+        db_session, sample_project.id, None, png_bytes, name="Ivo", seed=2
+    )
+    shot = _shot(
+        db_session, sample_scene, character_set_ids=[first.id, second.id]
+    )
+
+    selected = shot_conditioning.select_for_submission(
+        shot_conditioning.resolve(db_session, sample_project.id, shot), max_images=1
+    )
+
+    assert selected.submitted_images == []
+    assert any("multiple character sets" in problem for problem in selected.problems)
+
+
+def test_single_input_blocks_conflicting_hand_references(
+    db_session: Session, sample_project: Project, sample_scene: Scene,
+    uploaded_plate, png_bytes,
+):
+    sheet = reference_bible.create_sheet(
+        db_session, project_id=sample_project.id, kind="prop", name="Compass"
+    )
+    second = reference_bible.store_image(
+        db_session, sheet=sheet, data=png_bytes(80, 80),
+        original_filename="compass.png", content_type="image/png",
+    )
+    shot = _shot(
+        db_session, sample_scene,
+        reference_asset_ids=[uploaded_plate.id, second.id],
+    )
+
+    selected = shot_conditioning.select_for_submission(
+        shot_conditioning.resolve(db_session, sample_project.id, shot), max_images=1
+    )
+
+    assert selected.submitted_images == []
+    assert any("multiple hand references" in problem for problem in selected.problems)
+
+
+def test_multi_reference_capability_submits_every_resolved_image_unchanged(
+    db_session: Session, sample_project: Project, sample_scene: Scene,
+    sample_character: Character, uploaded_plate, png_bytes,
+):
+    character_set = _approved_set(
+        db_session, sample_project.id, sample_character.id, png_bytes,
+        name="Mara", slots=["front", "full_body"],
+    )
+    shot = _shot(
+        db_session, sample_scene, character_set_ids=[character_set.id],
+        reference_asset_ids=[uploaded_plate.id],
+    )
+    resolved = shot_conditioning.resolve(db_session, sample_project.id, shot)
+
+    selected = shot_conditioning.select_for_submission(resolved, max_images=None)
+
+    assert [entry.image.id for entry in selected.submitted_images] == [
+        entry.image.id for entry in selected.images
+    ]
+    assert all(item["submitted"] for item in shot_conditioning.provenance(selected)["images"])
 
 
 # ---------------------------------------------------------------------------

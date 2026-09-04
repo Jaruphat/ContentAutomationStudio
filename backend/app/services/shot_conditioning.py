@@ -47,11 +47,13 @@ SOURCE_REFERENCE = "reference"
 
 @dataclass
 class ConditioningImage:
-    """One image a provider will be given, and where it came from."""
+    """One conceptual conditioning image and whether it will be submitted."""
 
     image: ReferenceImage
     source: str
     detail: dict[str, Any] = field(default_factory=dict)
+    submitted: bool = True
+    selection_reason: str = "workflow supports the complete conditioning set"
 
 
 @dataclass
@@ -72,6 +74,11 @@ class ShotConditioning:
     @property
     def image_count(self) -> int:
         return len(self.images)
+
+    @property
+    def submitted_images(self) -> list[ConditioningImage]:
+        """Only the images that cross the provider boundary."""
+        return [entry for entry in self.images if entry.submitted]
 
     def describe_sources(self) -> str:
         """A human summary of what made up the set, for blocker messages."""
@@ -281,6 +288,102 @@ def resolve(db: Session, project_id: str, shot: Shot) -> ShotConditioning:
     return resolved
 
 
+def select_for_submission(
+    resolved: ShotConditioning, *, max_images: int | None
+) -> ShotConditioning:
+    """Mark the conceptual images a provider route can truthfully submit."""
+    if resolved.problems:
+        for entry in resolved.images:
+            entry.submitted = False
+        return resolved
+
+    if max_images is None or len(resolved.images) <= max_images:
+        return resolved
+    if max_images != 1:
+        resolved.problems.append(
+            f"The selected generation route accepts at most {max_images} reference images."
+        )
+        for entry in resolved.images:
+            entry.submitted = False
+        return resolved
+
+    continuity = [
+        entry for entry in resolved.images if entry.source == SOURCE_CONTINUITY
+    ]
+    identities = [
+        entry for entry in resolved.images if entry.source == SOURCE_CHARACTER_SET
+    ]
+    references = [
+        entry for entry in resolved.images if entry.source == SOURCE_REFERENCE
+    ]
+
+    problem = ""
+    selected: ConditioningImage | None = None
+    if continuity:
+        if references:
+            problem = (
+                "The selected workflow accepts one reference image, but explicit "
+                "continuity conflicts with hand references. Remove the hand "
+                "references or use a multi-reference workflow."
+            )
+        else:
+            selected = continuity[0]
+            selected.selection_reason = "explicit continuity frame is the workflow input"
+    elif references:
+        if len(references) > 1:
+            problem = (
+                "The selected workflow accepts one reference image, but this shot "
+                "has multiple hand references. Remove the conflict or use a "
+                "multi-reference workflow."
+            )
+        elif identities:
+            problem = (
+                "The selected workflow accepts one reference image, but the bound "
+                "character set and hand reference are both required. Remove one "
+                "conditioning source or use a multi-reference workflow."
+            )
+        else:
+            selected = references[0]
+            selected.selection_reason = "sole hand reference"
+    elif identities:
+        set_ids = {
+            str(entry.detail.get("character_set_id") or "") for entry in identities
+        }
+        if len(set_ids) != 1:
+            problem = (
+                "The selected workflow accepts one reference image, but this shot "
+                "depends on multiple character sets without an explicit continuity "
+                "frame. Use a multi-reference workflow or render a continuity frame first."
+            )
+        else:
+            slot_priority = {"full_body": 0, "front": 1}
+            selected = min(
+                enumerate(identities),
+                key=lambda item: (
+                    slot_priority.get(
+                        str(item[1].detail.get("view_slot") or "").lower(), 2
+                    ),
+                    item[0],
+                ),
+            )[1]
+            slot = str(selected.detail.get("view_slot") or "")
+            selected.selection_reason = (
+                f"primary canonical character-set view ({slot} preferred)"
+                if slot in slot_priority
+                else "primary canonical character-set view (stable slot order)"
+            )
+
+    for entry in resolved.images:
+        entry.submitted = entry is selected
+        if not entry.submitted:
+            entry.selection_reason = (
+                "conceptual lineage dependency; not submitted to one-input workflow"
+            )
+    if problem:
+        resolved.problems.append(problem)
+    return resolved
+
+
 def provenance(resolved: ShotConditioning) -> dict[str, Any]:
     """The record a job carries of what it was actually conditioned on.
 
@@ -300,6 +403,8 @@ def provenance(resolved: ShotConditioning) -> dict[str, Any]:
                 "height": entry.image.height,
                 "source": entry.source,
                 "detail": dict(entry.detail),
+                "submitted": entry.submitted,
+                "selection_reason": entry.selection_reason,
             }
             for entry in resolved.images
         ]

@@ -339,3 +339,78 @@ async def test_queue_uploads_reference_before_payload_build(
     uploaded = job.reference_provenance["images"][0]["comfyui"]
     assert uploaded["workflow_value"] == f"cas/{job.id}/hero.png"
     assert uploaded["mapping"] == {"nodeId": "4", "field": "ckpt_name"}
+
+
+@pytest.mark.asyncio
+async def test_queue_uploads_only_the_reference_marked_submitted(
+    db_session, sample_shot, sample_workflow_json, tmp_path
+):
+    workflow = _workflow_with_reference(db_session, sample_workflow_json)
+    front = tmp_path / "front.png"
+    full_body = tmp_path / "full_body.png"
+    front.write_bytes(b"front")
+    full_body.write_bytes(b"full body")
+    job = GenerationJob(
+        id=str(uuid.uuid4()), shot_id=sample_shot.id, workflow_id=workflow.id,
+        parameter_map={job_payload.POSITIVE_PROMPT: "hero", job_payload.SEED: 5},
+        reference_provenance={
+            "images": [
+                {
+                    "image_id": "front", "file_path": str(front),
+                    "mime_type": "image/png", "submitted": False,
+                    "selection_reason": "conceptual identity dependency",
+                },
+                {
+                    "image_id": "full-body", "file_path": str(full_body),
+                    "mime_type": "image/png", "submitted": True,
+                    "selection_reason": "primary canonical character-set view",
+                },
+            ]
+        },
+        seed=5, status="Queued",
+    )
+    db_session.add(job)
+    db_session.commit()
+    uploaded_paths = []
+
+    class UploadProvider:
+        async def upload_reference_image(self, file_path, *, upload_name, mime_type):
+            uploaded_paths.append(file_path)
+            return {
+                "name": "full_body.png", "subfolder": f"cas/{job.id}",
+                "type": "input", "workflow_value": f"cas/{job.id}/full_body.png",
+            }
+
+    manager = QueueManager()
+    await manager._prepare_reference_inputs(db_session, job, UploadProvider())
+
+    assert uploaded_paths == [str(full_body)]
+    assert [item["submitted"] for item in job.reference_provenance["images"]] == [
+        False, True
+    ]
+    assert "comfyui" not in job.reference_provenance["images"][0]
+    assert job.reference_provenance["images"][1]["comfyui"]["workflow_value"] == (
+        f"cas/{job.id}/full_body.png"
+    )
+
+
+def test_provider_context_contains_only_physically_submitted_references(
+    db_session, sample_shot
+):
+    job = GenerationJob(
+        id=str(uuid.uuid4()), shot_id=sample_shot.id,
+        parameter_map={job_payload.POSITIVE_PROMPT: "hero", job_payload.SEED: 5},
+        reference_provenance={
+            "images": [
+                {"image_id": "front", "submitted": False},
+                {"image_id": "full-body", "submitted": True},
+            ]
+        },
+        seed=5, status="Queued",
+    )
+    db_session.add(job)
+    db_session.commit()
+
+    context = QueueManager()._job_context(db_session, job, sample_shot)
+
+    assert [item["image_id"] for item in context["reference_inputs"]] == ["full-body"]

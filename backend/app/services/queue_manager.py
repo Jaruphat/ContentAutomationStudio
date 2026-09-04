@@ -266,7 +266,10 @@ class QueueManager:
             if (
                 provider_id == media_providers.COMFYUI
                 and provider.requires_workflow_payload
-                and (job.reference_provenance or {}).get("images")
+                and any(
+                    isinstance(image, dict) and image.get("submitted", True)
+                    for image in (job.reference_provenance or {}).get("images", [])
+                )
             ):
                 await self._prepare_reference_inputs(db, job, provider)
 
@@ -547,7 +550,14 @@ class QueueManager:
         self, db: Session, job: GenerationJob, provider: Any
     ) -> None:
         """Upload a job's reference image and bind its returned ComfyUI name."""
-        images = list((job.reference_provenance or {}).get("images") or [])
+        conceptual_images = list(
+            (job.reference_provenance or {}).get("images") or []
+        )
+        images = [
+            image
+            for image in conceptual_images
+            if isinstance(image, dict) and image.get("submitted", True)
+        ]
         if not images:
             raise WorkflowValidationError(
                 "Reference image provenance is missing from the generation job"
@@ -580,7 +590,12 @@ class QueueManager:
         uploaded = {**uploaded, "mapping": dict(mapping)}
         image["comfyui"] = uploaded
         provenance = dict(job.reference_provenance or {})
-        provenance["images"] = [image]
+        provenance["images"] = [
+            image
+            if candidate is images[0]
+            else candidate
+            for candidate in conceptual_images
+        ]
         job.reference_provenance = provenance
         job.parameter_map = {
             **dict(job.parameter_map or {}),
@@ -721,7 +736,7 @@ class QueueManager:
             "reference_inputs": [
                 dict(image)
                 for image in (job.reference_provenance or {}).get("images", [])
-                if isinstance(image, dict)
+                if isinstance(image, dict) and image.get("submitted", True)
             ],
         }
         if shot:

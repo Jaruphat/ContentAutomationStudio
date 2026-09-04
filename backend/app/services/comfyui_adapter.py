@@ -70,6 +70,10 @@ class ComfyUIProvider(ABC):
     #: payload. Real instances do; the mock accepts logical values directly so
     #: the product flow can be exercised before H3 workflow JSON arrives.
     requires_workflow_payload: bool = True
+    #: Current referenceImage mappings bind one uploaded filename. A provider
+    #: or workflow adapter that maps a true multi-image input may override this
+    #: with ``None`` to preserve the complete conditioning set.
+    max_reference_images: int | None = 1
 
     @abstractmethod
     async def submit_job(

@@ -278,8 +278,19 @@ async def preflight_validation(project_id: str, db: Session = Depends(get_db)):
         plan = plans[shot.id]
 
         conditioning = shot_conditioning.resolve(db, project_id, shot)
+        shot_conditioning.select_for_submission(
+            conditioning,
+            max_images=(
+                queue_manager.provider.max_reference_images
+                if plan.provider_id == media_providers.COMFYUI
+                else None
+            ),
+        )
         shot_issues.extend(conditioning.problems)
-        if shot.generation_mode == "image-to-video" and not conditioning.images:
+        if (
+            shot.generation_mode == "image-to-video"
+            and not conditioning.submitted_images
+        ):
             shot_issues.append("Image-to-video requires a reference image")
         if shot.is_stale:
             shot_issues.append(
@@ -517,9 +528,20 @@ def start_generation(
                 "recurring prop continuity missing " + ", ".join(finding["missing"])
             )
         conditioning = shot_conditioning.resolve(db, project_id, shot)
+        shot_conditioning.select_for_submission(
+            conditioning,
+            max_images=(
+                queue_manager.provider.max_reference_images
+                if plan.provider_id == media_providers.COMFYUI
+                else None
+            ),
+        )
         references[shot.id] = conditioning
         shot_blockers.extend(conditioning.problems)
-        if shot.generation_mode == "image-to-video" and not conditioning.images:
+        if (
+            shot.generation_mode == "image-to-video"
+            and not conditioning.submitted_images
+        ):
             shot_blockers.append("Image-to-video requires a reference image.")
         if plan.provider_id == media_providers.COMFYUI and plan.workflow_id:
             workflow = db.query(Workflow).filter(Workflow.id == plan.workflow_id).first()
@@ -547,7 +569,7 @@ def start_generation(
                     "Reference-conditioned generation requires the "
                     "referenceImage workflow mapping."
                 )
-            elif len(conditioning.images) != 1:
+            elif len(conditioning.submitted_images) != 1:
                 shot_blockers.append(
                     "The selected workflow accepts exactly one reference image."
                 )

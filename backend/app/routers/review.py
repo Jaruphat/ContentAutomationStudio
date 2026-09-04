@@ -28,6 +28,7 @@ from app.services import (
     shot_conditioning,
     workflow_registry,
 )
+from app.services.queue_manager import queue_manager
 
 router = APIRouter(tags=["review"])
 
@@ -305,12 +306,20 @@ def regenerate_shot(
         raise HTTPException(status_code=409, detail=" ".join(plan.blockers))
 
     conditioning = shot_conditioning.resolve(db, project.id, shot)
+    shot_conditioning.select_for_submission(
+        conditioning,
+        max_images=(
+            queue_manager.provider.max_reference_images
+            if plan.provider_id == media_providers.COMFYUI
+            else None
+        ),
+    )
     if conditioning.problems:
         raise HTTPException(
             status_code=409,
             detail=" ".join(conditioning.problems),
         )
-    if shot.generation_mode == "image-to-video" and not conditioning.images:
+    if shot.generation_mode == "image-to-video" and not conditioning.submitted_images:
         raise HTTPException(
             status_code=409, detail="Image-to-video requires a reference image."
         )
@@ -356,7 +365,7 @@ def regenerate_shot(
                     "referenceImage workflow mapping."
                 ),
             )
-        if len(conditioning.images) != 1:
+        if len(conditioning.submitted_images) != 1:
             raise HTTPException(
                 status_code=409,
                 detail="The selected workflow accepts exactly one reference image.",

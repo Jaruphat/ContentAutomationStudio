@@ -12,7 +12,13 @@ import pytest
 from sqlalchemy.orm import Session
 
 from app.models import GenerationJob, Take, Workflow
-from app.services import job_payload, reference_bible, revisions, workflow_registry
+from app.services import (
+    character_sets,
+    job_payload,
+    reference_bible,
+    revisions,
+    workflow_registry,
+)
 
 
 @pytest.fixture()
@@ -305,6 +311,64 @@ class TestRegenerate:
         assert job["reference_sha256s"] == [image.sha256]
         assert job["reference_provenance"]["images"][0]["sha256"] == image.sha256
         assert db_session.query(Take).filter(Take.id == historical_take.id).count() == 1
+
+    def test_regenerate_uses_the_same_primary_canonical_view_as_generate(
+        self,
+        client,
+        db_session,
+        sample_project,
+        sample_character,
+        sample_shot,
+        sample_workflow_json,
+        png_bytes,
+    ):
+        record = workflow_registry.import_workflow(
+            raw_bytes=sample_workflow_json,
+            name="One-input canonical regeneration",
+            purpose="image",
+        )
+        workflow = Workflow(**record)
+        workflow.parameter_mapping = {
+            job_payload.POSITIVE_PROMPT: {"nodeId": "6", "field": "text"},
+            job_payload.SEED: {"nodeId": "3", "field": "seed"},
+            job_payload.REFERENCE_IMAGE: {"nodeId": "4", "field": "ckpt_name"},
+        }
+        workflow.output_mapping = [{"nodeId": "9", "type": "image"}]
+        db_session.add(workflow)
+        sample_project.default_image_workflow_id = workflow.id
+
+        character_set = character_sets.create_set(
+            db_session,
+            project_id=sample_project.id,
+            character_id=sample_character.id,
+            name="Mara",
+        )
+        version = character_sets.create_version(
+            db_session, character_set, slots=["front", "full_body"]
+        )
+        for index, view in enumerate(character_sets.list_views(db_session, version)):
+            character_sets.attach_view_image(
+                db_session,
+                view,
+                data=png_bytes(64 + index, 64),
+                content_type="image/png",
+                original_filename=f"{view.slot}.png",
+            )
+        character_sets.approve_version(db_session, version)
+        sample_shot.character_set_ids = [character_set.id]
+        db_session.commit()
+
+        response = client.post(f"/api/shots/{sample_shot.id}/regenerate")
+
+        assert response.status_code == 200, response.text
+        images = response.json()["reference_provenance"]["images"]
+        assert [item["detail"]["view_slot"] for item in images] == [
+            "front", "full_body"
+        ]
+        assert [item["submitted"] for item in images] == [False, True]
+        assert response.json()["character_set_sha256s"] == [
+            character_sets.canonical_digest(db_session, character_set)
+        ]
 
     def test_regenerate_refuses_current_reference_without_workflow_mapping(
         self,

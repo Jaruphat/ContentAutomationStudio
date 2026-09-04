@@ -3,7 +3,7 @@
 import os
 import uuid
 
-from app.models import GenerationJob, Take, Workflow
+from app.models import GenerationJob, Shot, Take, Workflow
 from app.services import (
     character_sets,
     continuity_frames,
@@ -13,7 +13,7 @@ from app.services import (
 )
 
 
-def _approved_set(db, project_id, character_id, png_bytes):
+def _approved_set(db, project_id, character_id, png_bytes, *, slots=None):
     character_set = character_sets.create_set(
         db,
         project_id=project_id,
@@ -21,18 +21,21 @@ def _approved_set(db, project_id, character_id, png_bytes):
         name="Mara",
         appearance="Silver hair",
     )
-    version = character_sets.create_version(db, character_set, slots=["front"])
-    view = character_sets.list_views(db, version)[0]
-    character_sets.attach_view_image(
-        db,
-        view,
-        data=png_bytes(64, 64),
-        content_type="image/png",
-        original_filename="front.png",
-        provenance={"provider_id": "mock", "seed": 7},
+    version = character_sets.create_version(
+        db, character_set, slots=slots or ["front"]
     )
+    views = character_sets.list_views(db, version)
+    for index, view in enumerate(views):
+        character_sets.attach_view_image(
+            db,
+            view,
+            data=png_bytes(64 + index, 64),
+            content_type="image/png",
+            original_filename=f"{view.slot}.png",
+            provenance={"provider_id": "mock", "seed": 7 + index},
+        )
     character_sets.approve_version(db, version)
-    return character_set, view
+    return character_set, views[0]
 
 
 def test_preflight_and_generate_block_a_bound_set_with_no_approved_version(
@@ -101,6 +104,93 @@ def test_generate_records_canonical_images_and_exact_identity_lineage(
     assert image["detail"]["character_set_id"] == character_set.id
     assert image["detail"]["character_set_version_id"]
     assert image["detail"]["view_slot"] == "front"
+
+
+def test_real_e2e_scene_topology_preflights_and_queues_one_primary_view(
+    client, db_session, sample_project, sample_character, sample_shot, png_bytes,
+    sample_workflow_json,
+):
+    character_set, _ = _approved_set(
+        db_session,
+        sample_project.id,
+        sample_character.id,
+        png_bytes,
+        slots=["front", "full_body"],
+    )
+    record = workflow_registry.import_workflow(
+        raw_bytes=sample_workflow_json, name="Boogu one-input edit", purpose="image"
+    )
+    workflow = Workflow(**record)
+    workflow.parameter_mapping = {
+        job_payload.POSITIVE_PROMPT: {"nodeId": "6", "field": "text"},
+        job_payload.SEED: {"nodeId": "3", "field": "seed"},
+        job_payload.REFERENCE_IMAGE: {"nodeId": "4", "field": "ckpt_name"},
+    }
+    workflow.output_mapping = [{"nodeId": "9", "type": "image"}]
+    db_session.add(workflow)
+    sample_shot.workflow_preset_id = workflow.id
+    sample_shot.character_set_ids = [character_set.id]
+    sample_shot.status = "Ready"
+    db_session.commit()
+
+    preflight = client.get(f"/api/projects/{sample_project.id}/preflight").json()
+    assert not any(
+        issue["shot_id"] == sample_shot.id for issue in preflight["issues"]
+    ), preflight
+
+    response = client.post(
+        f"/api/projects/{sample_project.id}/generate",
+        json={"shot_ids": [sample_shot.id]},
+    )
+    assert response.status_code == 200, response.text
+    job = response.json()[0]
+    images = job["reference_provenance"]["images"]
+    assert [item["detail"]["view_slot"] for item in images] == ["front", "full_body"]
+    assert [item["submitted"] for item in images] == [False, True]
+    assert job["character_set_sha256s"] == [
+        character_sets.canonical_digest(db_session, character_set)
+    ]
+
+
+def test_preflight_and_generate_keep_multiple_character_sets_as_an_explicit_blocker(
+    client, db_session, sample_project, sample_character, sample_shot, png_bytes,
+    sample_workflow_json,
+):
+    first, _ = _approved_set(
+        db_session, sample_project.id, sample_character.id, png_bytes
+    )
+    second, _ = _approved_set(
+        db_session, sample_project.id, None, png_bytes
+    )
+    record = workflow_registry.import_workflow(
+        raw_bytes=sample_workflow_json, name="One-input edit", purpose="image"
+    )
+    workflow = Workflow(**record)
+    workflow.parameter_mapping = {
+        job_payload.POSITIVE_PROMPT: {"nodeId": "6", "field": "text"},
+        job_payload.SEED: {"nodeId": "3", "field": "seed"},
+        job_payload.REFERENCE_IMAGE: {"nodeId": "4", "field": "ckpt_name"},
+    }
+    workflow.output_mapping = [{"nodeId": "9", "type": "image"}]
+    db_session.add(workflow)
+    sample_shot.workflow_preset_id = workflow.id
+    sample_shot.character_set_ids = [first.id, second.id]
+    sample_shot.status = "Ready"
+    db_session.commit()
+
+    preflight = client.get(f"/api/projects/{sample_project.id}/preflight").json()
+    issues = next(
+        issue for issue in preflight["issues"] if issue["shot_id"] == sample_shot.id
+    )
+    assert any("multiple character sets" in issue for issue in issues["issues"])
+
+    response = client.post(
+        f"/api/projects/{sample_project.id}/generate",
+        json={"shot_ids": [sample_shot.id]},
+    )
+    assert response.status_code == 409, response.text
+    assert "multiple character sets" in response.json()["detail"]
+    assert db_session.query(GenerationJob).count() == 0
 
 
 def test_only_shots_bound_to_a_reapproved_set_are_invalidated(
@@ -216,7 +306,7 @@ def test_generate_records_the_bound_end_frame_as_the_i2v_provider_input(
 
 def test_generate_uses_the_exact_approved_scene_image_as_first_i2v_reference(
     client, db_session, sample_project, sample_shot, sample_scene,
-    sample_workflow_json, tmp_path, png_bytes,
+    sample_character, sample_workflow_json, tmp_path, png_bytes,
 ):
     path = os.path.join(str(tmp_path), "scene-image.png")
     data = png_bytes(96, 64)
@@ -234,6 +324,13 @@ def test_generate_uses_the_exact_approved_scene_image_as_first_i2v_reference(
     db_session.add(take)
     db_session.commit()
     frame = continuity_frames.extract_frame(db_session, take)
+    character_set, _ = _approved_set(
+        db_session,
+        sample_project.id,
+        sample_character.id,
+        png_bytes,
+        slots=["front", "full_body"],
+    )
 
     next_shot = client.post(
         f"/api/projects/{sample_project.id}/scenes/{sample_scene.id}/shots",
@@ -266,6 +363,9 @@ def test_generate_uses_the_exact_approved_scene_image_as_first_i2v_reference(
         json={"source_take_id": take.id},
     )
     assert bound.status_code == 200, bound.text
+    next_shot_row = db_session.query(Shot).filter(Shot.id == next_shot["id"]).one()
+    next_shot_row.character_set_ids = [character_set.id]
+    db_session.commit()
     response = client.post(
         f"/api/projects/{sample_project.id}/generate",
         json={"shot_ids": [next_shot["id"]]},
@@ -274,9 +374,17 @@ def test_generate_uses_the_exact_approved_scene_image_as_first_i2v_reference(
     job = response.json()[0]
     assert job["continuity_source_take_id"] == take.id
     assert job["continuity_source_sha256"] == frame.sha256
-    first = job["reference_provenance"]["images"][0]
+    images = job["reference_provenance"]["images"]
+    first = images[0]
     assert first["image_id"] == frame.reference_image_id
     assert first["sha256"] == frame.sha256
     assert first["source"] == "continuity"
     assert first["detail"]["source_type"] == "approved_image_take"
     assert first["detail"]["selection"] == "source_image"
+    assert [item["submitted"] for item in images] == [True, False, False]
+    assert [item["detail"]["view_slot"] for item in images[1:]] == [
+        "front", "full_body"
+    ]
+    assert job["character_set_sha256s"] == [
+        character_sets.canonical_digest(db_session, character_set)
+    ]

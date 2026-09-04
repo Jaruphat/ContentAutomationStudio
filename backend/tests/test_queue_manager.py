@@ -223,7 +223,20 @@ class TestExecuteJob:
             content_sha256="c" * 64,
             reference_image_ids=["image-1"],
             reference_sha256s=["d" * 64],
-            reference_provenance={"images": [{"image_id": "image-1"}]},
+            reference_provenance={
+                "images": [
+                    {
+                        "image_id": "image-1",
+                        "submitted": True,
+                        "selection_reason": "sole hand reference",
+                    },
+                    {
+                        "image_id": "identity-1",
+                        "submitted": False,
+                        "selection_reason": "conceptual lineage dependency",
+                    },
+                ]
+            },
             character_set_ids=["set-1"],
             character_set_sha256s=["e" * 64],
             continuity_source_take_id="source-take",
