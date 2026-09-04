@@ -69,6 +69,19 @@ def _resolve_workflow(
             f"Workflow '{workflow.name}' has no source JSON or no parameter "
             f"mapping. Map its nodes before generating a character set."
         )
+    if job_payload.REFERENCE_IMAGE in (workflow.parameter_mapping or {}):
+        # A sheet is what identity comes from, so it has no reference to give.
+        # Injection only replaces the values it is handed, which would leave
+        # this workflow conditioning every canonical view on whichever image
+        # was baked into the exported graph - a different person, reported as
+        # success. Refuse instead of generating the wrong identity quietly.
+        raise CharacterSetGenerationError(
+            f"Workflow '{workflow.name}' expects a reference image, so it edits "
+            f"an existing picture rather than establishing one. A character "
+            f"sheet has no reference to supply and would inherit whichever "
+            f"image is baked into the workflow. Choose a text-to-image "
+            f"workflow for this character set."
+        )
     return workflow
 
 

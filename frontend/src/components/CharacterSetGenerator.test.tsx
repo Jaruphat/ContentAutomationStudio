@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import CharacterSetGenerator from "./CharacterSetGenerator";
-import type { CharacterSet, MediaProviderCatalogue } from "../types";
+import type { CharacterSet, MediaProviderCatalogue, Workflow } from "../types";
 
 const set: CharacterSet = {
   id: "set-1", project_id: "project-1", character_id: null, reference_sheet_id: "sheet-1",
@@ -41,10 +41,30 @@ const catalogue: MediaProviderCatalogue = {
   ],
 };
 
+const workflow = (over: Partial<Workflow>): Workflow => ({
+  id: "wf", name: "wf", purpose: "image", source_json_path: "wf.json",
+  source_format: "api", sha256_hash: "h", version: "1", required_models: [],
+  required_custom_nodes: [], parameter_mapping: {}, output_mapping: [],
+  tested_comfyui_version: "0.34.0", validation_status: "valid",
+  created_at: "2026-09-04T00:00:00Z", updated_at: "2026-09-04T00:00:00Z", ...over,
+});
+
+const workflowList: Workflow[] = [
+  workflow({ id: "wf-t2i", name: "Z-Image Turbo T2I",
+    parameter_mapping: { positivePrompt: {}, seed: {}, width: {}, height: {} } }),
+  workflow({ id: "wf-edit", name: "Boogu Image Edit",
+    parameter_mapping: { positivePrompt: {}, seed: {}, referenceImage: {} } }),
+  workflow({ id: "wf-video", name: "H3 Video T2V", purpose: "text-to-video",
+    parameter_mapping: { positivePrompt: {}, seed: {} } }),
+  workflow({ id: "wf-ui", name: "Z-Image Turbo (UI export)", source_format: "ui",
+    parameter_mapping: { positivePrompt: {}, seed: {} } }),
+];
+
 function renderGenerator() {
   const client = new QueryClient({ defaultOptions: { queries: { enabled: false } } });
   client.setQueryData(["character-sets", "project-1"], [set]);
   client.setQueryData(["media-providers"], catalogue);
+  client.setQueryData(["workflows"], workflowList);
   return renderToStaticMarkup(<QueryClientProvider client={client}><CharacterSetGenerator projectId="project-1" /></QueryClientProvider>);
 }
 
@@ -67,5 +87,17 @@ describe("CharacterSetGenerator", () => {
     expect(html).toContain("Seed: 42");
     expect(html).toContain("SHA: abc123");
     expect(html).toContain("Unapprove canonical");
+  });
+
+  it("offers only the workflows that can actually establish an identity", () => {
+    const html = renderGenerator();
+    // The sheet is what identity comes from, so it has no reference to give.
+    // Offering an edit workflow here would let the user pick a run whose views
+    // are conditioned on whatever image the exported graph happens to carry.
+    expect(html).toContain("Character sheet workflow");
+    expect(html).toContain("Z-Image Turbo T2I");
+    expect(html).not.toContain("Boogu Image Edit");
+    expect(html).not.toContain("H3 Video T2V");
+    expect(html).not.toContain("Z-Image Turbo (UI export)");
   });
 });

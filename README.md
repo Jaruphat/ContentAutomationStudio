@@ -179,6 +179,31 @@ CAS_MOCK_QUEUED_SEC=0.2 CAS_MOCK_RUNNING_SEC=0.3 python -m uvicorn app.main:app 
 python test_e2e.py
 ```
 
+### Character continuity end-to-end (requires the backend and a live ComfyUI)
+
+Walks the identity and hand-off chain once against real generation: character
+set -> generated canonical views -> approved version -> bound to two shots ->
+reference-conditioned scene image -> approved take -> image-to-video ->
+approved clip -> extracted end frame -> bound as the next shot's continuity
+source -> that shot generated -> timeline -> render -> exports.
+
+It asserts what reached the provider, not only that each call returned 200:
+that a canonical view was really submitted, that withdrawing the source take's
+approval really blocks the dependent shot, and that the job's lineage names the
+exact frame bytes it was conditioned on. Every response is written to
+`backend/data/e2e_evidence/character-continuity/`.
+
+```bash
+# Start the backend with the real provider first:
+COMFYUI_PROVIDER=real COMFYUI_URL=http://127.0.0.1:8000   python -m uvicorn app.main:app --port 8001
+
+python scripts/e2e_character_continuity.py
+```
+
+The registered workflow ids default to this workstation's; override them with
+`CAS_E2E_WF_T2I`, `CAS_E2E_WF_EDIT` and `CAS_E2E_WF_I2V`. A full run drives the
+GPU for roughly 20 minutes.
+
 ---
 
 ## Project Structure
@@ -308,6 +333,8 @@ This application implements the full vertical slice described in the PRD:
 13. **Job Provenance** -- Every submission stores the exact ComfyUI graph it sent under `data/snapshots/` plus the SHA-256 of the registered workflow, so a job stays reproducible after a workflow is re-imported with different node IDs.
 14. **Categorised Errors** -- Failures are classified per PRD 10.5 (ConnectionError, OutOfMemoryError, MissingModelError, MissingCustomNodeError, GenerationTimeout, OutputMissingError, MediaValidationError, WorkflowValidationError). Only transient categories are retried; OOM and missing dependencies fail once with a suggested action.
 15. **Export** -- Export Storyboard (JSON, CSV, Markdown), Prompts, Generation Manifest (with provenance), Timeline Manifest, and full Project Archive.
+16. **Character Set Generator** -- Define a character's identity, proportions, wardrobe and palette once, then generate a versioned canonical sheet (front, three-quarter, side, back, full body, expression). Each version records its provider, model, workflow, seed and per-view SHA-256. Exactly one version is explicitly approved as canonical, and editing the identity text marks that version out of date rather than silently regenerating it -- regenerating a sheet costs time and money, so it stays the user's decision. Only a text-to-image workflow can produce a sheet: a reference-conditioned graph would keep whichever image was baked into its export and condition every canonical view on a stranger, so those workflows are excluded from the picker and refused by the backend.
+17. **Canonical Conditioning and Shot Continuity** -- Bind approved character sets to individual shots, so the canonical views reach the provider as real reference inputs, not as words in a prompt. A shot can additionally continue from an explicitly chosen source: an approved scene image, or the true end frame extracted with FFmpeg from a previous approved video take. Nothing is ever chained automatically. The bound frame's timestamp, dimensions, SHA-256 and source take are stored and shown, and the frame can be re-extracted or cleared. Job and take lineage records both the character-set hashes and the continuity frame hash, so preflight and generation refuse a shot whose source has lost approval or gone stale, naming what to do about it. Where a workflow accepts only one reference image, the run says which image it actually submitted and why, instead of implying it used them all.
 
 ### UX Layout
 

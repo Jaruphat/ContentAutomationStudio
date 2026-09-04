@@ -86,8 +86,11 @@ const generateChecks = await evaluate(`(() => {
   const text = document.body.innerText;
   return {
     tabs: ['Current', 'Failed', 'Completed', 'History'].every(x => text.includes(x)),
-    namedShots: text.includes('A Friendly Challenge') && text.includes('Shot 2 -'),
-    runCounts: text.includes('11 completed') && text.includes('0 queued'),
+    // Structural, not fixture-bound: these once named one sample project and
+    // silently went false for every other one, reporting a regression that was
+    // only a different project being selected.
+    namedShots: /Shot \d+ - \S/.test(text),
+    runCounts: /\d+ completed/.test(text) && /\d+ queued/.test(text),
     reviewAction: !!document.querySelector('[aria-label="Production stages"] button[title="Review"]'),
     noPageError: !text.includes('Something went wrong'),
     excerpt: text.slice(0, 3000)

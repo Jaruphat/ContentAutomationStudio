@@ -246,3 +246,62 @@ def test_a_registered_workflow_is_node_mapped_before_submission(
     assert payload["4"]["inputs"]["seed"] == 99
     view = character_sets.list_views(db_session, version)[0]
     assert view.workflow_id == workflow.id
+
+
+def test_a_reference_conditioned_workflow_is_refused_for_a_character_sheet(
+    db_session: Session, character_set, written_png, tmp_path
+):
+    """A sheet has no reference to give, so an edit workflow must be refused.
+
+    Character-set generation supplies a prompt, seed and size - never a
+    reference image. Handing those values to a workflow whose graph expects one
+    leaves the reference node holding whatever image was baked into the
+    exported JSON, and every canonical view would then be conditioned on a
+    stranger while reporting success. Refusing is the only honest outcome:
+    silently generating the wrong identity is worse than generating nothing.
+    """
+    from app.services import character_set_generation
+
+    source = os.path.join(str(tmp_path), "edit-workflow.json")
+    with open(source, "w", encoding="utf-8") as f:
+        f.write(
+            '{"3": {"class_type": "CLIPTextEncode", "inputs": {"text": ""}},'
+            ' "4": {"class_type": "KSampler", "inputs": {"seed": 0}},'
+            ' "9": {"class_type": "LoadImage",'
+            ' "inputs": {"image": "someone_else.png"}}}'
+        )
+    workflow = Workflow(
+        id="wf-charset-edit",
+        name="Boogu Image Edit",
+        purpose="image",
+        source_json_path=source,
+        source_format="api",
+        validation_status="valid",
+        parameter_mapping={
+            "positivePrompt": {"nodeId": "3", "field": "text"},
+            "seed": {"nodeId": "4", "field": "seed"},
+            "referenceImage": {"nodeId": "9", "field": "image"},
+        },
+        output_mapping=[],
+    )
+    db_session.add(workflow)
+    db_session.commit()
+
+    class StrictProvider(RecordingProvider):
+        requires_workflow_payload = True
+
+    version = character_sets.create_version(
+        db_session, character_set, slots=["front"],
+    )
+    provider = StrictProvider(written_png)
+    with pytest.raises(character_set_generation.CharacterSetGenerationError) as exc:
+        asyncio.run(character_set_generation.generate_version(
+            db_session, version, provider=provider,
+            provider_id="comfyui", model="workflow",
+            workflow_id="wf-charset-edit",
+        ))
+
+    message = str(exc.value)
+    assert "reference" in message.lower()
+    assert "Boogu Image Edit" in message, "the user has to be told which workflow"
+    assert provider.submissions == [], "nothing may reach the GPU"
