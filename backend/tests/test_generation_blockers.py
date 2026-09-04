@@ -10,7 +10,6 @@ recorded shot list does not describe what it did.
 """
 
 import os
-import uuid
 
 from app.routers import generation as generation_router
 from app.models import GenerationJob, GenerationRun, Shot, Workflow
