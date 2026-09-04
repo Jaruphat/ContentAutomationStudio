@@ -388,3 +388,38 @@ def test_generate_uses_the_exact_approved_scene_image_as_first_i2v_reference(
     assert job["character_set_sha256s"] == [
         character_sets.canonical_digest(db_session, character_set)
     ]
+
+def test_an_i2v_shot_refuses_to_animate_the_canonical_identity_sheet(
+    client, db_session, sample_project, sample_character, sample_shot, png_bytes,
+):
+    """The frame an image-to-video run animates is never a character sheet.
+
+    For image-to-video the single submitted image is not conditioning, it is
+    the first frame of the clip. A canonical view is a studio portrait on a
+    plain backdrop, so animating it produces a shot of the reference sheet
+    instead of the scene - and the run reports success, because every hash and
+    lineage entry is correct. Only an explicitly chosen start frame (this
+    shot's own approved image, or a bound continuity frame) can be the one
+    that moves, so with none bound the run is refused rather than guessed.
+    """
+    character_set, _view = _approved_set(
+        db_session, sample_project.id, sample_character.id, png_bytes
+    )
+    sample_shot.character_set_ids = [character_set.id]
+    sample_shot.generation_mode = "image-to-video"
+    sample_shot.status = "Ready"
+    db_session.commit()
+
+    preflight = client.get(f"/api/projects/{sample_project.id}/preflight").json()
+    issues = next(
+        item for item in preflight["issues"] if item["shot_id"] == sample_shot.id
+    )
+    assert any("no start frame" in text for text in issues["issues"]), issues["issues"]
+
+    response = client.post(
+        f"/api/projects/{sample_project.id}/generate",
+        json={"shot_ids": [sample_shot.id]},
+    )
+    assert response.status_code == 409, response.text
+    assert "no start frame" in response.json()["detail"]
+    assert db_session.query(GenerationJob).count() == 0

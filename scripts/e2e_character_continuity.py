@@ -5,9 +5,14 @@ ComfyUI. It walks the whole promised path once:
 
     character set -> generated canonical views -> approved version
       -> bound to shots -> reference-conditioned scene image -> approved take
-      -> image-to-video -> approved video take -> extracted end frame
+      -> captured as a clip shot's start frame -> image-to-video
+      -> approved video take -> extracted end frame
       -> bound as the next shot's continuity source -> that shot generated
       -> timeline -> render -> exports
+
+A clip is its own shot here rather than a mode toggle on the image shot: a
+shot cannot continue from its own take, so the image that a clip animates is
+always one an earlier shot produced and someone approved.
 
 and asserts the claims that matter at each step, rather than only that the
 call returned 200: that the canonical view really reached the provider, that
@@ -257,7 +262,7 @@ def main() -> int:
     run.check("version approved", approved_version.get("status") == "Approved", approved_version.get("status", ""))
 
     # ------------------------------------------------------------------
-    run.stage("3. Scene and two narratively linked shots")
+    run.stage("3. Scene, and three narratively linked shots")
     scene = run.call(
         "POST",
         f"/api/projects/{pid}/scenes",
@@ -288,12 +293,32 @@ def main() -> int:
         },
         expect=201,
     )
+    shot_v = run.call(
+        "POST",
+        f"/api/projects/{pid}/scenes/{sid}/shots",
+        name="shot-v",
+        json={
+            "order": 2,
+            "shot_type": "medium",
+            "subject": "Mai the courier",
+            "action": "steadies herself against the wind",
+            "environment": "windy rooftop at dusk",
+            "planned_duration_sec": 5.0,
+            "generation_mode": "image-to-video",
+            "video_prompt": "slow push in as she steadies herself against the wind",
+            "character_set_ids": [set_id],
+            "workflow_preset_id": WF_I2V,
+            "image_provider_id": "comfyui",
+            "image_model": "workflow",
+        },
+        expect=201,
+    )
     shot_b = run.call(
         "POST",
         f"/api/projects/{pid}/scenes/{sid}/shots",
         name="shot-b",
         json={
-            "order": 2,
+            "order": 3,
             "shot_type": "medium",
             "subject": "Mai the courier",
             "action": "turns to face the waiting client",
@@ -309,13 +334,30 @@ def main() -> int:
         expect=201,
     )
     run.check("shot A bound to the character set", shot_a.get("character_set_ids") == [set_id], str(shot_a.get("character_set_ids")))
+    run.check("clip shot bound to the character set", shot_v.get("character_set_ids") == [set_id], str(shot_v.get("character_set_ids")))
     run.check("shot B bound to the character set", shot_b.get("character_set_ids") == [set_id], str(shot_b.get("character_set_ids")))
 
     # ------------------------------------------------------------------
     run.stage("4. Shot A: canonical identity reaches the provider")
     preflight = run.call("GET", f"/api/projects/{pid}/preflight", name="preflight-a")
-    blocking = [entry for entry in preflight.get("issues", []) if entry.get("issues")]
-    run.check("preflight clean before generation", not blocking, json.dumps(blocking)[:600])
+    blocking = {
+        entry["shot_id"]: entry["issues"]
+        for entry in preflight.get("issues", [])
+        if entry.get("issues")
+    }
+    # The clip shot is legitimately blocked here and stays blocked until shot A
+    # has produced an image someone approved. Preflight reporting it as ready
+    # would be the lie; naming the missing start frame is the point.
+    run.check(
+        "the image shots are ready to generate",
+        shot_a["id"] not in blocking and shot_b["id"] not in blocking,
+        json.dumps(blocking)[:600],
+    )
+    run.check(
+        "the clip shot is blocked until its start frame exists",
+        any("no start frame" in issue for issue in blocking.get(shot_v["id"], [])),
+        json.dumps(blocking)[:600],
+    )
 
     jobs = run.call(
         "POST",
@@ -359,28 +401,83 @@ def main() -> int:
     run.check("shot A take approved", take_a["review_status"] == "Approved", take_a["review_status"])
 
     # ------------------------------------------------------------------
-    run.stage("5. Shot A image -> video, then approve the clip")
-    run.call(
-        "PUT",
-        f"/api/projects/{pid}/scenes/{sid}/shots/{shot_a['id']}",
-        name="shot-a-to-i2v",
-        json={"generation_mode": "image-to-video", "workflow_preset_id": WF_I2V},
+    run.stage("5. The clip shot animates shot A's approved image")
+    # An image-to-video run animates the image it is handed. With only the
+    # character set bound, that image would be a studio portrait on a plain
+    # backdrop, and the clip would show the reference sheet rather than the
+    # scene - while every hash still checked out. The start frame is a choice.
+    refused = run.call(
+        "POST",
+        f"/api/projects/{pid}/generate",
+        name="generate-video-refused",
+        json={"shot_ids": [shot_v["id"]], "confirm_paid_generation": False},
+        expect=(400, 409, 422),
     )
+    run.check(
+        "an i2v shot with no start frame is refused, not guessed",
+        "no start frame" in json.dumps(refused),
+        json.dumps(refused)[:400],
+    )
+
+    # Binding names a frame that exists now, so the approved image is captured
+    # before it can be selected - the same order the UI's control uses.
+    start_frame = run.call(
+        "POST",
+        f"/api/projects/{pid}/takes/{take_a['id']}/continuity-frame",
+        name="start-frame-captured",
+        json={},
+        expect=(200, 201),
+    )
+    run.check(
+        "the approved scene image is captured as a start-frame source",
+        start_frame.get("source_type") == "approved_image_take",
+        json.dumps(start_frame)[:400],
+    )
+    bound_start = run.call(
+        "PUT",
+        f"/api/projects/{pid}/scenes/{sid}/shots/{shot_v['id']}/continuity",
+        name="start-frame-bound",
+        json={"source_take_id": take_a["id"]},
+    )
+    run.check(
+        "the clip shot starts from shot A's approved image",
+        bound_start.get("source_take_id") == take_a["id"] and not bound_start.get("problems"),
+        json.dumps(bound_start)[:400],
+    )
+
     video_jobs = run.call(
         "POST",
         f"/api/projects/{pid}/generate",
-        name="generate-a-video",
-        json={"shot_ids": [shot_a["id"]], "confirm_paid_generation": False},
+        name="generate-video",
+        json={"shot_ids": [shot_v["id"]], "confirm_paid_generation": False},
     )
     settled_video = wait_for_jobs(run, pid, [j["id"] for j in video_jobs], budget_sec=args.video_budget)
-    run.record("jobs-a-video-settled", settled_video)
+    run.record("jobs-video-settled", settled_video)
     run.check(
         "image-to-video job completed",
         all(j["status"] == "Completed" for j in settled_video),
         json.dumps([{"status": j["status"], "error": j.get("error_message")} for j in settled_video]),
     )
 
-    video_take = latest_take(run, shot_a["id"])
+    video_job = settled_video[0]
+    submitted_video = [
+        img
+        for img in (video_job.get("reference_provenance") or {}).get("images", [])
+        if img.get("submitted")
+    ]
+    run.check(
+        "the clip animates the approved scene image, never the character sheet",
+        any(img.get("source") == "continuity" for img in submitted_video)
+        and not any(img.get("source") == "character_set" for img in submitted_video),
+        json.dumps((video_job.get("reference_provenance") or {}).get("images", []))[:800],
+    )
+    run.check(
+        "the animated frame is byte-for-byte shot A's approved image",
+        video_job.get("continuity_source_sha256") == start_frame.get("sha256"),
+        f"job={video_job.get('continuity_source_sha256')} frame={start_frame.get('sha256')}",
+    )
+
+    video_take = latest_take(run, shot_v["id"])
     run.check("video take produced a clip", str(video_take.get("file_path", "")).lower().endswith((".mp4", ".webm")), str(video_take.get("file_path")))
     video_take = approve_take(run, video_take["id"], "video-take-approved")
 
@@ -415,7 +512,7 @@ def main() -> int:
     )
     run.check("shot B bound to the source take", status.get("source_take_id") == video_take["id"], str(status.get("source_take_id")))
     run.check("binding reports no problems", not status.get("problems"), json.dumps(status.get("problems")))
-    run.check("binding names its source shot", status.get("source_shot_id") == shot_a["id"], str(status.get("source_shot_id")))
+    run.check("binding names its source shot", status.get("source_shot_id") == shot_v["id"], str(status.get("source_shot_id")))
 
     # Negative case: withdraw approval and the dependent shot must be blocked.
     run.call("POST", f"/api/takes/{video_take['id']}/reject", name="video-take-rejected", json={"reason": "e2e gate probe"})
@@ -574,6 +671,7 @@ def main() -> int:
         "character_set_id": set_id,
         "approved_version_id": version_id,
         "shot_a": shot_a["id"],
+        "shot_v": shot_v["id"],
         "shot_b": shot_b["id"],
         "video_take_id": video_take["id"],
         "continuity_frame_sha256": frame.get("sha256"),

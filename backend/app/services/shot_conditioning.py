@@ -269,6 +269,24 @@ def resolve(db: Session, project_id: str, shot: Shot) -> ShotConditioning:
     resolved.reference_image_ids = [image.id for image in reference_images]
     resolved.reference_sha256s = [image.sha256 or "" for image in reference_images]
 
+    # For image-to-video the leading image is not conditioning, it is the frame
+    # that moves. A hand-attached plate is a picture someone chose for this
+    # shot, so it can be that frame. A canonical view cannot: it is a studio
+    # portrait on a plain backdrop, and animating it yields a clip of the
+    # reference sheet instead of the scene - with every hash and lineage entry
+    # still correct, so nothing reports the substitution. Left as the only
+    # candidate, it is refused and the start frame is asked for instead.
+    if (shot.generation_mode or "").lower() == "image-to-video" \
+            and continuity_entry is None \
+            and identity_entries and not reference_images:
+        resolved.problems.append(
+            "This image-to-video shot has no start frame, and a canonical "
+            "character view cannot be one - animating it would produce a clip "
+            "of the character sheet rather than the scene. Under Explicit shot "
+            "continuity, pick this shot's approved scene image or a previous "
+            "approved video end frame."
+        )
+
     # Nothing is offered to a provider while any part of the set is refused:
     # a partially conditioned render is a different shot, not a degraded one.
     if resolved.problems:
