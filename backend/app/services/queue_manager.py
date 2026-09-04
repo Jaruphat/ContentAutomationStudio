@@ -549,7 +549,12 @@ class QueueManager:
     async def _prepare_reference_inputs(
         self, db: Session, job: GenerationJob, provider: Any
     ) -> None:
-        """Upload a job's reference image and bind its returned ComfyUI name."""
+        """Upload a job's reference images and bind each to its own slot.
+
+        Slots are filled in the order conditioning resolved them, so the image
+        the graph treats as primary - a start frame, before identity - is the
+        one that lands in the first input.
+        """
         conceptual_images = list(
             (job.reference_provenance or {}).get("images") or []
         )
@@ -562,45 +567,51 @@ class QueueManager:
             raise WorkflowValidationError(
                 "Reference image provenance is missing from the generation job"
             )
-        if len(images) != 1:
-            raise WorkflowValidationError(
-                "This workflow mapping accepts exactly one reference image"
-            )
         workflow = db.query(Workflow).filter(Workflow.id == job.workflow_id).first()
-        mapping = (workflow.parameter_mapping or {}).get(
-            job_payload.REFERENCE_IMAGE
-        ) if workflow else None
-        if not mapping:
+        parameter_mapping = (workflow.parameter_mapping or {}) if workflow else {}
+        capacity = job_payload.reference_capacity(parameter_mapping)
+        if not capacity:
             raise WorkflowValidationError(
                 "Workflow is missing the referenceImage mapping"
             )
-        image = dict(images[0])
-        file_path = str(image.get("file_path") or "")
-        if not file_path or not os.path.isfile(file_path):
+        if len(images) > capacity:
+            # Selection should already have trimmed to capacity. Reaching here
+            # means the two disagree, and submitting anyway would render a shot
+            # conditioned differently from the one its lineage describes.
             raise WorkflowValidationError(
-                f"Reference image file is missing: {file_path or image.get('image_id')}"
+                f"This workflow mapping accepts {capacity} reference image(s), "
+                f"but {len(images)} were marked for submission"
             )
-        extension = os.path.splitext(file_path)[1].lower()
-        upload_name = f"cas/{job.id}/{image.get('image_id')}{extension}"
-        uploaded = await provider.upload_reference_image(
-            file_path,
-            upload_name=upload_name,
-            mime_type=str(image.get("mime_type") or "application/octet-stream"),
-        )
-        uploaded = {**uploaded, "mapping": dict(mapping)}
-        image["comfyui"] = uploaded
+
+        uploads: dict[int, dict[str, Any]] = {}
+        parameter_values: dict[str, Any] = {}
+        for index, original in enumerate(images):
+            image = dict(original)
+            file_path = str(image.get("file_path") or "")
+            if not file_path or not os.path.isfile(file_path):
+                raise WorkflowValidationError(
+                    f"Reference image file is missing: "
+                    f"{file_path or image.get('image_id')}"
+                )
+            field_name = job_payload.reference_image_field(index)
+            mapping = parameter_mapping.get(field_name)
+            extension = os.path.splitext(file_path)[1].lower()
+            upload_name = f"cas/{job.id}/{image.get('image_id')}{extension}"
+            uploaded = await provider.upload_reference_image(
+                file_path,
+                upload_name=upload_name,
+                mime_type=str(image.get("mime_type") or "application/octet-stream"),
+            )
+            image["comfyui"] = {**uploaded, "mapping": dict(mapping or {})}
+            uploads[id(original)] = image
+            parameter_values[field_name] = uploaded["workflow_value"]
+
         provenance = dict(job.reference_provenance or {})
         provenance["images"] = [
-            image
-            if candidate is images[0]
-            else candidate
-            for candidate in conceptual_images
+            uploads.get(id(candidate), candidate) for candidate in conceptual_images
         ]
         job.reference_provenance = provenance
-        job.parameter_map = {
-            **dict(job.parameter_map or {}),
-            job_payload.REFERENCE_IMAGE: uploaded["workflow_value"],
-        }
+        job.parameter_map = {**dict(job.parameter_map or {}), **parameter_values}
         db.commit()
 
     def _handle_failure(

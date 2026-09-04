@@ -29,10 +29,11 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from app.models import ReferenceImage, Scene, Shot, Take
+from app.models import ReferenceImage, Scene, Shot, Take, Workflow
 from app.services import (
     character_sets,
     continuity_frames,
+    job_payload,
     reference_bible,
     revisions,
 )
@@ -306,6 +307,23 @@ def resolve(db: Session, project_id: str, shot: Shot) -> ShotConditioning:
     return resolved
 
 
+def workflow_capacity(db: Session, workflow_id: str | None) -> int:
+    """How many reference images the assigned workflow can physically receive.
+
+    Capacity is a property of the graph that will run, not of the provider: the
+    same ComfyUI serves a text-to-image workflow that binds none, an edit
+    workflow that binds one, and a reference-to-video workflow that binds nine.
+    """
+    workflow = (
+        db.query(Workflow).filter(Workflow.id == workflow_id).first()
+        if workflow_id
+        else None
+    )
+    return job_payload.reference_capacity(
+        workflow.parameter_mapping if workflow else None
+    )
+
+
 def select_for_submission(
     resolved: ShotConditioning, *, max_images: int | None
 ) -> ShotConditioning:
@@ -317,12 +335,45 @@ def select_for_submission(
 
     if max_images is None or len(resolved.images) <= max_images:
         return resolved
-    if max_images != 1:
-        resolved.problems.append(
-            f"The selected generation route accepts at most {max_images} reference images."
-        )
+    if max_images < 1:
+        # A graph with no reference input bound has nowhere to put these. The
+        # binding is still lineage worth keeping; it just never reaches a node.
         for entry in resolved.images:
             entry.submitted = False
+            entry.selection_reason = (
+                "conceptual lineage dependency; this workflow binds no "
+                "reference input"
+            )
+        return resolved
+    if max_images > 1:
+        # More conceptual images than slots. The resolved order already says
+        # which matter most - the frame that starts the shot, then identity,
+        # then plates - so the run keeps that many and stops. What is dropped
+        # is said out loud: a take whose lineage claimed conditioning the
+        # provider never received would be unexplainable afterwards.
+        keep = resolved.images[:max_images]
+        dropped = resolved.images[max_images:]
+        if any(entry.source == SOURCE_REFERENCE for entry in dropped):
+            # Canonical views past the first are interchangeable; a plate
+            # someone attached to this shot is a deliberate act, and choosing
+            # to discard it is not the software's call to make.
+            resolved.problems.append(
+                f"The selected workflow accepts {max_images} reference images, "
+                f"which is not enough for this shot's continuity, character "
+                f"sets and hand references together. Remove a reference or "
+                f"choose a workflow with more reference inputs."
+            )
+            for entry in resolved.images:
+                entry.submitted = False
+            return resolved
+        for entry in keep:
+            entry.submitted = True
+        for entry in dropped:
+            entry.submitted = False
+            entry.selection_reason = (
+                f"conceptual lineage dependency; not submitted, the workflow's "
+                f"{max_images} reference inputs were already filled"
+            )
         return resolved
 
     continuity = [

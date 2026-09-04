@@ -281,7 +281,7 @@ async def preflight_validation(project_id: str, db: Session = Depends(get_db)):
         shot_conditioning.select_for_submission(
             conditioning,
             max_images=(
-                queue_manager.provider.max_reference_images
+                shot_conditioning.workflow_capacity(db, plan.workflow_id)
                 if plan.provider_id == media_providers.COMFYUI
                 else None
             ),
@@ -531,7 +531,7 @@ def start_generation(
         shot_conditioning.select_for_submission(
             conditioning,
             max_images=(
-                queue_manager.provider.max_reference_images
+                shot_conditioning.workflow_capacity(db, plan.workflow_id)
                 if plan.provider_id == media_providers.COMFYUI
                 else None
             ),
@@ -562,16 +562,18 @@ def start_generation(
                 if plan.workflow_id
                 else None
             )
-            if not workflow or job_payload.REFERENCE_IMAGE not in (
-                workflow.parameter_mapping or {}
-            ):
+            capacity = job_payload.reference_capacity(
+                workflow.parameter_mapping if workflow else None
+            )
+            if not capacity:
                 shot_blockers.append(
                     "Reference-conditioned generation requires the "
                     "referenceImage workflow mapping."
                 )
-            elif len(conditioning.submitted_images) != 1:
+            elif not conditioning.submitted_images:
                 shot_blockers.append(
-                    "The selected workflow accepts exactly one reference image."
+                    "None of this shot's conditioning images could be submitted "
+                    "to the selected workflow."
                 )
         if shot_blockers:
             blocked.append(

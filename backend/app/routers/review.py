@@ -28,7 +28,6 @@ from app.services import (
     shot_conditioning,
     workflow_registry,
 )
-from app.services.queue_manager import queue_manager
 
 router = APIRouter(tags=["review"])
 
@@ -309,7 +308,7 @@ def regenerate_shot(
     shot_conditioning.select_for_submission(
         conditioning,
         max_images=(
-            queue_manager.provider.max_reference_images
+            shot_conditioning.workflow_capacity(db, plan.workflow_id)
             if plan.provider_id == media_providers.COMFYUI
             else None
         ),
@@ -355,9 +354,10 @@ def regenerate_shot(
                 detail="Assigned workflow mapping is invalid: " + "; ".join(details),
             )
     if conditioning.images and plan.provider_id == media_providers.COMFYUI:
-        if not workflow or job_payload.REFERENCE_IMAGE not in (
-            workflow.parameter_mapping or {}
-        ):
+        capacity = job_payload.reference_capacity(
+            workflow.parameter_mapping if workflow else None
+        )
+        if not capacity:
             raise HTTPException(
                 status_code=409,
                 detail=(
@@ -365,10 +365,13 @@ def regenerate_shot(
                     "referenceImage workflow mapping."
                 ),
             )
-        if len(conditioning.submitted_images) != 1:
+        if not conditioning.submitted_images:
             raise HTTPException(
                 status_code=409,
-                detail="The selected workflow accepts exactly one reference image.",
+                detail=(
+                    "None of this shot's conditioning images could be "
+                    "submitted to the selected workflow."
+                ),
             )
 
     compiled = prompt_context.compile_for_shot(db, shot).compiled

@@ -9,6 +9,7 @@ import pytest
 
 from app.models import GenerationJob, Workflow
 from app.services import job_payload, reference_bible, workflow_registry
+from app.services.job_payload import WorkflowValidationError
 from app.services.queue_manager import QueueManager
 
 
@@ -414,3 +415,130 @@ def test_provider_context_contains_only_physically_submitted_references(
     context = QueueManager()._job_context(db_session, job, sample_shot)
 
     assert [item["image_id"] for item in context["reference_inputs"]] == ["full-body"]
+
+
+def _workflow_with_two_references(db_session, sample_workflow_json):
+    """A workflow whose graph binds two reference inputs, not one."""
+    record = workflow_registry.import_workflow(
+        raw_bytes=sample_workflow_json, name="Two references", purpose="image"
+    )
+    workflow = Workflow(**record)
+    workflow.parameter_mapping = {
+        job_payload.POSITIVE_PROMPT: {"nodeId": "6", "field": "text"},
+        job_payload.SEED: {"nodeId": "3", "field": "seed"},
+        job_payload.REFERENCE_IMAGE: {"nodeId": "4", "field": "ckpt_name"},
+        job_payload.reference_image_field(1): {"nodeId": "5", "field": "width"},
+    }
+    workflow.output_mapping = [{"nodeId": "9", "type": "image"}]
+    workflow.validation_status = "valid"
+    db_session.add(workflow)
+    db_session.commit()
+    return workflow
+
+
+@pytest.mark.asyncio
+async def test_every_submitted_reference_reaches_its_own_slot(
+    db_session, sample_shot, sample_workflow_json, tmp_path
+):
+    """Two images, two slots, and each one lands where the graph expects it.
+
+    The upload used to stop at one because one is all the first registered
+    workflow could take. With a graph that binds two inputs, sending only the
+    first would leave the second holding whatever filename was baked into the
+    exported JSON - the same silent substitution that made a clip animate a
+    character sheet.
+    """
+    workflow = _workflow_with_two_references(db_session, sample_workflow_json)
+    frame = tmp_path / "end_frame.png"
+    identity = tmp_path / "full_body.png"
+    frame.write_bytes(b"end frame")
+    identity.write_bytes(b"canonical full body")
+    job = GenerationJob(
+        id=str(uuid.uuid4()), shot_id=sample_shot.id, workflow_id=workflow.id,
+        parameter_map={job_payload.POSITIVE_PROMPT: "hero", job_payload.SEED: 5},
+        reference_provenance={
+            "images": [
+                {
+                    "image_id": "frame", "file_path": str(frame),
+                    "mime_type": "image/png", "submitted": True,
+                    "source": "continuity",
+                },
+                {
+                    "image_id": "identity", "file_path": str(identity),
+                    "mime_type": "image/png", "submitted": True,
+                    "source": "character_set",
+                },
+            ]
+        },
+        seed=5, status="Queued",
+    )
+    db_session.add(job)
+    db_session.commit()
+    uploaded_order = []
+
+    class UploadProvider:
+        async def upload_reference_image(self, file_path, *, upload_name, mime_type):
+            uploaded_order.append(file_path)
+            name = os.path.basename(file_path)
+            return {
+                "name": name, "subfolder": f"cas/{job.id}",
+                "type": "input", "workflow_value": f"cas/{job.id}/{name}",
+            }
+
+    manager = QueueManager()
+    await manager._prepare_reference_inputs(db_session, job, UploadProvider())
+
+    assert uploaded_order == [str(frame), str(identity)], "resolved order is send order"
+    assert job.parameter_map[job_payload.REFERENCE_IMAGE] == (
+        f"cas/{job.id}/end_frame.png"
+    )
+    assert job.parameter_map[job_payload.reference_image_field(1)] == (
+        f"cas/{job.id}/full_body.png"
+    )
+    slots = [
+        item["comfyui"]["mapping"] for item in job.reference_provenance["images"]
+    ]
+    assert slots == [
+        {"nodeId": "4", "field": "ckpt_name"},
+        {"nodeId": "5", "field": "width"},
+    ], "each image records the node input it was actually bound to"
+
+
+@pytest.mark.asyncio
+async def test_more_submitted_images_than_slots_is_refused_before_upload(
+    db_session, sample_shot, sample_workflow_json, tmp_path
+):
+    """Selection should have trimmed this already; if it did not, nothing runs.
+
+    Uploading what the graph cannot receive would spend GPU time on a render
+    conditioned differently from the one the lineage describes.
+    """
+    workflow = _workflow_with_reference(db_session, sample_workflow_json)
+    first = tmp_path / "a.png"
+    second = tmp_path / "b.png"
+    first.write_bytes(b"a")
+    second.write_bytes(b"b")
+    job = GenerationJob(
+        id=str(uuid.uuid4()), shot_id=sample_shot.id, workflow_id=workflow.id,
+        parameter_map={job_payload.POSITIVE_PROMPT: "hero", job_payload.SEED: 5},
+        reference_provenance={
+            "images": [
+                {"image_id": "a", "file_path": str(first),
+                 "mime_type": "image/png", "submitted": True},
+                {"image_id": "b", "file_path": str(second),
+                 "mime_type": "image/png", "submitted": True},
+            ]
+        },
+        seed=5, status="Queued",
+    )
+    db_session.add(job)
+    db_session.commit()
+
+    class UploadProvider:
+        async def upload_reference_image(self, file_path, *, upload_name, mime_type):
+            raise AssertionError("nothing may be uploaded")
+
+    manager = QueueManager()
+    with pytest.raises(WorkflowValidationError) as exc:
+        await manager._prepare_reference_inputs(db_session, job, UploadProvider())
+    assert "1" in str(exc.value)

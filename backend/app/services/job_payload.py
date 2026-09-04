@@ -50,6 +50,44 @@ REFERENCE_IMAGE = "referenceImage"
 ASPECT_RATIO = "aspectRatio"
 OUTPUT_PREFIX = "outputPrefix"
 
+#: The most reference inputs any node this project drives will accept. Boogu's
+#: editor grows to sixteen; MiniMax H3's reference-to-video to nine; Qwen's
+#: edit encoder to three. The ceiling is the largest of them, and what a given
+#: run may actually use is read off that workflow's mapping, never assumed.
+MAX_REFERENCE_IMAGES = 16
+
+
+def reference_image_field(index: int) -> str:
+    """Logical name of the nth reference slot, counting from zero.
+
+    The first slot keeps the original ``referenceImage`` name so that every
+    mapping already stored in the database, and every job already generated
+    from one, keeps meaning what it meant.
+    """
+    return REFERENCE_IMAGE if index == 0 else f"{REFERENCE_IMAGE}{index + 1}"
+
+
+REFERENCE_IMAGE_FIELDS: tuple[str, ...] = tuple(
+    reference_image_field(i) for i in range(MAX_REFERENCE_IMAGES)
+)
+
+
+def reference_capacity(parameter_mapping: dict[str, Any] | None) -> int:
+    """How many reference images this workflow can actually be given.
+
+    Slots are filled in order, so the answer is the length of the run starting
+    at the first: a mapping that binds slots 1 and 3 but not 2 cannot take a
+    third image, because it would have to go into an input nothing is bound to.
+    """
+    mapping = parameter_mapping or {}
+    count = 0
+    for name in REFERENCE_IMAGE_FIELDS:
+        if name not in mapping:
+            break
+        count += 1
+    return count
+
+
 LOGICAL_FIELDS: tuple[str, ...] = (
     POSITIVE_PROMPT,
     NEGATIVE_PROMPT,
@@ -57,7 +95,7 @@ LOGICAL_FIELDS: tuple[str, ...] = (
     WIDTH,
     HEIGHT,
     FRAMES,
-    REFERENCE_IMAGE,
+    *REFERENCE_IMAGE_FIELDS,
     ASPECT_RATIO,
     OUTPUT_PREFIX,
 )

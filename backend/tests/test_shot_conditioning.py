@@ -456,3 +456,131 @@ def test_clearing_continuity_removes_the_blocker_with_it(
     resolved = shot_conditioning.resolve(db_session, sample_project.id, shot)
     assert resolved.problems == []
     assert resolved.images == []
+
+
+# ---------------------------------------------------------------------------
+# Several inputs: identity and the hand-off together
+# ---------------------------------------------------------------------------
+
+def test_two_inputs_carry_identity_and_the_hand_off_at_the_same_time(
+    db_session: Session, sample_project: Project, sample_scene: Scene,
+    sample_character: Character, approved_video_take, png_bytes,
+):
+    """The point of a second slot: who it is, and where the last shot left off.
+
+    With one input these compete and the frame wins, so identity survives only
+    as far as the previous clip carried it and drifts a little further every
+    hand-off. Given two, the canonical view holds the face and wardrobe while
+    the frame holds the pose and lighting, which is the whole reason for
+    keeping a character set at all.
+    """
+    frame = continuity_frames.extract_frame(db_session, approved_video_take)
+    character_set = _approved_set(
+        db_session, sample_project.id, sample_character.id, png_bytes,
+        name="Mara", slots=["full_body"],
+    )
+    shot = _shot(
+        db_session, sample_scene, character_set_ids=[character_set.id],
+    )
+    continuity_frames.bind_source(
+        db_session, sample_project.id, shot, approved_video_take.id
+    )
+
+    selected = shot_conditioning.select_for_submission(
+        shot_conditioning.resolve(db_session, sample_project.id, shot), max_images=2
+    )
+
+    assert selected.problems == []
+    submitted = selected.submitted_images
+    assert [entry.source for entry in submitted] == [
+        shot_conditioning.SOURCE_CONTINUITY,
+        shot_conditioning.SOURCE_CHARACTER_SET,
+    ], "the frame leads because it is the start frame; identity rides alongside"
+    assert submitted[0].image.id == frame.reference_image_id
+
+
+def test_overflow_past_the_last_slot_stays_conceptual_and_says_why(
+    db_session: Session, sample_project: Project, sample_scene: Scene,
+    sample_character: Character, approved_video_take, png_bytes,
+):
+    """Fewer slots than images is a truncation, and it has to be visible.
+
+    Dropping a view silently would leave a take whose lineage claims more
+    conditioning than the provider ever saw.
+    """
+    continuity_frames.extract_frame(db_session, approved_video_take)
+    character_set = _approved_set(
+        db_session, sample_project.id, sample_character.id, png_bytes,
+        name="Mara", slots=["full_body", "front", "side"],
+    )
+    shot = _shot(db_session, sample_scene, character_set_ids=[character_set.id])
+    continuity_frames.bind_source(
+        db_session, sample_project.id, shot, approved_video_take.id
+    )
+
+    selected = shot_conditioning.select_for_submission(
+        shot_conditioning.resolve(db_session, sample_project.id, shot), max_images=2
+    )
+
+    assert selected.problems == []
+    assert len(selected.submitted_images) == 2
+    dropped = [entry for entry in selected.images if not entry.submitted]
+    assert dropped, "a four-image shot cannot fit two slots"
+    assert all(
+        "not submitted" in entry.selection_reason for entry in dropped
+    ), [entry.selection_reason for entry in dropped]
+
+
+def test_a_hand_attached_plate_is_never_the_one_silently_dropped(
+    db_session: Session, sample_project: Project, sample_scene: Scene,
+    sample_character: Character, uploaded_plate, approved_video_take, png_bytes,
+):
+    """Someone chose that picture for this shot, so losing it is a refusal.
+
+    Canonical views past the first are interchangeable and dropping one costs
+    nothing the user asked for. A hand-attached plate is a deliberate act, and
+    quietly discarding it would render a different shot than the one approved.
+    """
+    continuity_frames.extract_frame(db_session, approved_video_take)
+    character_set = _approved_set(
+        db_session, sample_project.id, sample_character.id, png_bytes,
+        name="Mara", slots=["full_body"],
+    )
+    shot = _shot(
+        db_session, sample_scene, character_set_ids=[character_set.id],
+        reference_asset_ids=[uploaded_plate.id],
+    )
+    continuity_frames.bind_source(
+        db_session, sample_project.id, shot, approved_video_take.id
+    )
+
+    selected = shot_conditioning.select_for_submission(
+        shot_conditioning.resolve(db_session, sample_project.id, shot), max_images=2
+    )
+
+    assert selected.problems, "dropping an explicit plate must block, not truncate"
+    assert any("reference" in problem.lower() for problem in selected.problems)
+    assert selected.submitted_images == []
+
+
+def test_a_workflow_that_binds_no_reference_input_submits_nothing(
+    db_session: Session, sample_project: Project, sample_scene: Scene,
+    sample_character: Character, png_bytes,
+):
+    """Zero slots is a real answer, not a missing one.
+
+    A text-to-image graph has nowhere to put a reference. Treating zero as
+    "unlimited" would send images into a workflow with no input bound to them,
+    and treating it as one would submit into a mapping that does not exist.
+    """
+    character_set = _approved_set(
+        db_session, sample_project.id, sample_character.id, png_bytes, name="Mara",
+    )
+    shot = _shot(db_session, sample_scene, character_set_ids=[character_set.id])
+
+    selected = shot_conditioning.select_for_submission(
+        shot_conditioning.resolve(db_session, sample_project.id, shot), max_images=0
+    )
+
+    assert selected.submitted_images == []
+    assert selected.images, "the binding is still real lineage, just not submitted"
