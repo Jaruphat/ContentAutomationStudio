@@ -333,7 +333,26 @@ def select_for_submission(
             entry.submitted = False
         return resolved
 
-    if max_images is None or len(resolved.images) <= max_images:
+    if max_images is None:
+        return resolved
+    if max_images >= 1 and len(resolved.images) < max_images:
+        # Injection overwrites values; it does not clear inputs. A bound
+        # reference input nothing was sent to therefore keeps the filename
+        # baked into the graph at export time - and where that file exists,
+        # the render succeeds while conditioned on a picture from somebody
+        # else's project, with this take's lineage describing images the node
+        # never saw. One image per bound input removes the case.
+        resolved.problems.append(
+            f"The selected workflow takes {max_images} reference image(s) and "
+            f"this shot resolves {len(resolved.images)}. An input left unfilled "
+            f"keeps whichever image the workflow was exported with. Bind more "
+            f"conditioning to this shot, or choose a workflow that takes "
+            f"{len(resolved.images)}."
+        )
+        for entry in resolved.images:
+            entry.submitted = False
+        return resolved
+    if len(resolved.images) <= max_images:
         return resolved
     if max_images < 1:
         # A graph with no reference input bound has nowhere to put these. The

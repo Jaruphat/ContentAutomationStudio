@@ -204,6 +204,22 @@ The registered workflow ids default to this workstation's; override them with
 `CAS_E2E_WF_T2I`, `CAS_E2E_WF_EDIT` and `CAS_E2E_WF_I2V`. A full run drives the
 GPU for roughly 20 minutes.
 
+### Two references in one render (requires the backend and a live ComfyUI)
+
+Drives the two-slot path: an establishing shot conditioned on its canonical
+character view alone, then a continuation shot that carries both the hand-off
+frame and that same canonical view into one render. It asserts that both
+images physically reached the provider, that each landed on its own node
+input, and that a shot with only one image is refused on a two-slot workflow
+rather than letting the empty input keep the graph's exported default.
+
+```bash
+python scripts/e2e_two_reference.py
+```
+
+Needs a workflow mapping both `referenceImage` and `referenceImage2`; it finds
+one by mapping, or takes `CAS_E2E_WF_EDIT2`. A run takes about 8 minutes.
+
 ---
 
 ## Project Structure
@@ -335,6 +351,27 @@ This application implements the full vertical slice described in the PRD:
 15. **Export** -- Export Storyboard (JSON, CSV, Markdown), Prompts, Generation Manifest (with provenance), Timeline Manifest, and full Project Archive.
 16. **Character Set Generator** -- Define a character's identity, proportions, wardrobe and palette once, then generate a versioned canonical sheet (front, three-quarter, side, back, full body, expression). Each version records its provider, model, workflow, seed and per-view SHA-256. Exactly one version is explicitly approved as canonical, and editing the identity text marks that version out of date rather than silently regenerating it -- regenerating a sheet costs time and money, so it stays the user's decision. Only a text-to-image workflow can produce a sheet: a reference-conditioned graph would keep whichever image was baked into its export and condition every canonical view on a stranger, so those workflows are excluded from the picker and refused by the backend.
 17. **Canonical Conditioning and Shot Continuity** -- Bind approved character sets to individual shots, so the canonical views reach the provider as real reference inputs, not as words in a prompt. A shot can additionally continue from an explicitly chosen source: an approved scene image, or the true end frame extracted with FFmpeg from a previous approved video take. Nothing is ever chained automatically. The bound frame's timestamp, dimensions, SHA-256 and source take are stored and shown, and the frame can be re-extracted or cleared. Job and take lineage records both the character-set hashes and the continuity frame hash, so preflight and generation refuse a shot whose source has lost approval or gone stale, naming what to do about it. Where a workflow accepts only one reference image, the run says which image it actually submitted and why, instead of implying it used them all. A clip is its own shot rather than a mode toggle, because a shot cannot continue from its own take: the image an image-to-video shot animates is always one an earlier shot produced and someone approved. That start frame is never inferred -- a canonical view is a studio portrait on a plain backdrop, so animating it would deliver a clip of the character sheet instead of the scene while every hash and lineage entry still checked out, and an image-to-video shot with nothing but a character set bound is refused until a start frame is chosen.
+18. **Reference Capacity From the Workflow** -- How many reference images a run may use is read off the mapping of the graph that will actually execute, not fixed in code. The same ComfyUI serves a text-to-image workflow that binds none, an edit workflow that binds one, and a reference-to-video workflow that binds nine, so the number belongs to the workflow. Slots are counted as the contiguous run starting at the first, because a mapping with a gap would otherwise promise an input nothing is wired to. The first slot keeps the name `referenceImage`, so mappings and jobs created before this keep their meaning; later slots are `referenceImage2`, `referenceImage3` and so on. Every bound slot must receive an image: parameter injection overwrites values but does not clear inputs, so a reference input nothing was sent to would keep the filename baked into the graph at export time -- and on a machine where that file exists, the render succeeds while conditioned on a picture from someone else's project. Where a shot resolves more images than the workflow has slots, the run fills them in resolved order and records what it left out, except when a hand-attached plate would be the thing dropped, which is refused instead: someone chose that picture for that shot.
+
+### Deriving a multi-reference workflow
+
+`TextEncodeBooguEdit` accepts up to sixteen reference images through an
+autogrow input, but an exported graph wires only the slots that were connected
+in the editor. `scripts/derive_two_reference_workflow.py` adds one loader and
+binds it to the next slot, leaving the model, sampler, VAE and text encoder
+untouched:
+
+```bash
+python scripts/derive_two_reference_workflow.py path/to/edit_workflow.json
+```
+
+It prints the mapping to apply after importing the result. With two slots a
+continuation shot carries its hand-off frame *and* its canonical character
+view: the frame holds pose, framing and light while the canonical view holds
+the face and wardrobe. An establishing shot, which has only its identity to go
+on, stays on the one-slot workflow -- routing is per shot, so both fit in one
+project.
+
 
 ### UX Layout
 

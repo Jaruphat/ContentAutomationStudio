@@ -584,3 +584,50 @@ def test_a_workflow_that_binds_no_reference_input_submits_nothing(
 
     assert selected.submitted_images == []
     assert selected.images, "the binding is still real lineage, just not submitted"
+
+
+def test_a_slot_left_empty_blocks_rather_than_keeping_the_graph_default(
+    db_session: Session, sample_project: Project, sample_scene: Scene,
+    sample_character: Character, png_bytes,
+):
+    """Every bound slot has to be filled, because injection only overwrites.
+
+    Values are injected into the exported graph, so a reference input nothing
+    was sent to keeps the filename that was baked in when the workflow was
+    exported. On the machine that exported it, that file exists: the render
+    then succeeds while conditioned on a picture from somebody else's project,
+    with the take's lineage describing images that never reached the node.
+    Demanding one image per bound slot removes the case entirely.
+    """
+    character_set = _approved_set(
+        db_session, sample_project.id, sample_character.id, png_bytes,
+        name="Mara", slots=["full_body"],
+    )
+    shot = _shot(db_session, sample_scene, character_set_ids=[character_set.id])
+
+    selected = shot_conditioning.select_for_submission(
+        shot_conditioning.resolve(db_session, sample_project.id, shot), max_images=2
+    )
+
+    assert selected.problems, "one image cannot fill two bound inputs"
+    assert any("2" in problem for problem in selected.problems), selected.problems
+    assert selected.submitted_images == []
+
+
+def test_a_shot_with_nothing_to_condition_on_cannot_use_an_edit_workflow(
+    db_session: Session, sample_project: Project, sample_scene: Scene,
+):
+    """The same hole, at zero: an edit workflow needs something to edit.
+
+    This is the shape the single-slot path shipped with. A shot carrying no
+    conditioning at all left `referenceImage` unset, so the graph ran on
+    whatever image its export happened to carry.
+    """
+    shot = _shot(db_session, sample_scene)
+
+    selected = shot_conditioning.select_for_submission(
+        shot_conditioning.resolve(db_session, sample_project.id, shot), max_images=1
+    )
+
+    assert selected.problems, "an unfilled reference input must never run"
+    assert selected.submitted_images == []
