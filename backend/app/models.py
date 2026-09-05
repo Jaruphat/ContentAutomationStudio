@@ -465,6 +465,12 @@ class Shot(Base):
     dialogue = Column(Text, default="")
     planned_duration_sec = Column(Float, default=0.0)
     generation_mode = Column(String, default="image")  # image / video / image-to-video
+    #: Whether this shot is a piece of the film or a piece of production.
+    #: A key image generated so a clip can be animated from it is a real shot -
+    #: it has a prompt, a seed, a reviewed take and a place in the lineage of
+    #: the clip that came from it - but it is not part of the cut. Default true,
+    #: because the ordinary shot is one you are going to see.
+    include_in_cut = Column(Boolean, default=True)
     #: "" / establishing / continuation. Whether this shot opens its scene or
     #: carries on from the one before it, which is what decides whether its
     #: composition has to be invented or is already sitting in the previous

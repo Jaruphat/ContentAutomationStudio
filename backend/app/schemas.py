@@ -696,6 +696,7 @@ class ShotCreate(BaseModel):
     planned_duration_sec: float = 0.0
     generation_mode: str = "image"
     scene_role: str = ""
+    include_in_cut: bool = True
     image_prompt: str = ""
     video_prompt: str = ""
     negative_prompt: str = ""
@@ -727,6 +728,7 @@ class ShotUpdate(BaseModel):
     planned_duration_sec: Optional[float] = None
     generation_mode: Optional[str] = None
     scene_role: Optional[str] = None
+    include_in_cut: Optional[bool] = None
     image_prompt: Optional[str] = None
     video_prompt: Optional[str] = None
     negative_prompt: Optional[str] = None
@@ -790,6 +792,9 @@ class ShotResponse(BaseModel):
     dialogue: str
     planned_duration_sec: float
     generation_mode: str
+    #: False only for production intermediates such as a key image. Defaulted
+    #: for rows an ALTER TABLE could only add as NULL.
+    include_in_cut: bool = True
     #: Blank on any row written before roles existed, which reads as "infer it
     #: from position" - the same thing an unset role means for a new shot.
     scene_role: str = ""

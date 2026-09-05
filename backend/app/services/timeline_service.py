@@ -217,6 +217,11 @@ def build_timeline_from_approved_takes(
             .all()
         )
         for shot in shots:
+            # A production intermediate - a key image made so a clip could be
+            # animated from it - is generated, reviewed and traced like any
+            # other shot, and is not a piece of the programme.
+            if shot.include_in_cut is False:
+                continue
             approved_takes = (
                 db.query(Take)
                 .filter(Take.shot_id == shot.id, Take.review_status == "Approved")
@@ -235,9 +240,22 @@ def build_timeline_from_approved_takes(
             if approved_take is None:
                 continue
 
-            duration = shot.planned_duration_sec if shot.planned_duration_sec > 0 else 3.0
-            if approved_take.duration_sec > 0:
-                duration = approved_take.duration_sec
+            # How long the shot is *held* is an edit decision; how long the
+            # clip runs is a property of whatever graph produced it. The edit
+            # wins where it can, which is the only way a shot plan of 4, 2, 4,
+            # 3 seconds can be produced from a generator that returns one
+            # length. It cannot win the other way: a clip shorter than the plan
+            # is used as it is, because filling the gap would mean freezing or
+            # looping the tail, and inventing footage to meet a number is worse
+            # than missing the number.
+            planned = shot.planned_duration_sec or 0.0
+            clip = approved_take.duration_sec or 0.0
+            if planned > 0 and clip > 0:
+                duration = min(planned, clip)
+            elif clip > 0:
+                duration = clip
+            else:
+                duration = planned or 3.0
 
             item = {
                 "id": str(uuid.uuid4()),
@@ -392,6 +410,10 @@ def timeline_coverage(db: Session, project_id: str) -> dict[str, Any]:
             .all()
         )
         for shot in shots:
+            # Coverage answers "is the film complete?". A shot that was never
+            # meant to be in the film is not a hole in it.
+            if shot.include_in_cut is False:
+                continue
             total_shots += 1
             if shot.id in covered_shot_ids:
                 covered += 1
@@ -526,6 +548,35 @@ def get_timeline_manifest(
 
     timeline_takes = [takes[item.take_id] for item in items if item.take_id in takes]
     warnings = aspect_override_warnings(db, project, timeline_takes)
+
+    # A film that runs short has to name the shot that came up short, or the
+    # next edit is a guess about which one it was.
+    short_items = []
+    for item in items:
+        shot = shots.get(item.shot_id)
+        take = takes.get(item.take_id)
+        if shot is None or take is None:
+            continue
+        planned = shot.planned_duration_sec or 0.0
+        clip = take.duration_sec or 0.0
+        if planned > 0 and 0 < clip < planned:
+            short_items.append((item, shot, clip, planned))
+    if short_items:
+        warnings.append({
+            "code": "clip_shorter_than_plan",
+            "message": (
+                f"{len(short_items)} shot(s) have a clip shorter than the "
+                f"duration the edit asked for, so they are held for the clip's "
+                f"own length: "
+                + "; ".join(
+                    f"order {item.order} ({clip:.1f}s of {planned:.1f}s)"
+                    for item, _shot, clip, planned in short_items
+                )
+                + ". Regenerate them longer, or shorten the plan."
+            ),
+            "item_ids": [item.id for item, _s, _c, _p in short_items],
+            "take_ids": [item.take_id for item, _s, _c, _p in short_items],
+        })
     if legacy_items:
         warnings.append({
             "code": "legacy_take_lineage",
