@@ -305,3 +305,69 @@ def test_a_reference_conditioned_workflow_is_refused_for_a_character_sheet(
     assert "reference" in message.lower()
     assert "Boogu Image Edit" in message, "the user has to be told which workflow"
     assert provider.submissions == [], "nothing may reach the GPU"
+
+
+def test_a_transient_failure_on_one_view_is_retried_before_giving_up(
+    db_session: Session, character_set, written_png
+):
+    """A cold model load can fail once and succeed immediately after.
+
+    Generating a sheet is a single synchronous call with no queue behind it,
+    so one flaky view used to lose the whole run - and on a twenty-gigabyte
+    model the first view is exactly where a streaming read fails. The queue
+    retries transient failures; this path had no such thing.
+    """
+    from app.services import character_set_generation
+
+    class FlakyOnce(RecordingProvider):
+        def __init__(self, factory):
+            super().__init__(factory)
+            self.attempts = 0
+
+        async def get_job_status(self, prompt_id):
+            self.attempts += 1
+            if self.attempts == 1:
+                return JobStatus(
+                    status=JobStatusEnum.FAILED,
+                    error_message="RuntimeError: HostBuffer.read_file_slice failed",
+                )
+            return JobStatus(status=JobStatusEnum.COMPLETED, progress=1.0)
+
+    version = character_sets.create_version(db_session, character_set, slots=["front"])
+    provider = FlakyOnce(written_png)
+
+    result = asyncio.run(character_set_generation.generate_version(
+        db_session, version, provider=provider,
+        provider_id="comfyui", model="workflow",
+    ))
+
+    view = result.views[0]
+    assert view.status != "Failed", view.error_message
+    assert view.reference_image_id, "the retry has to actually produce the image"
+    assert len(provider.submissions) == 2, "it should have been submitted again"
+
+
+def test_a_permanent_failure_is_not_retried_forever(
+    db_session: Session, character_set, written_png
+):
+    """A missing model fails the same way every time; retrying wastes minutes
+    of somebody's evening to reach the same answer."""
+    from app.services import character_set_generation
+
+    class AlwaysMissing(RecordingProvider):
+        async def get_job_status(self, prompt_id):
+            return JobStatus(
+                status=JobStatusEnum.FAILED,
+                error_message="Value not in list: unet_name 'gone.safetensors' not in []",
+            )
+
+    version = character_sets.create_version(db_session, character_set, slots=["front"])
+    provider = AlwaysMissing(written_png)
+
+    result = asyncio.run(character_set_generation.generate_version(
+        db_session, version, provider=provider,
+        provider_id="comfyui", model="workflow",
+    ))
+
+    assert result.views[0].status == "Failed"
+    assert len(provider.submissions) == 1, "a permanent fault is not worth repeating"

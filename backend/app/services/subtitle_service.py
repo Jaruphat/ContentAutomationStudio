@@ -24,6 +24,14 @@ from app.services.timeline_service import get_timeline_manifest
 #: reverse, and a shared constant is what keeps that from drifting.
 DIALOGUE_FIELD = "dialogue"
 
+#: Below this the text stops being readable at all, so a very narrow canvas
+#: gets a slightly overrunning line rather than an unreadable one.
+MIN_RENDERED_FONT_SIZE = 14
+#: Rough width of one character as a fraction of the font size, for a
+#: proportional sans. Deliberately generous: a line that fits is worth more
+#: than a line that exactly fills.
+_CHAR_WIDTH_RATIO = 0.5
+
 SubtitleMode = Literal["off", "soft", "burn_in"]
 SubtitlePreset = Literal["clean", "cinematic", "social_bold", "thai_friendly"]
 SubtitlePosition = Literal["top", "middle", "bottom"]
@@ -289,6 +297,16 @@ def render_ass(
     vertical_margin = max(
         1, round(height * 0.05), round(settings.vertical_margin * height / 1080)
     )
+    # PlayResX is the real frame width, so the font size is in the frame's own
+    # units: a size chosen against 1920 draws three times too wide on a 576
+    # vertical cut and runs off both edges. The margin was already scaled to
+    # the canvas; this scales the type to match, capping it at the largest
+    # size a full line still fits inside.
+    usable_width = max(1, width - 2 * horizontal_margin)
+    fitting_size = int(
+        usable_width / (settings.max_chars_per_line * _CHAR_WIDTH_RATIO)
+    )
+    font_size = max(MIN_RENDERED_FONT_SIZE, min(settings.font_size, fitting_size))
     alignment = {"bottom": 2, "middle": 5, "top": 8}[settings.position]
     border_style = 3 if settings.background_box else 1
     back_alpha = "20" if settings.background_box else "80"
@@ -306,7 +324,7 @@ def render_ass(
         "ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, "
         "MarginR, MarginV, Encoding\n"
         "Style: Default,"
-        f"{settings.font_family},{settings.font_size},{_ass_color(settings.text_color)},"
+        f"{settings.font_family},{font_size},{_ass_color(settings.text_color)},"
         f"{_ass_color(settings.text_color)},{_ass_color(settings.outline_color)},"
         f"{_ass_color(back_color, back_alpha)},"
         f"{-1 if settings.bold else 0},{-1 if settings.italic else 0},0,0,100,100,0,0,"

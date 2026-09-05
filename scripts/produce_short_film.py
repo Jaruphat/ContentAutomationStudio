@@ -214,9 +214,14 @@ def main() -> int:
     timeline = call("POST", f"/api/projects/{pid}/timeline/build", json={})
     log(f"timeline: {timeline.get('item_count')} items, {timeline.get('total_duration_sec')}s")
 
-    call("PUT", f"/api/projects/{pid}/subtitles", json={
+    # A narrow vertical frame needs to wrap harder: the font is capped to what
+    # fits, so fewer characters per line is what buys the size back.
+    subtitle_settings = {
         "mode": "burn_in", "preset": "cinematic", "position": "bottom",
-    }, expect=(200, 404))
+    }
+    subtitle_settings.update(film.get("subtitles") or {})
+    call("PUT", f"/api/projects/{pid}/subtitles", json=subtitle_settings,
+         expect=(200, 404))
 
     log("rendering with narration...")
     started = time.time()

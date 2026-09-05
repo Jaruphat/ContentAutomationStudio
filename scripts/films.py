@@ -80,6 +80,9 @@ SWEEPER: dict[str, Any] = {
     "aspect_ratio": "9:16",
     "resolution": "576x1024",
     "seconds_per_shot": 8.0,
+    # 576 pixels wide is a third of the usual canvas, so the line wraps at
+    # roughly half the characters and the type stays readable.
+    "subtitles": {"max_chars_per_line": 20, "vertical_margin": 120},
     "look": SKY_LOOK,
     "cast": [{
         "name": "Pim",

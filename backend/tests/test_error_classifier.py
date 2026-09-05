@@ -122,3 +122,35 @@ class TestContract:
         ]
         for message in messages:
             assert classify(message).suggested_action.strip()
+
+
+def test_a_streaming_read_failure_is_named_as_the_memory_problem_it_is():
+    """`HostBuffer.read_file_slice failed` reads like a corrupt file. It is not.
+
+    It is what a twenty-gigabyte model looks like when it cannot be streamed
+    into memory that something else is still holding. The same graph runs
+    unchanged once the provider releases what it has loaded, so the message
+    has to say that - otherwise the next person spends an hour re-downloading
+    a model that was never broken.
+    """
+    result = error_classifier.classify("RuntimeError: HostBuffer.read_file_slice failed")
+
+    assert result.retryable is True
+    assert "memory" in result.suggested_action.lower()
+
+
+@pytest.mark.parametrize("message", [
+    "Out of VRAM",
+    "Allocation on device failed: not enough VRAM",
+    "torch.cuda.OutOfMemoryError: CUDA out of memory",
+])
+def test_running_out_of_card_memory_is_never_retried(message):
+    """Retrying an OOM unchanged reaches the same answer, slower.
+
+    "Out of VRAM" says nothing the earlier keywords matched, so it fell
+    through to the retryable default and a job that could not fit was tried
+    again anyway.
+    """
+    result = error_classifier.classify(message)
+    assert result.code == error_classifier.OUT_OF_MEMORY_ERROR, result
+    assert result.retryable is False

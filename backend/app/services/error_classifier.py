@@ -17,6 +17,9 @@ WORKFLOW_VALIDATION_ERROR = "WorkflowValidationError"
 MISSING_MODEL_ERROR = "MissingModelError"
 MISSING_CUSTOM_NODE_ERROR = "MissingCustomNodeError"
 OUT_OF_MEMORY_ERROR = "OutOfMemoryError"
+#: A model too large to stream in while other models are still resident.
+#: Distinct from an OOM because the fix is different: release, do not shrink.
+STREAMING_MEMORY_ERROR = "StreamingMemoryError"
 GENERATION_TIMEOUT = "GenerationTimeout"
 OUTPUT_MISSING_ERROR = "OutputMissingError"
 MEDIA_VALIDATION_ERROR = "MediaValidationError"
@@ -37,7 +40,22 @@ class Classification:
 # missing-node message can also mention "model", so the first match wins.
 _RULES: tuple[tuple[tuple[str, ...], Classification], ...] = (
     (
-        ("out of memory", "cuda out of memory", "oom", "allocate", "insufficient memory"),
+        ("read_file_slice", "hostbuffer"),
+        Classification(
+            STREAMING_MEMORY_ERROR,
+            retryable=True,
+            suggested_action=(
+                "A large model could not be streamed into memory while other "
+                "models were still resident. This is not a corrupt file: the "
+                "same graph runs unchanged once the provider releases what it "
+                "is holding. It will be retried, and freeing the provider's "
+                "memory first makes that reliable."
+            ),
+        ),
+    ),
+    (
+        ("out of memory", "cuda out of memory", "oom", "allocate", "insufficient memory",
+         "vram"),
         Classification(
             OUT_OF_MEMORY_ERROR,
             retryable=False,

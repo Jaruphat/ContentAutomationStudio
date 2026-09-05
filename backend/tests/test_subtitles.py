@@ -5,7 +5,7 @@ import pytest
 from pydantic import ValidationError
 
 from app.models import TimelineItem
-from app.services import revisions
+from app.services import revisions, subtitle_service
 from app.services.subtitle_service import (
     DEFAULT_SUBTITLE_SETTINGS,
     SubtitleSidecarError,
@@ -637,3 +637,71 @@ def test_real_ffmpeg_burns_same_ass_and_records_provenance(
     assert subtitles["cue_count"] == 1
     assert subtitles["ass_sidecar"]["sha256"]
     assert os.path.isfile(subtitles["ass_sidecar"]["path"])
+
+
+# ---------------------------------------------------------------------------
+# Fitting the canvas
+# ---------------------------------------------------------------------------
+
+class TestSubtitlesFitTheFrame:
+    """A line of subtitle has to fit the width it is drawn on.
+
+    The ASS header sets PlayResX to the real video width, so the font size is
+    in the frame's own units. The vertical margin was already scaled to the
+    canvas; the font size was not, so a setting that reads well on 1920x1080
+    drew text three times too wide on a 576-wide vertical cut and ran off both
+    edges. Clipped words are worse than small ones.
+    """
+
+    def _font_size_of(self, ass: str) -> int:
+        for line in ass.splitlines():
+            if line.startswith("Style: Default,"):
+                return int(line.split(",")[2])
+        raise AssertionError("no Default style in the rendered ASS")
+
+    def _cue(self):
+        return [{
+            "start_sec": 0.0, "end_sec": 2.0,
+            "text": "Every morning before the city woke, Pim swept the square.",
+        }]
+
+    def test_a_wide_canvas_keeps_the_configured_size(self):
+        settings = subtitle_service.SubtitleSettings(
+            font_size=52, max_chars_per_line=36,
+        )
+        ass = subtitle_service.render_ass(self._cue(), settings, 1920, 1080)
+        assert self._font_size_of(ass) == 52
+
+    def test_a_narrow_canvas_shrinks_the_font_to_fit(self):
+        settings = subtitle_service.SubtitleSettings(
+            font_size=52, max_chars_per_line=36,
+        )
+        ass = subtitle_service.render_ass(self._cue(), settings, 576, 1024)
+        size = self._font_size_of(ass)
+        assert size < 52, "52 units on a 576-wide frame runs off both edges"
+        # A full line has to sit inside the frame minus its side margins.
+        usable = 576 - 2 * round(576 * 0.05)
+        assert size * 0.5 * settings.max_chars_per_line <= usable
+
+    def test_fewer_characters_per_line_buys_back_the_size(self):
+        """The two settings trade against each other, so wrapping harder is
+        the way to keep large text on a narrow frame."""
+        wide_wrap = subtitle_service.SubtitleSettings(
+            font_size=52, max_chars_per_line=36,
+        )
+        tight_wrap = subtitle_service.SubtitleSettings(
+            font_size=52, max_chars_per_line=18,
+        )
+        loose = self._font_size_of(
+            subtitle_service.render_ass(self._cue(), wide_wrap, 576, 1024))
+        tight = self._font_size_of(
+            subtitle_service.render_ass(self._cue(), tight_wrap, 576, 1024))
+        assert tight > loose
+
+    def test_the_font_never_shrinks_below_legibility(self):
+        """A subtitle nobody can read is not a subtitle."""
+        settings = subtitle_service.SubtitleSettings(
+            font_size=52, max_chars_per_line=80,
+        )
+        ass = subtitle_service.render_ass(self._cue(), settings, 288, 512)
+        assert self._font_size_of(ass) >= subtitle_service.MIN_RENDERED_FONT_SIZE

@@ -25,7 +25,12 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from app.models import CharacterSetVersion, CharacterSetView, Workflow
-from app.services import character_sets, job_payload, workflow_registry
+from app.services import (
+    character_sets,
+    error_classifier,
+    job_payload,
+    workflow_registry,
+)
 from app.services.comfyui_adapter import JobStatusEnum
 from app.services.workflow_format import WorkflowFormat
 
@@ -34,6 +39,11 @@ logger = logging.getLogger("cas.character_set_generation")
 #: How long one view may take before the runner stops waiting on it.
 POLL_INTERVAL_SEC = 0.05
 MAX_POLLS = 2400  # 2 minutes at the default interval
+#: How many times one view is attempted before it is called failed. Two is
+#: enough for a cold model load, and few enough that a real fault is not
+#: retried into somebody\'s evening.
+MAX_VIEW_ATTEMPTS = 2
+RETRY_DELAY_SEC = 3.0
 
 
 class CharacterSetGenerationError(Exception):
@@ -215,17 +225,38 @@ async def generate_version(
             "view_slot": view.slot,
         }
 
-        try:
-            prompt_id = await provider.submit_job(
-                payload, f"charset-{view.id}", context=context
+        # Generating a sheet is one synchronous call with no queue behind it,
+        # so a single flaky view used to lose the whole run - and on a model
+        # this size the first view is exactly where a cold streaming read
+        # fails. Transient faults are retried here the way the queue retries
+        # them; a permanent one fails the same way every time and is not worth
+        # repeating.
+        prompt_id = ""
+        error = ""
+        for attempt in range(1, MAX_VIEW_ATTEMPTS + 1):
+            try:
+                prompt_id = await provider.submit_job(
+                    payload, f"charset-{view.id}", context=context
+                )
+            except Exception as exc:  # provider transport failure
+                error = f"Submission failed: {exc}"
+                prompt_id = ""
+            else:
+                ok, error = await _await_completion(provider, prompt_id)
+                if ok:
+                    break
+            if attempt >= MAX_VIEW_ATTEMPTS or not error_classifier.classify(error).retryable:
+                break
+            logger.info(
+                "Character view %s failed transiently (%s); retrying",
+                view.slot, error[:120],
             )
-        except Exception as exc:  # provider transport failure
-            character_sets.fail_view(db, view, f"Submission failed: {exc}")
-            continue
+            await asyncio.sleep(RETRY_DELAY_SEC)
+        else:
+            error = error or "The provider did not complete this view."
 
-        ok, error = await _await_completion(provider, prompt_id)
-        if not ok:
-            character_sets.fail_view(db, view, error)
+        if not prompt_id or error:
+            character_sets.fail_view(db, view, error or "Submission failed.")
             continue
 
         outputs = await provider.get_job_outputs(prompt_id)
