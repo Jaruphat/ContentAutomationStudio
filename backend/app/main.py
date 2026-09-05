@@ -20,6 +20,7 @@ from app.database import SessionLocal, init_db
 from app.models import Workflow
 from app.routers import (
     channels,
+    quality,
     ai,
     character_sets,
     continuity_frames,
@@ -170,6 +171,7 @@ app.include_router(continuity_frames.router)
 app.include_router(workflows.router)
 app.include_router(generation.router)
 app.include_router(review.router)
+app.include_router(quality.router)
 app.include_router(timeline.router)
 app.include_router(exports.router)
 app.include_router(ai.router)

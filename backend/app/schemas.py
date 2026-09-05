@@ -191,6 +191,45 @@ class CharacterResponse(BaseModel):
 # Location
 # ============================================================================
 
+class QualityReviewRequest(BaseModel):
+    """One pass of the publish gate. Scores are 1-10 against the rubric."""
+
+    model_config = {"extra": "forbid"}
+
+    scores: dict[str, Optional[float]] = Field(default_factory=dict)
+    ai_tell: bool = False
+    ai_tell_causes: str = ""
+    notes: str = ""
+    reviewer: str = ""
+
+
+class QualityReviewResponse(BaseModel):
+    """A recorded card, or the honest absence of one.
+
+    ``reviewed: false`` with ``passed: false`` is the state of an episode
+    nobody has looked at yet - not an error, and not a pass.
+    """
+
+    project_id: str
+    reviewed: bool = False
+    passed: bool = False
+    scores: dict[str, Optional[float]] = Field(default_factory=dict)
+    ai_tell: bool = False
+    ai_tell_causes: str = ""
+    shortfalls: list[dict[str, Any]] = Field(default_factory=list)
+    reasons: list[str] = Field(default_factory=list)
+    notes: str = ""
+    reviewer: str = ""
+    created_at: Optional[datetime] = None
+
+
+class QualityRubricEntry(BaseModel):
+    key: str
+    label: str
+    target: int
+    question: str
+
+
 class ChannelVocabularyEntry(BaseModel):
     """One pillar or one hook. The channel's own words, not an enum here."""
 

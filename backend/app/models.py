@@ -76,6 +76,40 @@ class Channel(Base):
     updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
 
 
+class QualityReview(Base):
+    """One pass of the publish gate over one episode.
+
+    Kept per review rather than overwritten: nine pilots are only comparable
+    if each one's card survives, and the change between two reviews of the
+    same episode is the useful part of a second look.
+    """
+
+    __tablename__ = "quality_reviews"
+
+    id = Column(String, primary_key=True, default=_uuid)
+    project_id = Column(
+        String, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False,
+        index=True,
+    )
+    #: {metric key: 1-10}. Held as JSON because the rubric is a vocabulary
+    #: that will grow, and a column per metric would make growing it a
+    #: migration.
+    scores = Column(JSON, default=dict)
+    #: Would a viewer know this was AI within two seconds - the one question
+    #: that outranks the nine scores.
+    ai_tell = Column(Boolean, default=False)
+    #: What gives it away, in specific shots. Required when ai_tell is true:
+    #: "it looks like AI" regenerates nothing.
+    ai_tell_causes = Column(Text, default="")
+    passed = Column(Boolean, default=False)
+    #: The shortfalls as evaluated at the time, so an old card still says why
+    #: it failed even after the targets are revised.
+    shortfalls = Column(JSON, default=list)
+    notes = Column(Text, default="")
+    reviewer = Column(String, default="")
+    created_at = Column(DateTime, default=_utcnow)
+
+
 class Project(Base):
     __tablename__ = "projects"
 
