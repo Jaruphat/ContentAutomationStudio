@@ -48,6 +48,13 @@ class Project(Base):
     target_resolution = Column(String, default="1920x1080")
     target_duration_sec = Column(Float, default=180.0)
     frame_rate = Column(Float, default=24.0)
+    #: An audio file laid under the whole film. A bed is a property of the
+    #: film, not of any shot in it, which is why it lives here and the mute
+    #: and trim controls live on the shot.
+    music_path = Column(String, default="")
+    #: How far under the programme the bed sits. Mixed at parity it would be a
+    #: duet with the film rather than a bed.
+    music_gain_db = Column(Float, default=-18.0)
     language = Column(String, default="en")
     # Additive JSON settings keep subtitle styling project-scoped and migration-safe.
     subtitle_settings = Column(JSON, default=dict)
@@ -502,6 +509,15 @@ class Shot(Base):
     workflow_preset_id = Column(String, nullable=True)
     image_provider_id = Column(String, default="comfyui")
     image_model = Column(String, default="workflow")
+    #: "native" / "mute". Whether this shot's clip contributes its own audio.
+    #: The provider gives every clip a track and taking all of them is the
+    #: right default; it is a bad only-option, because one shot's generated
+    #: hum should cost eight seconds rather than a whole film's sound.
+    audio_mode = Column(String, default="native")
+    #: Level trim in dB applied to this shot's own audio. Generated audio is
+    #: often usable but far too loud against the shot beside it, which is a
+    #: level decision and not an on/off one.
+    audio_gain_db = Column(Float, default=0.0)
     seed_policy = Column(String, default="random")
     status = Column(String, default="Draft")  # Draft / Ready / Generating / NeedsReview / Approved / Failed
 

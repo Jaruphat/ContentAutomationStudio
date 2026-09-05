@@ -65,6 +65,18 @@ logger = logging.getLogger("cas.render_service")
 #: it - the room tone is part of what the video model produced.
 NARRATION_DUCK_DB = -11.0
 
+#: Where a music bed sits under the programme by default. A bed mixed at
+#: parity is a duet with the film, not a bed.
+MUSIC_GAIN_DB = -18.0
+
+#: How much further the bed drops once a voice is over it. Music at reading
+#: level under narration is the commonest way a review cut becomes
+#: unwatchable.
+MUSIC_NARRATION_DUCK_DB = -8.0
+
+#: A shot whose own audio is not used. The clip still plays; it is silent.
+AUDIO_MODE_MUTE = "mute"
+
 #: Every segment that carries audio is normalised to this layout so the concat
 #: demuxer can stream-copy them into one file.
 AUDIO_SAMPLE_RATE = 48000
@@ -128,6 +140,29 @@ def probe_media(file_path: str) -> dict[str, Any]:
     return probe_media_file(file_path)
 
 
+def _shot_audio_direction(
+    db: Session, sources: list[tuple[dict[str, Any], "Take"]]
+) -> list[tuple[bool, float]]:
+    """``(muted, gain_db)`` per timeline position, in render order.
+
+    Read once for the whole render rather than per segment, so the report of
+    what was done is built from the same values the segments were made with
+    instead of a second read of rows that may have moved in between.
+    """
+    shot_ids = [take.shot_id for _item, take in sources]
+    shots = {
+        shot.id: shot
+        for shot in db.query(Shot).filter(Shot.id.in_(shot_ids)).all()
+    } if shot_ids else {}
+    plan: list[tuple[bool, float]] = []
+    for shot_id in shot_ids:
+        shot = shots.get(shot_id)
+        mode = (getattr(shot, "audio_mode", "") or "native").lower()
+        gain = float(getattr(shot, "audio_gain_db", 0.0) or 0.0)
+        plan.append((mode == AUDIO_MODE_MUTE, gain))
+    return plan
+
+
 def _source_has_audio(file_path: str) -> bool | None:
     """Whether a source file carries audio, or None when it cannot be probed.
 
@@ -162,6 +197,12 @@ def _blocked(
         "size_bytes": 0,
         "has_audio": False,
         "audio_codec": "",
+        "audio_direction": {
+            "muted_shots": [],
+            "adjusted_shots": {},
+            "music": {"present": False, "gain_db": 0.0,
+                      "ducked_under_narration": False, "path": ""},
+        },
         "provenance_path": "",
         "embedded_metadata_keys": leaked_metadata_keys or [],
         "metadata_status": metadata_status,
@@ -506,7 +547,25 @@ def render_review_video(
             "Source audio could not be detected because ffprobe was unavailable "
             "or could not read the media. Rendering is blocked to prevent audio loss.",
         )
-    keep_audio = any(source_audio)
+
+    # What the director asked for, shot by shot. Resolved here rather than in
+    # the loop so the report can be built from the same values the segments
+    # were made with, instead of from a second read of the same rows.
+    shot_audio = _shot_audio_direction(db, sources)
+    muted_shots = [
+        take.shot_id for index, (_item, take) in enumerate(sources)
+        if shot_audio[index][0]
+    ]
+    adjusted_shots = {
+        take.shot_id: shot_audio[index][1]
+        for index, (_item, take) in enumerate(sources)
+        if shot_audio[index][1]
+    }
+
+    keep_audio = any(
+        flag and not shot_audio[index][0]
+        for index, flag in enumerate(source_audio)
+    )
 
     segment_paths: list[str] = []
     for index, (item, take) in enumerate(sources):
@@ -515,7 +574,11 @@ def render_review_video(
         is_video = (take.file_path or "").lower().endswith(VIDEO_EXTENSIONS)
         # A still or a silent clip on an otherwise-audible timeline needs a
         # synthesised silent track to match the other segments.
-        needs_silence = keep_audio and not source_audio[index]
+        muted, gain_db = shot_audio[index]
+        # A still, a silent clip, or one the director muted all need the same
+        # synthesised track: the segments have to share a layout for the
+        # concat demuxer's stream copy.
+        needs_silence = keep_audio and (not source_audio[index] or muted)
 
         cmd = [ffmpeg, "-y", "-loglevel", "error"]
         if not is_video:
@@ -542,6 +605,8 @@ def render_review_video(
             "-pix_fmt", "yuv420p",
         ]
         if keep_audio:
+            if gain_db and not needs_silence:
+                cmd += ["-af", f"volume={gain_db:g}dB"]
             cmd += [
                 "-c:a", "aac",
                 "-ar", str(AUDIO_SAMPLE_RATE),
@@ -647,6 +712,81 @@ def render_review_video(
                 warnings.append(
                     f"{len(track.failures)} narration line(s) could not be spoken."
                 )
+
+    # --- Music bed -------------------------------------------------------
+    # Laid after narration so it can be ducked under the voice, and before
+    # loudness normalisation so the whole programme is measured together.
+    music_report: dict[str, Any] = {
+        "present": False, "gain_db": 0.0,
+        "ducked_under_narration": False, "path": "",
+    }
+    music_path = (project.music_path or "").strip()
+    if music_path and not os.path.isfile(music_path):
+        # Losing a whole render over a moved file is the wrong trade; so is
+        # delivering a silent film that was meant to have music and saying
+        # nothing about it.
+        warnings.append(
+            f"The project's music bed file is missing, so the film was "
+            f"rendered without it: {music_path}"
+        )
+    elif music_path:
+        music_gain = float(
+            project.music_gain_db if project.music_gain_db is not None
+            else MUSIC_GAIN_DB
+        )
+        ducked = bool(narration_report.get("present"))
+        if ducked:
+            music_gain += MUSIC_NARRATION_DUCK_DB
+        bedded = os.path.join(out_dir, "review.bedded.mp4")
+        if keep_audio:
+            # apad so a bed shorter than the film does not end the mix early;
+            # duration=first then cuts it to the programme.
+            filter_complex = (
+                f"[1:a]volume={music_gain:g}dB,apad[bed];"
+                f"[0:a][bed]amix=inputs=2:duration=first:normalize=0[aout]"
+            )
+            bed_cmd = [
+                ffmpeg, "-y", "-loglevel", "error",
+                "-i", concat_output, "-i", music_path,
+                "-filter_complex", filter_complex,
+                "-map", "0:v", "-map", "[aout]",
+                "-c:v", "copy", "-c:a", "aac", "-b:a", AUDIO_BITRATE,
+                bedded,
+            ]
+        else:
+            # Nothing on the timeline had audio, so the bed becomes the only
+            # track. Padded then cut with -shortest, so a bed shorter than the
+            # film does not truncate the picture and a longer one does not
+            # extend it.
+            bed_cmd = [
+                ffmpeg, "-y", "-loglevel", "error",
+                "-i", concat_output, "-i", music_path,
+                "-filter_complex", f"[1:a]volume={music_gain:g}dB,apad[aout]",
+                "-map", "0:v", "-map", "[aout]", "-shortest",
+                "-c:v", "copy", "-c:a", "aac", "-b:a", AUDIO_BITRATE,
+                bedded,
+            ]
+        ok, err = _run(bed_cmd)
+        if not ok:
+            return _blocked(project_id, f"FFmpeg music bed mix failed: {err}")
+        try:
+            os.remove(concat_output)
+        except OSError:
+            pass
+        concat_output = bedded
+        keep_audio = True
+        music_report = {
+            "present": True,
+            "gain_db": music_gain,
+            "ducked_under_narration": ducked,
+            "path": music_path,
+        }
+
+    audio_direction = {
+        "muted_shots": muted_shots,
+        "adjusted_shots": adjusted_shots,
+        "music": music_report,
+    }
 
     if keep_audio:
         input_measurement = _measure_loudness(ffmpeg, concat_output)
@@ -788,6 +928,10 @@ def render_review_video(
                 "target_lufs": AUDIO_TARGET_LUFS if keep_audio else None,
                 "true_peak_dbtp": AUDIO_TRUE_PEAK_DBTP if keep_audio else None,
                 "loudness_range_lu": AUDIO_LOUDNESS_RANGE if keep_audio else None,
+                # What was asked for, shot by shot, so a delivered file can be
+                # checked against the direction it was made under rather than
+                # only against its measured loudness.
+                "direction": audio_direction,
                 "measured_input_lufs": loudness_input,
                 "measured_output_lufs": loudness_output,
                 "measured_output_true_peak_dbtp": output_true_peak,
@@ -828,6 +972,7 @@ def render_review_video(
         "has_audio": bool(probe.get("has_audio")) if probe else keep_audio,
         "audio_codec": probe.get("audio_codec", "aac" if keep_audio else ""),
         # What was spoken over the film, and which lines did not go cleanly.
+        "audio_direction": audio_direction,
         "narration": narration_report,
         "provenance_path": provenance_path,
         "embedded_metadata_keys": leaked,
