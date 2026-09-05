@@ -297,3 +297,73 @@ describe("Timeline failure truthfulness", () => {
   });
 
 });
+
+describe("Watching the finished film", () => {
+  const FILM_KEY = ["rendered-film", "project-1"];
+
+  function film(overrides: Record<string, unknown> = {}) {
+    return {
+      project_id: "project-1",
+      rendered: true,
+      url: "/api/projects/project-1/render/file",
+      reason: "",
+      size_bytes: 43938900,
+      duration_sec: 184.02,
+      width: 576,
+      height: 1024,
+      has_audio: true,
+      rendered_at: "2026-09-05T02:31:00+00:00",
+      stale: false,
+      ...overrides,
+    };
+  }
+
+  it("plays the render in the page instead of naming a file to go and open", () => {
+    // Every other stage is reviewable in the browser except the one thing the
+    // pipeline exists to produce.
+    const qc = queryClient();
+    qc.setQueryData(TIMELINE_KEY, manifest());
+    qc.setQueryData(FILM_KEY, film());
+
+    const html = render(qc);
+
+    expect(html).toContain("<video");
+    expect(html).toContain("controls");
+    expect(html).toContain("/api/projects/project-1/render/file");
+  });
+
+  it("says a project has not been rendered rather than showing a dead player", () => {
+    const qc = queryClient();
+    qc.setQueryData(TIMELINE_KEY, manifest());
+    qc.setQueryData(
+      FILM_KEY,
+      film({ rendered: false, url: "", reason: "This project has not been rendered yet." }),
+    );
+
+    const html = render(qc);
+
+    expect(html).not.toContain("<video");
+    expect(html).toContain("has not been rendered yet");
+  });
+
+  it("warns when the film on disk is older than the timeline on screen", () => {
+    // Reviewing a previous cut without noticing is the failure this prevents;
+    // the file is still worth playing, so it is a caution, not a hidden player.
+    const qc = queryClient();
+    qc.setQueryData(TIMELINE_KEY, manifest());
+    qc.setQueryData(FILM_KEY, film({ stale: true }));
+
+    const html = render(qc);
+
+    expect(html).toContain("<video");
+    expect(html).toMatch(/older than|out of date/i);
+  });
+
+  it("gives the aspect ratio to the player so a vertical film is not letterboxed into a wide box", () => {
+    const qc = queryClient();
+    qc.setQueryData(TIMELINE_KEY, manifest());
+    qc.setQueryData(FILM_KEY, film());
+
+    expect(render(qc)).toMatch(/aspect-ratio:\s*576\s*\/\s*1024/);
+  });
+});

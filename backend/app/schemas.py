@@ -1206,6 +1206,30 @@ class RenderRequest(BaseModel):
     narrate: bool = False
 
 
+class RenderedFilm(BaseModel):
+    """The finished film for a project, as far as the page needs to play it.
+
+    ``rendered: false`` with a reason is the ordinary answer for a project
+    nobody has rendered yet - a 404 there would show a failure to somebody who
+    has simply not pressed the button.
+    """
+
+    project_id: str
+    rendered: bool = False
+    url: str = ""
+    reason: str = ""
+    size_bytes: int = 0
+    duration_sec: float = 0.0
+    width: int = 0
+    height: int = 0
+    has_audio: bool = False
+    #: When the file was last written, so the page can say how old it is - the
+    #: film on disk is easily older than the timeline that is on screen.
+    rendered_at: str = ""
+    #: True when the timeline has moved on since the file was written.
+    stale: bool = False
+
+
 class RenderResult(BaseModel):
     project_id: str
     rendered: bool

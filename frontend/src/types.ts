@@ -1026,3 +1026,40 @@ export type SceneCreate = Partial<
 export type ShotCreate = Partial<
   Omit<Shot, "id" | "scene_id" | "created_at" | "updated_at">
 >;
+
+
+/** One decision applied to many takes at once. */
+export interface BatchReviewResult {
+  approved: number;
+  rejected: number;
+  failed: number;
+  results: { take_id: string; status: string; detail: string }[];
+}
+
+/** An entry in the regenerate picker. `keep_seed` is the half a user cannot
+ *  work out: holding the seed is what keeps a framing while the light moves,
+ *  and re-rolling it is what lets a framing change at all. */
+export interface RegenerationIntentOption {
+  key: string;
+  label: string;
+  directive: string;
+  keep_seed: boolean;
+  explanation: string;
+}
+
+/** The finished film for a project, as far as the page needs to play it.
+ *  `rendered: false` with a reason is the ordinary answer for a project nobody
+ *  has rendered yet, not an error. */
+export interface RenderedFilm {
+  project_id: string;
+  rendered: boolean;
+  url: string;
+  reason: string;
+  size_bytes: number;
+  duration_sec: number;
+  width: number;
+  height: number;
+  has_audio: boolean;
+  rendered_at: string;
+  stale: boolean;
+}

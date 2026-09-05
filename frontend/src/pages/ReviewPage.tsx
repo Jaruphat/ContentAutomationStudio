@@ -39,6 +39,81 @@ function formatUsd(amount: number): string {
   });
 }
 
+/** Approving a run without clicking through it one card at a time.
+ *
+ *  A three-minute film is twenty-odd takes, and one-at-a-time review takes
+ *  longer than watching the film it is reviewing. The count is taken from what
+ *  the current filter is showing, because the button acts on what is on
+ *  screen - naming a number that includes takes the user filtered away would
+ *  be a promise to act on takes they cannot see.
+ *
+ *  It does not appear for a single take: one click is already one click, and a
+ *  bulk control is exactly what should not be easy to press by accident. */
+function BatchApproveBar({
+  projectId,
+  takes,
+  runId,
+}: {
+  projectId: string;
+  takes: Take[];
+  runId: string | null;
+}) {
+  const qc = useQueryClient();
+  const pending = takes.filter((t) => t.review_status === "Pending");
+
+  const batchMut = useMutation({
+    mutationFn: () =>
+      api.review.batchReview(
+        projectId,
+        pending.map((t) => t.id),
+        "approve",
+      ),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["takes", projectId, runId] });
+      qc.invalidateQueries({ queryKey: ["takes", projectId, null] });
+    },
+  });
+
+  if (pending.length < 2) return null;
+
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-zinc-800 bg-zinc-900/60 px-4 py-2.5">
+      <p className="text-xs text-zinc-400">
+        {pending.length} takes are waiting on a decision.
+      </p>
+      <div className="flex items-center gap-3">
+        {batchMut.isError && (
+          <span className="text-xs text-red-300">
+            {toAIError(batchMut.error).detail}
+          </span>
+        )}
+        {batchMut.isSuccess && batchMut.data.failed > 0 && (
+          <span className="text-xs text-amber-300">
+            {batchMut.data.approved} approved, {batchMut.data.failed} could not
+            be:{" "}
+            {batchMut.data.results
+              .filter((r) => r.status === "Failed")
+              .map((r) => r.detail)
+              .join(" ")}
+          </span>
+        )}
+        <button
+          onClick={() => batchMut.mutate()}
+          disabled={batchMut.isPending}
+          className="flex items-center gap-1.5 rounded-md bg-emerald-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-600 disabled:opacity-50"
+        >
+          {batchMut.isPending ? (
+            <Loader2 size={12} className="animate-spin" />
+          ) : (
+            <CheckCircle size={12} />
+          )}
+          Approve all {pending.length} pending
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export function reviewRunPath(runId: string): string {
   return `/review?run=${encodeURIComponent(runId)}`;
 }
@@ -444,6 +519,12 @@ export default function ReviewPage() {
           </div>
         );
       })()}
+
+      <BatchApproveBar
+        projectId={currentProjectId}
+        takes={filtered ?? []}
+        runId={runId}
+      />
 
       {/* Filters + stats */}
       <div className="flex flex-wrap items-center gap-3">

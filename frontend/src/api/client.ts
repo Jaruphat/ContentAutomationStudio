@@ -5,6 +5,9 @@
 
 import axios from "axios";
 import type {
+  BatchReviewResult,
+  RenderedFilm,
+  RegenerationIntentOption,
   AIErrorBody,
   AIErrorCategory,
   AIHealthResponse,
@@ -446,11 +449,42 @@ export const review = {
       .post<Take>(`/takes/${takeId}/reject`, { notes, rating })
       .then((r) => r.data),
 
-  regenerate: (shotId: string, confirmPaid = false) =>
+  /** One decision applied to many takes. Membership is checked server-side
+   *  before anything is written, so a stale selection refuses the whole
+   *  request rather than applying half of it. */
+  batchReview: (
+    projectId: string,
+    takeIds: string[],
+    action: "approve" | "reject",
+    reason = "",
+  ) =>
+    http
+      .post<BatchReviewResult>(`/projects/${projectId}/takes/batch-review`, {
+        take_ids: takeIds,
+        action,
+        reason,
+      })
+      .then((r) => r.data),
+
+  regenerate: (
+    shotId: string,
+    confirmPaid = false,
+    intent = "",
+    intentNote = "",
+  ) =>
     http
       .post<GenerationJob>(`/shots/${shotId}/regenerate`, {
         confirm_paid_generation: confirmPaid,
+        intent,
+        intent_note: intentNote,
       })
+      .then((r) => r.data),
+
+  /** The regenerate vocabulary, server-side, so the seed policy shown beside
+   *  each choice is the one the endpoint will actually apply. */
+  listIntents: () =>
+    http
+      .get<RegenerationIntentOption[]>("/regeneration-intents")
       .then((r) => r.data),
 
   /** Current single-shot route and price, including already-approved shots. */
@@ -500,6 +534,13 @@ export const timeline = {
   renderPlan: (projectId: string) =>
     http
       .post<RenderPlan>(`/projects/${projectId}/render-plan`)
+      .then((r) => r.data),
+
+  /** The finished film, if this project has one. Asked on load, so a render
+   *  survives a reload instead of living only in the response that made it. */
+  latestRender: (projectId: string) =>
+    http
+      .get<RenderedFilm>(`/projects/${projectId}/render/latest`)
       .then((r) => r.data),
 
   /** Executes the render. Reports why it was skipped rather than faking one. */

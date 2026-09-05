@@ -2,12 +2,16 @@
 Timeline router - Timeline manifest, auto-build, and render plan.
 """
 
-from fastapi import APIRouter, Depends, HTTPException
+import os
+from datetime import datetime, timezone
+
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models import Project, TimelineItem
 from app.schemas import (
+    RenderedFilm,
     RenderPlan,
     RenderRequest,
     RenderResult,
@@ -15,7 +19,13 @@ from app.schemas import (
     TimelineManifest,
     TimelineUpdateRequest,
 )
-from app.services import render_service, timeline_service
+from app import paths
+from app.services import (
+    media_probe,
+    range_response,
+    render_service,
+    timeline_service,
+)
 
 router = APIRouter(prefix="/api/projects/{project_id}", tags=["timeline"])
 
@@ -197,3 +207,87 @@ def render_review(
     except timeline_service.StaleTimelineError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     return RenderResult(**result)
+
+
+# ---------------------------------------------------------------------------
+# Watching the result
+# ---------------------------------------------------------------------------
+
+def _rendered_path(project_id: str) -> str:
+    """Where a review render lands. One known place per project, so "is there
+    a finished film?" is a question the page can ask on load rather than
+    something only the response to a render ever knew."""
+    return os.path.join(paths.exports_dir(project_id), "review.mp4")
+
+
+@router.get("/render/latest", response_model=RenderedFilm)
+def latest_render(project_id: str, db: Session = Depends(get_db)):
+    """Describe this project's finished film, if it has one.
+
+    Everything else in this application is reviewable in the browser except
+    the one thing the pipeline exists to produce: the render returned an
+    absolute path and the path was gone on the next reload.
+    """
+    _get_project_or_404(db, project_id)
+    path = _rendered_path(project_id)
+    if not os.path.isfile(path):
+        return RenderedFilm(
+            project_id=project_id,
+            rendered=False,
+            reason=(
+                "This project has not been rendered yet. Build the timeline "
+                "and press Render Review."
+            ),
+        )
+
+    probe = media_probe.probe_media_file(path)
+    modified = datetime.fromtimestamp(os.path.getmtime(path), tz=timezone.utc)
+
+    # A film older than the newest thing on the timeline is still worth
+    # playing - it is what was made - but saying so is the difference between
+    # reviewing the current cut and reviewing a previous one without noticing.
+    items = db.query(TimelineItem).filter(TimelineItem.project_id == project_id).all()
+    latest_item = max(
+        (item.updated_at or item.created_at for item in items if
+         (item.updated_at or item.created_at)),
+        default=None,
+    )
+    stale = bool(
+        latest_item
+        and latest_item.replace(tzinfo=latest_item.tzinfo or timezone.utc)
+        > modified
+    )
+
+    return RenderedFilm(
+        project_id=project_id,
+        rendered=True,
+        url=f"/api/projects/{project_id}/render/file",
+        size_bytes=os.path.getsize(path),
+        duration_sec=float(probe.get("duration_sec") or 0.0),
+        width=int(probe.get("width") or 0),
+        height=int(probe.get("height") or 0),
+        has_audio=bool(probe.get("has_audio")),
+        rendered_at=modified.isoformat(),
+        stale=stale,
+    )
+
+
+@router.get("/render/file")
+def stream_render(project_id: str, request: Request, db: Session = Depends(get_db)):
+    """Stream the finished film, seekably.
+
+    Range support is the whole point: without it a browser can only play from
+    the start, and nobody reviews three minutes of film without scrubbing it.
+    The path is derived here, never taken from the request.
+    """
+    _get_project_or_404(db, project_id)
+    path = _rendered_path(project_id)
+    if not os.path.isfile(path):
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                "This project has no render yet. Build the timeline and press "
+                "Render Review."
+            ),
+        )
+    return range_response.serve(path, request.headers.get("range"))

@@ -25,6 +25,7 @@ import ActionError from "../components/ActionError";
 import AspectOverrideBanner from "../components/AspectOverrideBanner";
 import { useAppState } from "../store/useProjectStore";
 import type {
+  RenderedFilm,
   RenderPlan,
   RenderResult,
   TimelineCoverage,
@@ -265,6 +266,69 @@ function RenderPlanPanel({ plan }: { plan: RenderPlan }) {
 
 // ── Render result display ────────────────────────────────────────────────
 
+/** The finished film, played where it was made.
+ *
+ *  Every other stage of this application is reviewable in the browser except
+ *  the one thing the pipeline exists to produce: the render returned an
+ *  absolute path, the user left to find the file, and the path was gone on the
+ *  next reload. This asks the server on load instead, so a film made overnight
+ *  is on screen the next morning.
+ *
+ *  The aspect ratio comes from the file, not from a fixed box: a 576x1024
+ *  vertical cartoon in a 16:9 frame is mostly black. */
+function FinishedFilmPanel({ film }: { film: RenderedFilm }) {
+  return (
+    <div className="rounded-lg border border-zinc-800 bg-zinc-900/60 p-4 space-y-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <PlayCircle size={14} className="text-emerald-400" />
+        <h3 className="text-sm font-semibold text-zinc-200">Finished Film</h3>
+        {film.rendered && (
+          <span className="text-[11px] text-zinc-500">
+            {film.width}x{film.height} · {film.duration_sec.toFixed(1)}s ·{" "}
+            {formatBytes(film.size_bytes)}
+            {film.has_audio ? " · with audio" : " · silent"}
+          </span>
+        )}
+      </div>
+
+      {!film.rendered && <p className="text-xs text-zinc-500">{film.reason}</p>}
+
+      {film.rendered && (
+        <>
+          {film.stale && (
+            <p className="rounded border border-amber-900/60 bg-amber-950/30 px-3 py-2 text-[11px] text-amber-200">
+              This film is older than the timeline on screen, so it is out of
+              date - you would be reviewing a previous cut. Render Review again
+              to see the current one.
+            </p>
+          )}
+          <video
+            controls
+            preload="metadata"
+            src={film.url}
+            className="w-full max-h-[70vh] rounded-md bg-black"
+            style={
+              film.width && film.height
+                ? { aspectRatio: `${film.width} / ${film.height}` }
+                : undefined
+            }
+          />
+          <p className="text-[11px] text-zinc-500">
+            Rendered {new Date(film.rendered_at).toLocaleString()}.{" "}
+            <a
+              href={film.url}
+              download
+              className="text-indigo-400 hover:underline"
+            >
+              Download
+            </a>
+          </p>
+        </>
+      )}
+    </div>
+  );
+}
+
 function RenderResultPanel({ result }: { result: RenderResult }) {
   return (
     <div className="rounded-lg border border-zinc-800 bg-zinc-900/60 p-4 space-y-3">
@@ -385,12 +449,23 @@ export default function TimelinePage() {
 
   // Off by default: speaking a film takes time and is a choice, not a default.
   const [narrate, setNarrate] = useState(false);
+  // Asked on load, so a film rendered in a previous session is on screen
+  // rather than living only in the response that produced it.
+  const filmQ = useQuery({
+    queryKey: ["rendered-film", currentProjectId],
+    queryFn: () => api.timeline.latestRender(currentProjectId as string),
+    enabled: Boolean(currentProjectId),
+  });
+
   const renderMut = useMutation({
     mutationFn: (projectId: string) => api.timeline.render(projectId, narrate),
     onSuccess: (data, projectId) => {
       if (currentProjectRef.current === projectId) {
         setScopedRenderResult({ projectId, data });
       }
+      // The player reads from the server, not from this response, so a film
+      // rendered now and one rendered last night reach the page the same way.
+      qc.invalidateQueries({ queryKey: ["rendered-film", projectId] });
     },
   });
 
@@ -585,6 +660,7 @@ export default function TimelinePage() {
       )}
 
       {/* Render output */}
+      {filmQ.data && <FinishedFilmPanel film={filmQ.data} />}
       {renderResult && <RenderResultPanel result={renderResult} />}
       {renderPlan && <RenderPlanPanel plan={renderPlan} />}
     </div>

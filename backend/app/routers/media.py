@@ -12,17 +12,16 @@ runtime data directory.
 """
 
 import logging
-import mimetypes
 import os
 
-from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import FileResponse
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from app import paths
 from app.database import get_db
 from app.models import ReferenceImage, Take
 from app.services import media_providers
+from app.services import range_response
 from app.services.media_probe import VIDEO_EXTENSIONS, ffmpeg_path, run_captured
 
 logger = logging.getLogger("cas.media")
@@ -75,7 +74,13 @@ async def media_health():
     return {"providers": entries}
 
 
-def _serve_from_data_dir(file_path: str, *, what: str, missing_hint: str):
+def _serve_from_data_dir(
+    file_path: str,
+    *,
+    what: str,
+    missing_hint: str,
+    range_header: str | None = None,
+):
     """Stream a file, but only from inside the runtime data directory.
 
     A database row could in principle hold any absolute path - a re-imported
@@ -100,8 +105,9 @@ def _serve_from_data_dir(file_path: str, *, what: str, missing_hint: str):
     if not os.path.isfile(target):
         raise HTTPException(status_code=404, detail=missing_hint)
 
-    media_type = mimetypes.guess_type(target)[0] or "application/octet-stream"
-    return FileResponse(target, media_type=media_type)
+    # Served through the range-aware response so a video can be scrubbed.
+    # Without it the seek bar moves and the picture stays where it was.
+    return range_response.serve(target, range_header)
 
 
 @router.get("/references/{image_id}/file")
@@ -126,7 +132,9 @@ def get_reference_image_file(image_id: str, db: Session = Depends(get_db)):
 
 
 @router.get("/takes/{take_id}/file")
-def get_take_file(take_id: str, db: Session = Depends(get_db)):
+def get_take_file(
+    take_id: str, request: Request, db: Session = Depends(get_db)
+):
     """Stream a take's media file so the reviewer can actually see it.
 
     Only files inside the runtime data directory are served. A take row could
@@ -144,6 +152,7 @@ def get_take_file(take_id: str, db: Session = Depends(get_db)):
             "The take's media file is missing from disk. Regenerate the shot "
             "to produce it again."
         ),
+        range_header=request.headers.get("range"),
     )
 
 
