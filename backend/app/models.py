@@ -162,6 +162,10 @@ class Project(Base):
     #: An audio file laid under the whole film. A bed is a property of the
     #: film, not of any shot in it, which is why it lives here and the mute
     #: and trim controls live on the shot.
+    #: Frames of black appended after the last shot. A few before a loop stop
+    #: the last frame and the first from touching, which is what makes a loop
+    #: read as a loop rather than a glitch.
+    tail_black_frames = Column(Integer, default=0)
     music_path = Column(String, default="")
     #: How far under the programme the bed sits. Mixed at parity it would be a
     #: duet with the film rather than a bed.

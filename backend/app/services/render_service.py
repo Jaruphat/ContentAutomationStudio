@@ -77,6 +77,20 @@ MUSIC_NARRATION_DUCK_DB = -8.0
 #: A shot whose own audio is not used. The clip still plays; it is silent.
 AUDIO_MODE_MUTE = "mute"
 
+#: The transitions the renderer understands. A cut is the default and costs
+#: nothing: the segments are stream-copied, which is why assembly is fast.
+TRANSITION_CUT = "cut"
+TRANSITION_DISSOLVE = "dissolve"
+TRANSITIONS = (TRANSITION_CUT, TRANSITION_DISSOLVE)
+
+#: How long a dissolve runs. Short on purpose - this is a punctuation mark
+#: between two shots, not an effect.
+DEFAULT_DISSOLVE_SEC = 0.5
+
+#: A dissolve may not take more than this share of either shot it joins.
+#: Past that it stops blending two shots and starts eating a third.
+MAX_DISSOLVE_SHARE = 0.5
+
 #: Every segment that carries audio is normalised to this layout so the concat
 #: demuxer can stream-copy them into one file.
 AUDIO_SAMPLE_RATE = 48000
@@ -197,6 +211,9 @@ def _blocked(
         "size_bytes": 0,
         "has_audio": False,
         "audio_codec": "",
+        "transitions": {
+            "dissolves": 0, "re_encoded": False, "tail_black_frames": 0,
+        },
         "audio_direction": {
             "muted_shots": [],
             "adjusted_shots": {},
@@ -630,6 +647,89 @@ def render_review_video(
             )
         segment_paths.append(segment)
 
+    # -- Transitions -------------------------------------------------------
+    # `transition_in` has been on the timeline row since the first build and
+    # the renderer never read it: every film this application made was hard
+    # cuts whatever the row said. Honouring it is not free - a dissolve is a
+    # filter across a boundary and cannot be stream-copied - so the fast path
+    # is kept for a film of cuts, and the cost of a dissolve is stated rather
+    # than paid silently.
+    dissolves: list[int] = []
+    for index, (item, _take) in enumerate(sources):
+        name = str(item.get("transition_in") or TRANSITION_CUT).strip().lower()
+        if name not in TRANSITIONS:
+            return _blocked(
+                project_id,
+                f"Timeline position {item['order']} asks for a "
+                f"'{item.get('transition_in')}' transition, which this "
+                f"renderer does not know. Use one of: "
+                f"{', '.join(TRANSITIONS)}. Treating it as a cut would deliver "
+                f"a film that ignores the edit and looks exactly like one that "
+                f"honoured it."
+            )
+        # Nothing before the first shot to dissolve from. Refusing there would
+        # block a render over a setting that can have no effect.
+        if name == TRANSITION_DISSOLVE and index > 0:
+            dissolves.append(index)
+
+    for index in dissolves:
+        before = float(sources[index - 1][0].get("duration_sec") or 0.0)
+        after = float(sources[index][0].get("duration_sec") or 0.0)
+        limit = MAX_DISSOLVE_SHARE * min(before, after)
+        if DEFAULT_DISSOLVE_SEC > limit:
+            return _blocked(
+                project_id,
+                f"The dissolve into timeline position "
+                f"{sources[index][0]['order']} is {DEFAULT_DISSOLVE_SEC:g}s, "
+                f"and the shots it joins are {before:g}s and {after:g}s. An "
+                f"overlap past a neighbour's start does not blend two shots, "
+                f"it eats a third. Lengthen the shots, or cut instead."
+            )
+
+    tail_frames = int(getattr(project, "tail_black_frames", 0) or 0)
+    transitions_report = {
+        "dissolves": len(dissolves),
+        "re_encoded": bool(dissolves),
+        "tail_black_frames": tail_frames,
+    }
+
+    if tail_frames > 0:
+        # Built as a segment so it goes through the same assembly as
+        # everything else and shares the audio layout.
+        tail = os.path.join(segments_dir, "seg_tail.mp4")
+        tail_cmd = [
+            ffmpeg, "-y", "-loglevel", "error",
+            "-f", "lavfi",
+            "-i", f"color=c=black:s={width}x{height}:r={frame_rate:g}",
+        ]
+        if keep_audio:
+            tail_cmd += [
+                "-f", "lavfi",
+                "-i", f"anullsrc=channel_layout=stereo:"
+                      f"sample_rate={AUDIO_SAMPLE_RATE}",
+                "-map", "0:v:0", "-map", "1:a:0",
+            ]
+        else:
+            tail_cmd += ["-map", "0:v:0"]
+        tail_cmd += STRIP_METADATA_ARGS
+        tail_cmd += [
+            "-t", f"{tail_frames / frame_rate:g}",
+            "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
+            "-pix_fmt", "yuv420p",
+        ]
+        if keep_audio:
+            tail_cmd += [
+                "-c:a", "aac", "-ar", str(AUDIO_SAMPLE_RATE),
+                "-ac", str(AUDIO_CHANNELS), "-b:a", AUDIO_BITRATE, "-shortest",
+            ]
+        else:
+            tail_cmd += ["-an"]
+        tail_cmd.append(tail)
+        ok, err = _run(tail_cmd)
+        if not ok:
+            return _blocked(project_id, f"FFmpeg tail render failed: {err}")
+        segment_paths.append(tail)
+
     # Concatenate the normalised segments. Video can be stream-copied; audio is
     # decoded once so loudness normalisation applies to the assembled program.
     concat_file = os.path.join(out_dir, "concat_list.txt")
@@ -649,15 +749,78 @@ def render_review_video(
         os.path.join(out_dir, "review.pre-normalized.mp4")
         if keep_audio or burn_subtitles else output_path
     )
-    concat_cmd = [
-        ffmpeg, "-y", "-loglevel", "error",
-        "-f", "concat", "-safe", "0", "-i", concat_file,
-        *STRIP_METADATA_ARGS,
-        "-c", "copy", concat_output,
-    ]
-    ok, err = _run(concat_cmd)
-    if not ok:
-        return _blocked(project_id, f"FFmpeg concat failed: {err}")
+    if dissolves:
+        # xfade chains pairwise, and each overlap pulls everything after it
+        # earlier - so the offset of a join is the running time so far minus
+        # every overlap already spent. Getting that wrong is invisible in a
+        # thumbnail and puts every later subtitle out of step.
+        durations = [
+            float(item.get("duration_sec") or 0.0) for item, _take in sources
+        ]
+        if tail_frames > 0:
+            durations.append(tail_frames / frame_rate)
+        inputs: list[str] = []
+        for segment in segment_paths:
+            inputs += ["-i", segment]
+
+        filters: list[str] = []
+        label = "0:v"
+        elapsed = durations[0]
+        for index in range(1, len(segment_paths)):
+            out_label = f"v{index}"
+            if index in dissolves:
+                offset = elapsed - DEFAULT_DISSOLVE_SEC
+                filters.append(
+                    f"[{label}][{index}:v]xfade=transition=fade:"
+                    f"duration={DEFAULT_DISSOLVE_SEC:g}:offset={offset:g}"
+                    f"[{out_label}]"
+                )
+                elapsed += durations[index] - DEFAULT_DISSOLVE_SEC
+            else:
+                filters.append(
+                    f"[{label}][{index}:v]xfade=transition=fade:"
+                    f"duration=0.001:offset={elapsed - 0.001:g}[{out_label}]"
+                )
+                elapsed += durations[index] - 0.001
+            label = out_label
+
+        filter_complex = ";".join(filters)
+        blend_cmd = [ffmpeg, "-y", "-loglevel", "error", *inputs]
+        if keep_audio:
+            audio_inputs = "".join(f"[{i}:a]" for i in range(len(segment_paths)))
+            filter_complex += (
+                f";{audio_inputs}concat=n={len(segment_paths)}:v=0:a=1[aout]"
+            )
+        blend_cmd += ["-filter_complex", filter_complex, "-map", f"[{label}]"]
+        if keep_audio:
+            blend_cmd += ["-map", "[aout]"]
+        blend_cmd += STRIP_METADATA_ARGS
+        blend_cmd += [
+            "-r", f"{frame_rate:g}",
+            "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
+            "-pix_fmt", "yuv420p",
+        ]
+        if keep_audio:
+            blend_cmd += [
+                "-c:a", "aac", "-ar", str(AUDIO_SAMPLE_RATE),
+                "-ac", str(AUDIO_CHANNELS), "-b:a", AUDIO_BITRATE,
+            ]
+        else:
+            blend_cmd += ["-an"]
+        blend_cmd.append(concat_output)
+        ok, err = _run(blend_cmd)
+        if not ok:
+            return _blocked(project_id, f"FFmpeg transition blend failed: {err}")
+    else:
+        concat_cmd = [
+            ffmpeg, "-y", "-loglevel", "error",
+            "-f", "concat", "-safe", "0", "-i", concat_file,
+            *STRIP_METADATA_ARGS,
+            "-c", "copy", concat_output,
+        ]
+        ok, err = _run(concat_cmd)
+        if not ok:
+            return _blocked(project_id, f"FFmpeg concat failed: {err}")
 
     narration_report: dict[str, Any] = {"present": False}
     if narrate:
@@ -972,6 +1135,7 @@ def render_review_video(
         "has_audio": bool(probe.get("has_audio")) if probe else keep_audio,
         "audio_codec": probe.get("audio_codec", "aac" if keep_audio else ""),
         # What was spoken over the film, and which lines did not go cleanly.
+        "transitions": transitions_report,
         "audio_direction": audio_direction,
         "narration": narration_report,
         "provenance_path": provenance_path,

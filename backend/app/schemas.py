@@ -212,6 +212,15 @@ class ReferenceGenerateRequest(BaseModel):
     confirm_paid_generation: bool = False
 
 
+class RenderFinishRequest(BaseModel):
+    """How the cut ends. Frames of black before a loop stop the last frame
+    and the first from touching."""
+
+    model_config = {"extra": "forbid"}
+
+    tail_black_frames: int = Field(default=0, ge=0, le=120)
+
+
 class PublishFieldsRequest(BaseModel):
     """What an upload form asks for, kept apart from the working title."""
 
@@ -1577,6 +1586,14 @@ class RenderResult(BaseModel):
     #: take on the timeline had any.
     has_audio: bool = False
     audio_codec: str = ""
+    #: What the cut did between shots, and after the last one. `re_encoded`
+    #: says whether a dissolve cost the whole programme a re-encode - the
+    #: fast stream-copy path is kept for a film of cuts.
+    transitions: dict[str, Any] = Field(
+        default_factory=lambda: {
+            "dissolves": 0, "re_encoded": False, "tail_black_frames": 0,
+        }
+    )
     #: What was spoken over the film: whether a narration track was mixed in,
     #: how long it ran, and any line that overran its shot or could not be
     #: spoken. Reported rather than hidden, because both are worth rewriting.
