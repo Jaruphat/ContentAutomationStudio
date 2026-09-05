@@ -305,6 +305,7 @@ def main() -> int:
     produced: dict[str, Any] = state.get("beats", {})
     for index, beat in enumerate(beats, start=1):
         seconds, name, image_prompt, motion, narration, emphasis, cast = beat
+        subject_motion, camera_motion = motion
         record = produced.get(str(index), {})
         sets = [cast_ids[c] for c in cast]
         log(f"beat {index}/{len(beats)} - {name}")
@@ -386,7 +387,11 @@ def main() -> int:
                     "planned_duration_sec": seconds,
                     "dialogue": narration,
                     "emphasis_text": emphasis,
-                    "video_prompt": motion,
+                    # What happens leads; the camera qualifies it. Sent apart
+                    # because a video model reads a camera sentence as the
+                    # whole brief and animates nothing.
+                    "subject_motion": subject_motion,
+                    "camera_motion": camera_motion,
                     "negative_prompt": ep["negative"],
                     "workflow_preset_id": WF_I2V,
                     "image_provider_id": "comfyui", "image_model": "workflow",

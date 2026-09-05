@@ -127,7 +127,14 @@ SF01: dict[str, Any] = {
             "slots": ["full_body", "front"],
         },
     },
-    #: (seconds, name, image prompt, motion direction, narration, emphasis, cast)
+    #: (seconds, name, image prompt, (what happens, camera), narration,
+    #:  emphasis, cast)
+    #:
+    #: The motion is a pair because a video model does not weigh the two
+    #: clauses evenly. The first cut of this episode said "locked-off
+    #: camera... nothing else moves" and came back 86% identical frames.
+    #: Every direction below names what happens, with verbs, and leaves
+    #: out what does not.
     "shots": [
         (
             4.0, "The Station",
@@ -138,9 +145,11 @@ SF01: dict[str, Any] = {
             "platform lamps, cold damp autumn night, slight ground mist, no "
             "people, distant train headlights barely visible far down the track. "
             "Wide establishing shot, eye level, 35mm lens.",
-            "Locked-off observational camera. Mist drifts slowly across the "
-            "platform, weeds move slightly in the wind, one lamp flickers "
-            "naturally. Nothing else moves.",
+            ("Mist rolls across the platform in slow visible drifts. The "
+             "weeds between the rails bend and spring back in the wind. A "
+             "platform lamp flickers and steadies. Far down the track a "
+             "headlight grows larger and brighter.",
+             "Locked-off camera at eye level."),
             "Every night at exactly 3:17, a train arrives at this abandoned station.",
             "EVERY NIGHT / AT 3:17 AM", [],
         ),
@@ -150,8 +159,9 @@ SF01: dict[str, Any] = {
             "canopy, chipped cream-painted metal frame, condensation on the "
             "glass, weak tungsten light, abandoned station blurred behind, "
             "85mm lens, shallow depth of field.",
-            "Very slow natural push-in with slight handheld micro-movement. The "
-            "second hand ticks.",
+            ("The second hand sweeps round the dial. A bead of condensation "
+             "runs down the glass and stops.",
+             "Very slow push in with slight handheld micro-movement."),
             "", "3:17 AM", [],
         ),
         (
@@ -160,9 +170,10 @@ SF01: dict[str, Any] = {
             "toward an abandoned rural platform, modest white headlights, "
             "weathered exterior, believable proportions, wet rails reflecting "
             "weak station lights, empty platform, long lens 70mm view.",
-            "The train moves slowly and realistically toward the platform, its "
-            "headlights brightening the wet rails, with a subtle camera "
-            "vibration as it passes.",
+            ("The train rolls into the platform and grows larger in frame, "
+             "its headlights sweeping bright across the wet rails. Dust and "
+             "steam blow past the lens. The train slows and comes to a stop.",
+             "Long lens, subtle vibration as it passes."),
             "That's impossible.", "THE TRAIN RETURNS.", [],
         ),
         (
@@ -172,8 +183,10 @@ SF01: dict[str, Any] = {
             "through the paving, an old timetable frame with faded illegible "
             "paper, part of a stationary train softly out of focus behind, "
             "50mm lens.",
-            "Slow restrained lateral camera drift along the platform. Weeds move "
-            "slightly. Nothing else changes.",
+            ("Weeds and moss shift in the wind. A loose sheet of paper in the "
+             "timetable frame lifts and flaps against the glass. Light from "
+             "the stationary train shifts slowly across the peeling paint.",
+             "Slow restrained lateral drift along the platform."),
             "The station closed thirty years ago.", "CLOSED 30 YEARS AGO.", [],
         ),
         (
@@ -182,8 +195,11 @@ SF01: dict[str, Any] = {
             "One carriage door stands open, warm dim interior light spilling "
             "against the cold dark platform, no passenger visible, realistic "
             "worn interior, 50mm lens.",
-            "The carriage door finishes opening with a realistic pneumatic "
-            "motion. The interior light flickers subtly. Nobody appears.",
+            ("The carriage door slides fully open with a pneumatic push. Warm "
+             "interior light spills out across the platform and widens. The "
+             "interior lamp flickers twice. Steam curls out from beneath the "
+             "carriage.",
+             "Locked-off camera."),
             "The train isn't on any schedule, and nobody has ever stepped off.",
             "NO ONE EVER GETS OFF.", [],
         ),
@@ -194,8 +210,11 @@ SF01: dict[str, Any] = {
             "wool overcoat, a folded newspaper held at her side, ordinary tired "
             "expression, warm train interior light behind her, cold platform "
             "lamps, 50mm lens.",
-            "She takes two slow natural steps onto the platform. Her coat moves "
-            "subtly. She does not look at the camera.",
+            ("The woman steps down from the carriage onto the platform, one "
+             "foot then the other, and walks two unhurried paces forward. Her "
+             "long coat swings with the movement. She shifts the folded "
+             "newspaper to her other hand.",
+             "Locked-off camera at eye level."),
             "Until last night.", "UNTIL LAST NIGHT.", ["CHAR01"],
         ),
         (
@@ -204,8 +223,10 @@ SF01: dict[str, Any] = {
             "old-fashioned newspaper on a dark railway platform, a man's dark "
             "shoulder out of focus in the extreme foreground, natural practical "
             "station lighting, 70mm lens, shallow depth of field.",
-            "The woman raises the newspaper slightly. The paper moves naturally "
-            "in the breeze. The man in the foreground stays still.",
+            ("The woman lifts the folded newspaper up toward her chest. The "
+             "pages ripple and lift in the breeze. She turns her head "
+             "slightly and looks down at it.",
+             "70mm lens, shallow focus, camera steady."),
             "A woman walked onto the platform carrying a newspaper dated tomorrow.",
             "", ["CHAR01"],
         ),
@@ -216,8 +237,10 @@ SF01: dict[str, Any] = {
             "blank unreadable placeholder areas where the headline and date "
             "would be, worn newsprint texture, railway platform heavily out of "
             "focus behind, 85mm lens.",
-            "Minimal natural paper movement in the night air. The hands stay "
-            "steady.",
+            ("The newspaper page lifts and settles in the night air. The "
+             "hands adjust their grip and turn the page a little toward the "
+             "light, and the paper flexes across its fold.",
+             "85mm lens, shallow focus, camera steady."),
             "", "DATED TOMORROW.", [],
         ),
         (
@@ -227,8 +250,10 @@ SF01: dict[str, Any] = {
             "of a man in a dark brown jacket filling the upper half of the page, "
             "blank unreadable placeholder areas where the headline would be, "
             "worn newsprint, shallow depth of field.",
-            "Slow push toward the photograph on the front page, stopping "
-            "completely for the final half second.",
+            ("The hands raise the newspaper toward the camera and hold it "
+             "there. The page flexes and steadies. The photograph on the "
+             "front page fills more of the frame.",
+             "Slow push in that comes to rest for the final half second."),
             "But that wasn't the strange part. The photograph on the front "
             "page... was him.",
             "IT WAS HIM.", ["CHAR02"],
