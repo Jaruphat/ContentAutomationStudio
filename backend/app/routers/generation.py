@@ -37,6 +37,7 @@ from app.services import (
     dialogue_fit,
     media_providers,
     motion_direction,
+    prompt_context,
     revisions,
     scene_routing,
     shot_conditioning,
@@ -679,18 +680,12 @@ def start_generation(
             "character_ids": scene.character_ids if scene else [],
             "location_id": scene.location_id if scene else None,
         }
-        shot_dict = {
-            "id": shot.id, "shot_type": shot.shot_type,
-            "camera_angle": shot.camera_angle,
-            "camera_movement": shot.camera_movement,
-            "lens_framing": shot.lens_framing,
-            "subject": shot.subject, "action": shot.action,
-            "environment": shot.environment,
-            "generation_mode": shot.generation_mode,
-            "image_prompt": shot.image_prompt,
-            "video_prompt": shot.video_prompt,
-            "negative_prompt": shot.negative_prompt,
-        }
+        # The shared builder, not a copy of it. This was a copy, and the copy
+        # fell behind: the motion fields reached the preview and the
+        # regenerate path and never reached the prompt a generation actually
+        # submitted. Nine clips came back with no movement described and
+        # nothing reported a problem.
+        shot_dict = prompt_context.shot_input(shot)
 
         compiled = compile_prompt(
             shot=shot_dict,
