@@ -106,6 +106,89 @@ def _fraction(layer: dict[str, Any], key: str, *, default: float | None = None) 
 MAX_ROTATION_DEGREES = 360.0
 
 
+def _corners(layer: dict[str, Any]) -> list[tuple[float, float]] | None:
+    """The four points a layer is stretched onto, clockwise from top-left.
+
+    Rotation matches a tilt; it cannot match a plane seen at an angle. A
+    newspaper held out toward the camera is a trapezoid, wider at the near
+    edge, and a rotated rectangle laid over one is the last thing that still
+    reads as a sticker.
+    """
+    raw = layer.get("corners")
+    if not raw:
+        return None
+    if layer.get("x") is not None or layer.get("y") is not None:
+        # Two ways of saying where a layer goes is a recipe nobody can read.
+        raise CompositeError(
+            "A layer gives both 'corners' and an x/y placement. Corners "
+            "replace the placement; give one or the other."
+        )
+    if len(raw) != 4:
+        raise CompositeError(
+            f"'corners' needs four points, clockwise from the top left; got "
+            f"{len(raw)}."
+        )
+    points: list[tuple[float, float]] = []
+    for index, point in enumerate(raw):
+        if not isinstance(point, (list, tuple)) or len(point) != 2:
+            raise CompositeError(f"Corner {index} is not a pair of numbers.")
+        x, y = float(point[0]), float(point[1])
+        if not (0.0 <= x <= 1.0 and 0.0 <= y <= 1.0):
+            raise CompositeError(
+                f"Corner {index} is ({x:g}, {y:g}), outside the frame. "
+                f"Corners are fractions of the frame, like every other "
+                f"placement here."
+            )
+        points.append((x, y))
+    return points
+
+
+def _solve(matrix: list[list[float]], vector: list[float]) -> list[float]:
+    """Gaussian elimination on an 8x8.
+
+    Small enough not to need numpy, and not importing numpy keeps a heavy
+    dependency out of the render path for eight numbers.
+    """
+    size = len(vector)
+    rows = [row[:] + [vector[index]] for index, row in enumerate(matrix)]
+    for column in range(size):
+        pivot = max(range(column, size), key=lambda r: abs(rows[r][column]))
+        if abs(rows[pivot][column]) < 1e-12:
+            raise CompositeError(
+                "Those four corners do not describe a quadrilateral this can "
+                "map onto - check they are given clockwise from the top left."
+            )
+        rows[column], rows[pivot] = rows[pivot], rows[column]
+        for other in range(size):
+            if other == column:
+                continue
+            factor = rows[other][column] / rows[column][column]
+            for index in range(column, size + 1):
+                rows[other][index] -= factor * rows[column][index]
+    return [rows[index][size] / rows[index][index] for index in range(size)]
+
+
+def _coefficients(
+    target: list[tuple[float, float]], size: tuple[int, int]
+) -> tuple[float, ...]:
+    """The eight numbers PIL's PERSPECTIVE transform wants.
+
+    Solved from the destination quad back to the source rectangle, because
+    that is the direction the transform samples in.
+    """
+    width, height = size
+    source = [
+        (0.0, 0.0), (float(width), 0.0),
+        (float(width), float(height)), (0.0, float(height)),
+    ]
+    matrix: list[list[float]] = []
+    for (dx, dy), (sx, sy) in zip(target, source):
+        matrix.append([dx, dy, 1, 0, 0, 0, -sx * dx, -sx * dy])
+        matrix.append([0, 0, 0, dx, dy, 1, -sy * dx, -sy * dy])
+    vector = [value for point in source for value in point]
+    return tuple(_solve(matrix, vector))
+
+
 def _rotation(layer: dict[str, Any]) -> float:
     value = layer.get("rotation", 0.0) or 0.0
     try:
@@ -125,18 +208,35 @@ def _rotation(layer: dict[str, Any]) -> float:
 
 
 def _place(
-    canvas: Image.Image, patch: Image.Image, x: float, y: float, degrees: float
+    canvas: Image.Image,
+    patch: Image.Image,
+    layer: dict[str, Any],
+    x: float | None = None,
+    y: float | None = None,
 ) -> None:
-    """Centre ``patch`` on the frame at (x, y), turned by ``degrees``.
+    """Put ``patch`` on the frame: onto four corners, or centred and turned.
 
-    Rotating with expand and then re-centring is what keeps the layer where it
-    was placed; rotating in place moves it by half the growth.
+    Rotating with expand and then re-centring is what keeps a turned layer
+    where it was placed; rotating in place moves it by half the growth.
     """
+    width, height = canvas.size
+    corners = _corners(layer)
+    if corners:
+        target = [(px * width, py * height) for px, py in corners]
+        stretched = patch.transform(
+            (width, height),
+            Image.PERSPECTIVE,
+            _coefficients(target, patch.size),
+            resample=Image.BICUBIC,
+        )
+        canvas.alpha_composite(stretched, dest=(0, 0))
+        return
+
+    degrees = _rotation(layer)
     if degrees:
         patch = patch.rotate(degrees, resample=Image.BICUBIC, expand=True)
-    width, height = canvas.size
-    left = int(x * width - patch.width / 2)
-    top = int(y * height - patch.height / 2)
+    left = int((x or 0.0) * width - patch.width / 2)
+    top = int((y or 0.0) * height - patch.height / 2)
     canvas.alpha_composite(patch, dest=(max(0, left), max(0, top)))
 
 
@@ -145,8 +245,9 @@ def _draw_text(canvas: Image.Image, layer: dict[str, Any]) -> None:
     if not text.strip():
         raise CompositeError("A text layer needs text.")
     _width, height = canvas.size
-    x = _fraction(layer, "x")
-    y = _fraction(layer, "y")
+    on_corners = bool(layer.get("corners"))
+    x = None if on_corners else _fraction(layer, "x")
+    y = None if on_corners else _fraction(layer, "y")
     size = _fraction(layer, "size", default=0.05)
     font = _load_font(int(size * height))
     fill = str(layer.get("colour") or layer.get("color") or "#ffffff")
@@ -164,18 +265,19 @@ def _draw_text(canvas: Image.Image, layer: dict[str, Any]) -> None:
     ImageDraw.Draw(scratch).text(
         (4 - box[0], 4 - box[1]), text, font=font, fill=fill,
     )
-    _place(canvas, scratch, x, y, _rotation(layer))
+    _place(canvas, scratch, layer, x, y)
 
 
 def _draw_rect(canvas: Image.Image, layer: dict[str, Any]) -> None:
     """A flat patch, for masking what the model wrote."""
     width, height = canvas.size
-    x = _fraction(layer, "x")
-    y = _fraction(layer, "y")
+    on_corners = bool(layer.get("corners"))
+    x = None if on_corners else _fraction(layer, "x")
+    y = None if on_corners else _fraction(layer, "y")
     box_w = max(1, int(_fraction(layer, "width", default=0.4) * width))
     box_h = max(1, int(_fraction(layer, "height", default=0.1) * height))
     fill = str(layer.get("colour") or layer.get("color") or "#000000")
-    _place(canvas, Image.new("RGBA", (box_w, box_h), fill), x, y, _rotation(layer))
+    _place(canvas, Image.new("RGBA", (box_w, box_h), fill), layer, x, y)
 
 
 def _layer_source(db: Session, layer: dict[str, Any]) -> str:
@@ -228,8 +330,9 @@ def _draw_image(
     source_path = _layer_source(db, layer)
 
     width, height = canvas.size
-    x = _fraction(layer, "x")
-    y = _fraction(layer, "y")
+    on_corners = bool(layer.get("corners"))
+    x = None if on_corners else _fraction(layer, "x")
+    y = None if on_corners else _fraction(layer, "y")
     box_w = max(1, int(_fraction(layer, "width", default=0.5) * width))
     box_h = max(1, int(_fraction(layer, "height", default=0.5) * height))
 
@@ -250,7 +353,7 @@ def _draw_image(
         alpha = patch.getchannel("A").point(lambda v: int(v * opacity))
         patch.putalpha(alpha)
 
-    _place(canvas, patch, x, y, _rotation(layer))
+    _place(canvas, patch, layer, x, y)
 
 
 def composite_take(

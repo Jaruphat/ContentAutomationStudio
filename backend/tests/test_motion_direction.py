@@ -195,3 +195,49 @@ def test_the_motion_warning_never_blocks_a_render(
 
     for entry in body["issues"]:
         assert not any("what happens" in issue.lower() for issue in entry["issues"])
+
+
+def test_a_shot_directed_only_by_the_motion_pair_is_not_called_promptless(
+    client, db_session, sample_project, sample_scene,
+):
+    """The two fields *are* the video prompt once they are set. A blocker that
+    only looks at `video_prompt` refuses a shot that is fully directed - which
+    it did, stopping a production run on its first beat."""
+    import uuid
+
+    from app.models import Shot
+
+    shot = Shot(
+        id=str(uuid.uuid4()), scene_id=sample_scene.id, order=1,
+        generation_mode="image-to-video", status="Ready", video_prompt="",
+        subject_motion="The carriage door slides open and light spills out.",
+        camera_motion="Locked-off camera.",
+    )
+    db_session.add(shot)
+    db_session.commit()
+
+    body = client.get(f"/api/projects/{sample_project.id}/preflight").json()
+
+    for entry in body["issues"]:
+        if entry["shot_id"] == shot.id:
+            assert "Missing video prompt" not in entry["issues"], entry["issues"]
+
+
+def test_a_shot_with_neither_is_still_called_promptless(
+    client, db_session, sample_project, sample_scene,
+):
+    import uuid
+
+    from app.models import Shot
+
+    shot = Shot(
+        id=str(uuid.uuid4()), scene_id=sample_scene.id, order=1,
+        generation_mode="image-to-video", status="Ready", video_prompt="",
+    )
+    db_session.add(shot)
+    db_session.commit()
+
+    body = client.get(f"/api/projects/{sample_project.id}/preflight").json()
+
+    entry = next(e for e in body["issues"] if e["shot_id"] == shot.id)
+    assert "Missing video prompt" in entry["issues"]

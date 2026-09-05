@@ -471,3 +471,80 @@ def test_a_rotation_beyond_a_full_turn_is_refused(
             "type": "rect", "rotation": 400.0,
             "x": 0.5, "y": 0.5, "width": 0.3, "height": 0.1,
         }])
+
+
+# ---------------------------------------------------------------------------
+# Perspective
+# ---------------------------------------------------------------------------
+
+def test_a_layer_can_be_placed_on_four_corners(db_session, sample_shot, tmp_path):
+    """Rotation matches a tilt; it cannot match a plane seen at an angle. A
+    newspaper held out toward the camera is a trapezoid - wider at the near
+    edge - and a rotated rectangle laid over it is the last thing that still
+    reads as a sticker."""
+    base = _take(
+        db_session, sample_shot.id,
+        _write_image(str(tmp_path / "a.png"), size=(600, 600), colour=(240, 240, 240)),
+    )
+
+    result = compositing.composite_take(db_session, base, layers=[{
+        "type": "rect", "colour": "#101014",
+        # A trapezoid: narrow at the top, wide at the bottom.
+        "corners": [[0.35, 0.30], [0.65, 0.30], [0.80, 0.70], [0.20, 0.70]],
+    }])
+
+    image = Image.open(result.file_path).convert("L")
+    w, h = image.size
+    assert image.getpixel((int(w * 0.50), int(h * 0.35))) < 60, "top not covered"
+    assert image.getpixel((int(w * 0.75), int(h * 0.65))) < 60, "wide end missed"
+    assert image.getpixel((int(w * 0.75), int(h * 0.35))) > 200, "top too wide"
+
+
+def test_text_takes_the_same_four_corners(db_session, sample_shot, tmp_path):
+    """The words have to sit on the same plane as the patch under them."""
+    base = _take(
+        db_session, sample_shot.id,
+        _write_image(str(tmp_path / "a.png"), size=(600, 600), colour=(20, 20, 20)),
+    )
+
+    result = compositing.composite_take(db_session, base, layers=[{
+        "type": "text", "text": "TOMORROW", "colour": "#ffffff", "size": 0.08,
+        "corners": [[0.20, 0.40], [0.80, 0.35], [0.82, 0.60], [0.18, 0.62]],
+    }])
+
+    pixels = list(Image.open(result.file_path).convert("L").getdata())
+    assert max(pixels) > 200, "nothing was drawn"
+
+
+def test_corners_replace_the_placement_rather_than_arguing_with_it(
+    db_session, sample_shot, tmp_path,
+):
+    """Two ways of saying where a layer goes is a recipe nobody can read."""
+    base = _take(db_session, sample_shot.id, _write_image(str(tmp_path / "a.png")))
+
+    with pytest.raises(compositing.CompositeError) as exc:
+        compositing.composite_take(db_session, base, layers=[{
+            "type": "rect", "x": 0.5, "y": 0.5, "width": 0.4, "height": 0.2,
+            "corners": [[0.1, 0.1], [0.9, 0.1], [0.9, 0.9], [0.1, 0.9]],
+        }])
+    assert "corners" in str(exc.value).lower()
+
+
+def test_three_corners_are_refused(db_session, sample_shot, tmp_path):
+    base = _take(db_session, sample_shot.id, _write_image(str(tmp_path / "a.png")))
+
+    with pytest.raises(compositing.CompositeError) as exc:
+        compositing.composite_take(db_session, base, layers=[{
+            "type": "rect", "corners": [[0.1, 0.1], [0.9, 0.1], [0.5, 0.9]],
+        }])
+    assert "four" in str(exc.value).lower()
+
+
+def test_a_corner_outside_the_frame_is_refused(db_session, sample_shot, tmp_path):
+    base = _take(db_session, sample_shot.id, _write_image(str(tmp_path / "a.png")))
+
+    with pytest.raises(compositing.CompositeError):
+        compositing.composite_take(db_session, base, layers=[{
+            "type": "rect",
+            "corners": [[0.1, 0.1], [1.4, 0.1], [1.4, 0.9], [0.1, 0.9]],
+        }])

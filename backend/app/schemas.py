@@ -455,9 +455,13 @@ class CompositeLayer(BaseModel):
     height: float = 0.5
     grayscale: bool = False
     opacity: float = 1.0
-    #: Both
-    x: float
-    y: float
+    #: Both. Either an x/y centre, or four corners - never both.
+    x: Optional[float] = None
+    y: Optional[float] = None
+    #: Four points, clockwise from the top left, as fractions of the frame.
+    #: Rotation matches a tilt; only corners match a plane seen at an angle,
+    #: and a newspaper held toward the camera is a trapezoid.
+    corners: Optional[list[list[float]]] = None
 
 
 class CompositeRequest(BaseModel):

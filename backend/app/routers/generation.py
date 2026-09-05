@@ -174,6 +174,22 @@ def _validate_workflow_record(
     return source_format, errors, warnings
 
 
+def _video_direction(shot: Shot) -> str:
+    """What this shot tells a video model, from either shape of direction.
+
+    The motion pair *is* the video prompt once it is set - the compiler builds
+    the prompt from it and ignores `video_prompt`. A blocker that only looks at
+    the old field refuses a shot that is fully directed, which is exactly what
+    it did on the first beat of a production run.
+    """
+    composed = motion_direction.compose(
+        subject_motion=shot.subject_motion or "",
+        camera_motion=shot.camera_motion or "",
+    )
+    return composed or (shot.video_prompt or "").strip()
+
+
+
 # ---------------------------------------------------------------------------
 # Preflight validation
 # ---------------------------------------------------------------------------
@@ -313,7 +329,9 @@ async def preflight_validation(project_id: str, db: Session = Depends(get_db)):
 
         if shot.generation_mode == "image" and not shot.image_prompt:
             shot_issues.append("Missing image prompt")
-        elif shot.generation_mode in ("video", "image-to-video") and not shot.video_prompt:
+        elif shot.generation_mode in ("video", "image-to-video") and not (
+            _video_direction(shot)
+        ):
             shot_issues.append("Missing video prompt")
 
         # The plan reports a missing prompt too; it is already listed above,
@@ -556,8 +574,8 @@ def start_generation(
         if shot.generation_mode == "image" and not (shot.image_prompt or "").strip():
             shot_blockers.append("Missing image prompt")
         elif shot.generation_mode in ("video", "image-to-video") and not (
-            shot.video_prompt or ""
-        ).strip():
+            _video_direction(shot)
+        ):
             shot_blockers.append("Missing video prompt")
         finding = continuity_by_shot.get(shot.id)
         if finding:
