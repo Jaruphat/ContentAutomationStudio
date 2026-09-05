@@ -1,0 +1,73 @@
+{
+  "project_id": "389e3302-1c02-445e-a553-0c5f2edab933",
+  "workflow_id": "9067da63-5a54-4c48-9b33-df5e9a11f370",
+  "shot_id": "eeaa1e6c-814b-4449-b02b-2324b080181b",
+  "character_set_ids": [
+    "f7ab611b-9c97-4053-ba49-92fd32f86a28",
+    "40ebf1ec-a207-49ef-96a6-c9f3674462ec"
+  ],
+  "submitted": [
+    "Bram the hare",
+    "Odo the tortoise"
+  ],
+  "elapsed_sec": 135.9,
+  "checks": [
+    {
+      "check": "Bram the hare rendered a canonical view",
+      "passed": true,
+      "detail": "[{\"id\": \"881658c9-1698-4bbd-85d7-9a282a5210f4\", \"version_id\": \"5cd8eb56-872c-4708-956d-7c8f8da1c85f\", \"character_set_id\": \"f7ab611b-9c97-4053-ba49-92fd32f86a28\", \"slot\": \"full_body\", \"label\": \"Full Body\", \"order\": 0, \"view_prompt\": \"full-body charact"
+    },
+    {
+      "check": "Odo the tortoise rendered a canonical view",
+      "passed": true,
+      "detail": "[{\"id\": \"cfd76827-c395-436d-a580-cf34f66c3563\", \"version_id\": \"5514e49e-f128-41d8-abcc-3aca5dca8e28\", \"character_set_id\": \"40ebf1ec-a207-49ef-96a6-c9f3674462ec\", \"slot\": \"full_body\", \"label\": \"Full Body\", \"order\": 0, \"view_prompt\": \"full-body charact"
+    },
+    {
+      "check": "the two sets are distinct",
+      "passed": true,
+      "detail": "['f7ab611b-9c97-4053-ba49-92fd32f86a28', '40ebf1ec-a207-49ef-96a6-c9f3674462ec']"
+    },
+    {
+      "check": "the shot carries both character sets",
+      "passed": true,
+      "detail": "['f7ab611b-9c97-4053-ba49-92fd32f86a28', '40ebf1ec-a207-49ef-96a6-c9f3674462ec']"
+    },
+    {
+      "check": "two characters on a two-input workflow preflight clean",
+      "passed": true,
+      "detail": "[]"
+    },
+    {
+      "check": "the shot rendered",
+      "passed": true,
+      "detail": "[{\"s\": \"Completed\", \"e\": null}]"
+    },
+    {
+      "check": "two references were submitted",
+      "passed": true,
+      "detail": "[{\"character_set_id\": \"f7ab611b-9c97-4053-ba49-92fd32f86a28\", \"character_set_name\": \"Bram the hare\", \"character_set_version\": 1, \"character_set_version_id\": \"5cd8eb56-872c-4708-956d-7c8f8da1c85f\", \"view_slot\": \"full_body\", \"character_order\": 0}, {\"character_set_id\": \"40ebf1ec-a207-49ef-96a6-c9f3674462ec\", \"character_set_name\": \"Odo the tortoise\", \"character_set_version\": 1, \"character_set_version_"
+    },
+    {
+      "check": "one view from each character, not two of the first",
+      "passed": true,
+      "detail": "['Bram the hare', 'Odo the tortoise']"
+    },
+    {
+      "check": "each landed on its own node input",
+      "passed": true,
+      "detail": "[{\"nodeId\": \"137\", \"field\": \"image\"}, {\"nodeId\": \"139\", \"field\": \"image\", \"optional\": true}]"
+    },
+    {
+      "check": "the payload names two distinct uploads",
+      "passed": true,
+      "detail": "{\"referenceImage\": \"cas/75e10fbd-5052-41c9-b904-4ca8dfb73545/0418d479-2d77-4e67-acd4-788835da2251.png\", \"referenceImage2\": \"cas/75e10fbd-5052-41c9-b904-4ca8dfb73545/8225d41a-2573-4a07-882a-ff56e584259b.png\"}"
+    },
+    {
+      "check": "a clip was produced",
+      "passed": true,
+      "detail": "C:\\Users\\jongp\\Desktop\\Thinkpad_and_PC_Sync\\ContentAutomationStudio\\backend\\data\\generated\\6ee46439-f0eb-4870-8dab-e1c829bd62c0_389e3302_eeaa1e6c_00001_.mp4"
+    }
+  ],
+  "passed": 11,
+  "failed": 0
+}

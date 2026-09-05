@@ -355,7 +355,7 @@ async def preflight_validation(project_id: str, db: Session = Depends(get_db)):
             ready_count += 1
 
     # -- Paid generation ---------------------------------------------------
-    summary = generation_planning.summarise(list(plans.values()))
+    summary = generation_planning.summarise(list(plans.values()), db)
     if summary["paid_shot_count"]:
         total = summary["estimated_cost_usd"]
         amount = f"about ${total:.2f}" if total is not None else "an unpriced amount"
@@ -466,7 +466,7 @@ def start_generation(
     # side-effect of clicking Generate, and it covers the whole selection so a
     # user cannot approve one image and be charged for twelve.
     plans = {shot.id: generation_planning.plan_shot(db, project, shot) for shot in selected}
-    summary = generation_planning.summarise(list(plans.values()))
+    summary = generation_planning.summarise(list(plans.values()), db)
     if summary["requires_confirmation"] and not payload.confirm_paid_generation:
         total = summary["estimated_cost_usd"]
         amount = f"about ${total:.2f}" if total is not None else "an unpriced amount"
@@ -754,7 +754,7 @@ def estimate_generation(
     ]
 
     return generation_planning.summarise(
-        [generation_planning.plan_shot(db, project, shot) for shot in selected]
+        [generation_planning.plan_shot(db, project, shot) for shot in selected], db,
     )
 
 

@@ -45,6 +45,14 @@ import type {
   Workflow,
 } from "../types";
 
+/** Minutes for anything under an hour and a half, hours beyond it. */
+function formatDuration(seconds: number): string {
+  const minutes = seconds / 60;
+  return minutes < 90
+    ? `${Math.round(minutes)} min`
+    : `${(minutes / 60).toFixed(1)} hours`;
+}
+
 function formatUsd(amount: number): string {
   return amount.toLocaleString(undefined, {
     style: "currency",
@@ -585,6 +593,20 @@ function RunPanel({
                   </tbody>
                 </table>
               </div>
+
+              {/* Local generation is not billed but it is slow, so the time a
+                  run will take is the number that actually decides whether to
+                  start it now. Measured, never guessed. */}
+              {estimate.estimated_seconds !== null && (
+                <p className="text-sm text-zinc-400">
+                  Roughly {formatDuration(estimate.estimated_seconds)} for{" "}
+                  {estimate.timed_shots} shot(s), from previous runs of these
+                  workflows
+                  {estimate.untimed_shots > 0
+                    ? `, plus ${estimate.untimed_shots} never run before`
+                    : ""}
+                </p>
+              )}
 
               {/* The cost basis is only shown where there is a cost. */}
               {paid ? (

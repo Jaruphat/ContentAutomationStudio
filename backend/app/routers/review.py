@@ -223,7 +223,7 @@ def estimate_regeneration(shot_id: str, db: Session = Depends(get_db)):
     if project is None:
         raise HTTPException(status_code=404, detail="Shot is not attached to a project")
     return generation_planning.summarise(
-        [generation_planning.plan_shot(db, project, shot)]
+        [generation_planning.plan_shot(db, project, shot)], db,
     )
 
 

@@ -1221,6 +1221,13 @@ class GenerationEstimate(BaseModel):
     providers: list[GenerationProviderEstimate] = Field(default_factory=list)
     shots: list[dict[str, Any]] = Field(default_factory=list)
     blockers: list[str] = Field(default_factory=list)
+    #: Roughly how long the run will take, measured from what the same
+    #: workflows took before. None when no route in the run has been timed:
+    #: an evening gets planned around this, so a guess is worse than nothing.
+    estimated_seconds: Optional[int] = None
+    #: Shots whose route has been timed, and shots that never have.
+    timed_shots: int = 0
+    untimed_shots: int = 0
 
 
 class RegenerateRequest(BaseModel):

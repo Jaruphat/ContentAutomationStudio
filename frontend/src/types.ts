@@ -969,6 +969,11 @@ export interface GenerationEstimate {
   providers: GenerationProviderEstimate[];
   shots: GenerationShotPlan[];
   blockers: string[];
+  /** Roughly how long the run will take, measured from what these same
+   *  workflows took before. Null when no route in it has been timed. */
+  estimated_seconds: number | null;
+  timed_shots: number;
+  untimed_shots: number;
 }
 
 export type ProjectCreate = Partial<

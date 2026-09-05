@@ -196,7 +196,9 @@ def plan_shot(db: Session, project: Project, shot: Shot) -> ShotPlan:
     )
 
 
-def summarise(plans: list[ShotPlan]) -> dict[str, Any]:
+def summarise(
+    plans: list[ShotPlan], db: Session | None = None
+) -> dict[str, Any]:
     """Aggregate plans into the confirmation summary the UI shows.
 
     ``estimated_cost_usd`` is the sum of the plans whose rate is known.
@@ -242,4 +244,21 @@ def summarise(plans: list[ShotPlan]) -> dict[str, Any]:
         "providers": sorted(by_provider.values(), key=lambda e: e["provider_id"]),
         "shots": [plan.as_dict() for plan in plans],
         "blockers": blockers,
+        # Measured from what these workflows took before, so a long run can be
+        # started deliberately rather than discovered to be long.
+        **_timing(plans, db),
+    }
+
+
+def _timing(plans: list[ShotPlan], db: Session | None) -> dict[str, Any]:
+    """Roughly how long this run will take, when there is history to say."""
+    if db is None:
+        return {"estimated_seconds": None, "timed_shots": 0, "untimed_shots": len(plans)}
+    from app.services import run_duration
+
+    estimate = run_duration.estimate_run(db, [plan.workflow_id for plan in plans])
+    return {
+        "estimated_seconds": estimate["seconds"],
+        "timed_shots": estimate["known_shots"],
+        "untimed_shots": estimate["unknown_shots"],
     }
