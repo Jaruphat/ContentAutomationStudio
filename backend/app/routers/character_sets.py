@@ -1,6 +1,14 @@
 """Character-set CRUD, version generation, gallery and approval API."""
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    HTTPException,
+    Query,
+    Response,
+    UploadFile,
+)
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -12,6 +20,7 @@ from app.schemas import (
     CharacterSetUpdate,
     CharacterSetVersionCreate,
     CharacterSetVersionResponse,
+    ReferenceImageResponse,
 )
 from app.services import (
     character_set_generation,
@@ -142,6 +151,41 @@ def delete_character_set(
     if detached:
         revisions.refresh_project(db, project_id)
     return Response(status_code=204)
+
+
+@router.post(
+    "/{set_id}/source-image",
+    response_model=ReferenceImageResponse,
+    status_code=201,
+)
+async def upload_character_set_source_image(
+    project_id: str,
+    set_id: str,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+):
+    """Attach the picture this identity is derived from.
+
+    With one attached, the canonical sheet becomes an edit of it, so the views
+    are angles of one subject rather than several people who each match the
+    same paragraph. Uploading a second one replaces the first and moves the
+    identity spec, which marks an already approved sheet out of date rather
+    than leaving it canonical for a different face.
+    """
+    _character_set_value = _character_set(db, project_id, set_id)
+    data = await file.read()
+    try:
+        image = character_sets.attach_source_image(
+            db,
+            _character_set_value,
+            data=data,
+            content_type=file.content_type or "",
+            original_filename=file.filename or "",
+        )
+    except character_sets.CharacterSetError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    revisions.refresh_project(db, project_id)
+    return image
 
 
 @router.post("/{set_id}/versions", response_model=CharacterSetVersionResponse, status_code=201)

@@ -19,12 +19,18 @@ Two things it guarantees:
 
 import asyncio
 import logging
+import os
 import random
 from typing import Any
 
 from sqlalchemy.orm import Session
 
-from app.models import CharacterSetVersion, CharacterSetView, Workflow
+from app.models import (
+    CharacterSetVersion,
+    CharacterSetView,
+    ReferenceImage,
+    Workflow,
+)
 from app.services import (
     character_sets,
     error_classifier,
@@ -51,7 +57,11 @@ class CharacterSetGenerationError(Exception):
 
 
 def _resolve_workflow(
-    db: Session, workflow_id: str | None, *, require: bool
+    db: Session,
+    workflow_id: str | None,
+    *,
+    require: bool,
+    has_source_image: bool = False,
 ) -> Workflow | None:
     """Load the workflow a real provider needs, or refuse the run."""
     workflow = (
@@ -79,18 +89,30 @@ def _resolve_workflow(
             f"Workflow '{workflow.name}' has no source JSON or no parameter "
             f"mapping. Map its nodes before generating a character set."
         )
-    if job_payload.REFERENCE_IMAGE in (workflow.parameter_mapping or {}):
-        # A sheet is what identity comes from, so it has no reference to give.
-        # Injection only replaces the values it is handed, which would leave
-        # this workflow conditioning every canonical view on whichever image
-        # was baked into the exported graph - a different person, reported as
-        # success. Refuse instead of generating the wrong identity quietly.
+    takes_reference = job_payload.REFERENCE_IMAGE in (workflow.parameter_mapping or {})
+    if takes_reference and not has_source_image:
+        # A sheet described in words is what identity comes from, so it has no
+        # reference to give. Injection only replaces the values it is handed,
+        # which would leave this workflow conditioning every canonical view on
+        # whichever image was baked into the exported graph - a different
+        # person, reported as success. Refuse rather than generate the wrong
+        # identity quietly.
         raise CharacterSetGenerationError(
             f"Workflow '{workflow.name}' expects a reference image, so it edits "
-            f"an existing picture rather than establishing one. A character "
-            f"sheet has no reference to supply and would inherit whichever "
-            f"image is baked into the workflow. Choose a text-to-image "
-            f"workflow for this character set."
+            f"an existing picture rather than establishing one. This character "
+            f"set has no source image to supply and would inherit whichever "
+            f"image is baked into the workflow. Either choose a text-to-image "
+            f"workflow, or attach a source image to the character set."
+        )
+    if has_source_image and not takes_reference:
+        # The opposite mistake, and just as quiet: the picture the user chose
+        # this feature for has nowhere to go, so the sheet would be generated
+        # from the description alone and look nothing like the subject.
+        raise CharacterSetGenerationError(
+            f"Workflow '{workflow.name}' has no referenceImage mapping, so it "
+            f"cannot be given this character set's source image and would "
+            f"generate the sheet from the description alone. Choose an "
+            f"image-edit workflow, or remove the source image."
         )
     return workflow
 
@@ -176,8 +198,43 @@ async def generate_version(
     if character_set is None:
         raise CharacterSetGenerationError("This version has no character set.")
 
+    source_image = (
+        db.query(ReferenceImage)
+        .filter(ReferenceImage.id == character_set.source_image_id)
+        .first()
+        if character_set.source_image_id
+        else None
+    )
+    if character_set.source_image_id and source_image is None:
+        raise CharacterSetGenerationError(
+            "This character set names a source image that is no longer in the "
+            "reference bible. Re-attach the picture, or clear it, before "
+            "generating the sheet."
+        )
+
     require_workflow = bool(getattr(provider, "requires_workflow_payload", True))
-    workflow = _resolve_workflow(db, workflow_id, require=require_workflow)
+    workflow = _resolve_workflow(
+        db, workflow_id, require=require_workflow,
+        has_source_image=source_image is not None,
+    )
+
+    # One picture, uploaded once for the whole sheet. Uploading per view would
+    # give the same bytes a different name each time, and the provenance would
+    # then read as six different sources for one subject.
+    source_value = ""
+    if source_image is not None:
+        if not source_image.file_path or not os.path.isfile(source_image.file_path):
+            raise CharacterSetGenerationError(
+                f"This character set's source image is missing from disk: "
+                f"{source_image.file_path or source_image.id}"
+            )
+        extension = os.path.splitext(source_image.file_path)[1].lower()
+        uploaded = await provider.upload_reference_image(
+            source_image.file_path,
+            upload_name=f"cas/charset/{source_image.id}{extension}",
+            mime_type=source_image.mime_type or "application/octet-stream",
+        )
+        source_value = uploaded["workflow_value"]
 
     if seed is None:
         seed = random.randint(0, 2**31 - 1)
@@ -200,6 +257,8 @@ async def generate_version(
             width=width,
             height=height,
         )
+        if source_value:
+            values[job_payload.REFERENCE_IMAGE] = source_value
         view.status = character_sets.VIEW_GENERATING
         view.provider_id = provider_id
         view.model = model or ""
@@ -292,6 +351,10 @@ async def generate_version(
                     "prompt_id": prompt_id,
                     "seed": seed,
                     "view_slot": view.slot,
+                    "source_image_id": source_image.id if source_image else "",
+                    "source_image_sha256": (
+                        source_image.sha256 or "" if source_image else ""
+                    ),
                     "request_params": dict(values),
                 },
             )

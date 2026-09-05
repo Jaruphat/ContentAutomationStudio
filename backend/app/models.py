@@ -295,6 +295,13 @@ class CharacterSet(Base):
     notes = Column(Text, default="")
     #: The version whose views are canonical. NULL until one is approved, and
     #: the only thing downstream generation reads.
+    #: A picture this identity is derived from, rather than described into
+    #: existence: a photograph, a drawing, a frame from an earlier film. When
+    #: set, every canonical view is generated as an edit of it, so the sheet
+    #: is six angles of one subject instead of six people who match the same
+    #: paragraph. Held as a ReferenceImage id with role "source" so it is
+    #: never mistaken for a canonical view and handed to a shot.
+    source_image_id = Column(String, nullable=True)
     approved_version_id = Column(String, nullable=True)
     created_at = Column(DateTime, default=_utcnow)
     updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)

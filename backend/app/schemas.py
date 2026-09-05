@@ -516,6 +516,10 @@ class CharacterSetResponse(BaseModel):
     identity_tokens: str = ""
     negative_tokens: str = ""
     notes: str = ""
+    #: The picture this identity was derived from, when one was supplied
+    #: rather than described. Null on a set written before source images
+    #: existed, and on every set built purely from text.
+    source_image_id: Optional[str] = None
     approved_version_id: Optional[str] = None
     created_at: datetime
     updated_at: datetime

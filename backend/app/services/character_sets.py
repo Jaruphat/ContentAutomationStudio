@@ -155,6 +155,10 @@ def spec_snapshot(character_set: CharacterSet) -> dict[str, str]:
         "palette": character_set.palette or "",
         "identity_tokens": character_set.identity_tokens or "",
         "negative_tokens": character_set.negative_tokens or "",
+        # The picture is part of who the character is, so swapping it has to
+        # move the digest exactly as rewriting the appearance does - otherwise
+        # an approved sheet keeps reading as canonical for a different subject.
+        "source_image_id": character_set.source_image_id or "",
     }
 
 
@@ -242,6 +246,49 @@ def create_set(
     db.commit()
     db.refresh(character_set)
     return character_set
+
+
+def attach_source_image(
+    db: Session,
+    character_set: CharacterSet,
+    *,
+    data: bytes,
+    content_type: str = "",
+    original_filename: str = "",
+) -> ReferenceImage:
+    """Attach the picture this identity is derived from.
+
+    Filed on the same sheet as the views but with role ``source``: the store
+    is content-addressed and validated in one place, and the role is what
+    keeps a photograph of the subject from being resolved as a canonical view
+    and sent to a shot as one.
+
+    Replacing it moves the identity spec, so a sheet approved from the old
+    picture reads as out of date rather than staying canonical for somebody
+    else's face.
+    """
+    sheet = backing_sheet(db, character_set)
+    if sheet is None:
+        raise CharacterSetError(
+            "This character set has no reference sheet to store a source "
+            "image on.",
+            "sheet_missing",
+        )
+    image = reference_bible.store_image(
+        db,
+        sheet=sheet,
+        data=data,
+        original_filename=original_filename or "source.png",
+        content_type=content_type,
+        role="source",
+        caption=f"{character_set.name} - source image",
+        source="upload",
+        source_detail={"character_set_id": character_set.id},
+    )
+    character_set.source_image_id = image.id
+    db.commit()
+    db.refresh(character_set)
+    return image
 
 
 def update_set(

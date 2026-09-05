@@ -45,7 +45,12 @@ KIND_CONTINUITY = "continuity"
 SHEET_KINDS: tuple[str, ...] = ("character", "prop", "location", KIND_CONTINUITY)
 
 #: Roles an image may play on its sheet. "canonical" is what generation uses.
-IMAGE_ROLES: tuple[str, ...] = ("canonical", "support")
+#: "source" is the picture an identity was derived *from* - a photograph, a
+#: drawing, a frame from an earlier film - and is deliberately not canonical:
+#: it is the input to a character sheet, and resolving it as a view would hand
+#: a shot the photograph instead of the sheet made from it.
+ROLE_SOURCE = "source"
+IMAGE_ROLES: tuple[str, ...] = ("canonical", "support", ROLE_SOURCE)
 
 #: Sheet fields a client may write. Anything else - id, project, revision,
 #: digest - is ours.
