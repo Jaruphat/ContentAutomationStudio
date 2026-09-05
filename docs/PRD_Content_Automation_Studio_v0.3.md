@@ -1,7 +1,7 @@
 # Content Automation Studio — PRD v0.3 (current state)
 
 **Status date:** 2026-09-05 · **Supersedes:** v0.2 (preserved unchanged) ·
-**Backend tests:** 1251 passing · **Frontend tests:** 179 passing
+**Backend tests:** 1358 passing · **Frontend tests:** 190 passing
 
 v0.2 described a product to build. This describes the one that exists, what it
 proved on real hardware, and what is still missing. Where the two disagree, the
@@ -200,43 +200,80 @@ provider's memory first makes it reliable.
 
 ## 5. Built since this document was first written
 
+**From the earlier gap list**
+
 1. **Scene-role routing.** A per-shot `scene_role`, inferred from position
    within the scene and overridable, driving advice in the inspector and in
-   preflight. Scoped to the scene, so continuity resets at a scene boundary and
-   a start frame bound across one is flagged. Advice only — never a reroute.
-2. **Identity from a picture.** A character set may carry a source image and
-   the canonical sheet becomes an edit of it: six angles of one subject rather
-   than six people matching one paragraph. Filed with role `source`, never
-   `canonical`, so it cannot be handed to a shot as a view. Refuses a
-   text-to-image workflow once a picture is attached, and still refuses a
-   reference workflow when there is none.
-3. **Regeneration by intent.** "Same shot, different framing" and "same
-   framing, later in the day" want opposite things from the sampler, and the
-   difference is the seed, not the words. An intent carries the seed policy as
-   well as the directive; the shot is never edited, so an intent cannot mark
-   every earlier take of it stale.
+   preflight. Advice only, never a reroute.
+2. **Identity from a picture.** A character set may carry a source image; the
+   canonical sheet becomes an edit of it. Filed with role `source`, never
+   `canonical`. The workflow picker inverts once a picture is attached.
+3. **Regeneration by intent.** An intent carries the seed policy as well as the
+   directive — reframing re-rolls the seed, relighting holds it — and never
+   edits the shot.
 4. **Batch review.** One decision applied to many takes, membership checked
-   before anything is written. Deliberately no stricter than the single-take
-   path.
-5. **Watching the film in the app.** The render is found on load rather than
-   living only in the response that made it, and is served with HTTP range
-   support so it can be scrubbed — takes too. The player takes its aspect
-   ratio from the file.
+   before anything is written.
+5. **Watching the film in the app.** The render is found on load and served
+   with HTTP range support, so it can be scrubbed. Takes too.
+6. **Shot-level audio direction.** Per-shot mute and gain, and a project music
+   bed ducked under narration, cut to the picture in both directions.
+
+**From the ODDVERSE channel blueprint**
+
+7. **Channels.** A channel owns what recurs — brand, look, negative prompt,
+   voice, pillars, hooks — and starting an episode *copies* them into a
+   project. Copied, not referenced: revising a channel must not rewrite a film
+   already delivered under the old look. Deleting a channel orphans its
+   episodes rather than deleting them.
+8. **Episode vocabulary.** Pillar, hook, ending and premise recorded when the
+   episode is made, because nobody remembers which of nine hooks a video used
+   once it has been live for a month. A pillar the channel does not define is
+   refused.
+9. **The publish gate.** Nine measures with targets, plus the question that
+   outranks them — *would a viewer know this was AI within two seconds?* — which
+   fails the gate whatever the scores say and must name the shots that give it
+   away. Cards are kept, not overwritten.
+10. **Compositing.** Text and image layers drawn over an approved frame as a
+    new take, placed in fractions of the frame so a recipe survives a change of
+    canvas. This closes §4.3: no prompt makes a model spell, and now none has
+    to.
+11. **Emphasis cards.** A second caption track with its own style, burned in
+    only, held for a beat, capped at two lines and eight words.
+12. **Analytics.** Captures per episode, kept; a comparison grouped by the
+    choices that varied; and a refusal to name a winner the sample cannot
+    support — including on a tie.
+13. **The publish package.** Everything an upload form asks for, with the gate
+    in front of it. Not ready is the default and every blocker is named.
+14. **Pacing, corrected.** The timeline used the clip's own length whenever it
+    knew it, so a shot plan of 4, 2, 4, 3 seconds could not be produced and a
+    32-second short assembled at 47. The edit now decides the hold time; a clip
+    shorter than the plan is used as it is and named.
+15. **Shots outside the cut.** A key image is a real shot — prompt, seed, take,
+    review, lineage — and not a piece of the film. `include_in_cut` is what
+    makes the key-image-then-animate route usable at all.
+16. **Writes that drop fields are refused.** A style posted with plausible but
+    invented field names created an empty record and returned 201. Story Bible
+    write models now forbid unknown fields.
 
 ## 5b. What is still not built
 
-Ranked by how much each would change the product.
-
-1. **Acting on the routing recommendation.** The advice exists; making the app
-   generate the key image, wait for approval and animate it is not automated.
-2. **Multi-scene structure in practice.** Scene boundaries now mean something
-   to routing, but both films are still one scene of 23 shots.
-3. **Shot-level audio direction.** H3's native per-clip audio is accepted
-   wholesale. No ambience control, no music bed, no ducking beyond the
-   narration mix.
-4. **A cut that is not one shot per line.** `planned_duration_sec` is honoured,
-   but nothing decides pacing, holds a beat, or cuts inside a take.
-5. **Cost/time budget for a whole project**, not per run.
+1. **A real voice.** Narration uses the local Windows voice. The blueprint asks
+   for a calm documentary narrator at ~150 WPM with pauses before named
+   phrases; that needs a paid TTS provider and per-line prosody control.
+2. **Timed SFX cues.** An audio timeline — clock tick at 0:04, pneumatic door
+   at 0:14 — needs cues with offsets. Per-shot mute/gain and a bed exist;
+   timed cues do not.
+3. **Transitions and tails.** `transition_in`/`transition_out` exist on the
+   timeline row and the renderer has never read them. Hard cuts only, no
+   dissolve, no black tail before a loop.
+4. **Premise generation and scoring.** Nothing generates or ranks candidate
+   premises against a rubric.
+5. **Acting on the routing recommendation.** The advice exists; generating the
+   key image, waiting for approval and animating it is still done by hand or by
+   a script.
+6. **Cost and time budget per episode**, as opposed to per run.
+7. **Native delivery resolution.** The video model runs at 576x1024 on a 16 GB
+   card, so a 1080x1920 delivery is an upscale.
 
 ## 6. Unchanged from v0.2
 
