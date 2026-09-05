@@ -191,6 +191,39 @@ class CharacterResponse(BaseModel):
 # Location
 # ============================================================================
 
+class CompositeLayer(BaseModel):
+    """One layer drawn over a generated frame.
+
+    Positions are fractions of the frame, never pixels: this pipeline
+    generates at one size and delivers at another, and a pixel offset right
+    for the first is wrong for the second.
+    """
+
+    model_config = {"extra": "forbid"}
+
+    type: Literal["text", "image"]
+    #: Text layers
+    text: str = ""
+    size: float = 0.05
+    colour: str = "#ffffff"
+    anchor: str = "mm"
+    #: Image layers
+    take_id: str = ""
+    width: float = 0.5
+    height: float = 0.5
+    grayscale: bool = False
+    opacity: float = 1.0
+    #: Both
+    x: float
+    y: float
+
+
+class CompositeRequest(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    layers: list[CompositeLayer] = Field(..., min_length=1)
+
+
 class QualityReviewRequest(BaseModel):
     """One pass of the publish gate. Scores are 1-10 against the rubric."""
 

@@ -15,6 +15,7 @@ from app.schemas import (
     BatchReviewItemResult,
     BatchReviewRequest,
     BatchReviewResponse,
+    CompositeRequest,
     GenerationEstimate,
     GenerationJobResponse,
     RegenerateRequest,
@@ -23,6 +24,7 @@ from app.schemas import (
     TakeReviewRequest,
 )
 from app.services import (
+    compositing,
     generation_planning,
     generation_runs,
     job_payload,
@@ -200,6 +202,36 @@ def reject_take(
             db.commit()
 
     return take
+
+
+# ---------------------------------------------------------------------------
+# Compositing
+# ---------------------------------------------------------------------------
+
+@router.post("/api/takes/{take_id}/composite", response_model=TakeResponse,
+             status_code=201)
+def composite_take(
+    take_id: str,
+    payload: CompositeRequest,
+    db: Session = Depends(get_db),
+):
+    """Draw text or another take over this frame, as a new take of the shot.
+
+    The stage exists because no prompt makes an image model spell. Anything
+    that has to be read - a date, a headline, a sign - is generated as a blank
+    area and put on afterwards. The generated frame is left exactly as it was
+    generated; the composite is a new take, reviewed like any other, recording
+    what it was built from.
+    """
+    take = db.query(Take).filter(Take.id == take_id).first()
+    if not take:
+        raise HTTPException(status_code=404, detail="Take not found")
+    try:
+        return compositing.composite_take(
+            db, take, layers=[layer.model_dump() for layer in payload.layers],
+        )
+    except compositing.CompositeError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 # ---------------------------------------------------------------------------
