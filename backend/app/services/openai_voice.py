@@ -19,12 +19,11 @@ film with no narration and no warning, which is worse than a render that stops.
 from __future__ import annotations
 
 import os
-import wave
 from typing import Any
 
 import httpx
 
-from app.services.narration import NarrationError
+from app.services.narration import NarrationError, wav_seconds
 
 #: The speech endpoint. Kept whole rather than assembled, so a misconfigured
 #: base URL fails visibly instead of quietly pointing somewhere else.
@@ -122,7 +121,9 @@ class OpenAIVoice:
 
         self.usage["lines"] += 1
         self.usage["characters"] += len(line)
-        return _wav_seconds(out_path)
+        # Measured from the frames, not the header: this endpoint streams, so
+        # it writes a sentinel frame count it cannot know in advance.
+        return wav_seconds(out_path)
 
 
 def _message(response: httpx.Response) -> str:
@@ -134,11 +135,6 @@ def _message(response: httpx.Response) -> str:
     if isinstance(error, dict):
         return str(error.get("message") or error)[:300]
     return str(payload)[:300]
-
-
-def _wav_seconds(path: str) -> float:
-    with wave.open(path, "rb") as handle:
-        return handle.getnframes() / float(handle.getframerate() or 24000)
 
 
 __all__ = [

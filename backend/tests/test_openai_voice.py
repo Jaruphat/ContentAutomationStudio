@@ -222,3 +222,58 @@ def test_the_track_builder_takes_this_voice_like_any_other(tmp_path):
     assert os.path.isfile(track.path)
     assert track.overruns == []
     assert len(recorder.requests) == 2
+
+
+# ---------------------------------------------------------------------------
+# The header the endpoint actually sends
+# ---------------------------------------------------------------------------
+
+def _streamed_wav(seconds: float = 6.2, rate: int = 24000) -> bytes:
+    """A WAV whose header claims an unknown length, as OpenAI's does.
+
+    Found on the first real call: the endpoint streams, so it writes the
+    sentinel frame count 0x7FFFFFFF rather than the real one. Trusting the
+    header made a six-second line report as twenty-four hours - which then
+    reports as an overrun on every shot, and would size the narration canvas
+    from a number nothing on the timeline can match.
+    """
+    import struct
+
+    frames = int(rate * seconds)
+    data = bytes([0, 1]) * frames
+    header = (
+        b"RIFF" + struct.pack("<I", 0xFFFFFFFF) + b"WAVE"
+        + b"fmt " + struct.pack("<IHHIIHH", 16, 1, 1, rate, rate * 2, 2, 16)
+        + b"data" + struct.pack("<I", 0x7FFFFFFF * 2)
+    )
+    return header + data
+
+
+def test_a_streamed_wav_is_measured_by_its_bytes_not_its_header(tmp_path):
+    """The real defect, from the first live call. A header-derived duration
+    made a six-second line claim twenty-four hours."""
+    recorder = _Recorder(body=_streamed_wav(seconds=6.2))
+
+    seconds = _voice(recorder).speak("x", str(tmp_path / "a.wav"))
+
+    assert seconds == pytest.approx(6.2, abs=0.1)
+
+
+def test_a_streamed_wav_mixes_at_its_real_length(tmp_path):
+    """The same trap one layer up: the track builder reads frames by the
+    header's count too, and a sentinel there would pad the film with silence
+    to a length nothing on the timeline matches."""
+    recorder = _Recorder(body=_streamed_wav(seconds=1.0))
+
+    track = narration.build_track(
+        [narration.NarrationCue(start_sec=0.0, end_sec=4.0, text="A line.")],
+        str(tmp_path / "narration.wav"),
+        voice=_voice(recorder),
+    )
+
+    assert track is not None
+    assert track.overruns == [], "a one-second line does not overrun four seconds"
+    with wave.open(track.path, "rb") as handle:
+        assert handle.getnframes() / handle.getframerate() == pytest.approx(
+            4.0, abs=0.2
+        )

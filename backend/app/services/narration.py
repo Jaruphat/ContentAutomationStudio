@@ -126,14 +126,45 @@ class WindowsSapiVoice:
 
 
 def _wav_duration(path: str) -> float:
+    # Measured from the frames rather than the header count: a streaming
+    # producer writes a sentinel there, and a wrong length here is silently
+    # wrong rather than loudly wrong.
+    return wav_seconds(path)
+
+
+def read_all_frames(handle: "wave.Wave_read") -> bytes:
+    """Every frame in a WAV, however wrong its header is about the count.
+
+    A streaming producer writes a sentinel frame count - OpenAI's speech
+    endpoint sends 0x7FFFFFFF - because it does not know the length when the
+    header goes out. Trusting that number made a six-second line measure as
+    twenty-four hours, which then reports as an overrun on every shot and
+    sizes the mix canvas from something nothing on the timeline can match.
+    Reading in chunks to EOF is correct for an honest header too.
+    """
+    chunks: list[bytes] = []
+    while True:
+        chunk = handle.readframes(4096)
+        if not chunk:
+            break
+        chunks.append(chunk)
+    return b"".join(chunks)
+
+
+def wav_seconds(path: str) -> float:
+    """How long a WAV really runs, measured from its frames."""
     with wave.open(path, "rb") as handle:
-        return handle.getnframes() / float(handle.getframerate() or SAMPLE_RATE)
+        rate = handle.getframerate() or SAMPLE_RATE
+        width = handle.getsampwidth() or 2
+        channels = handle.getnchannels() or 1
+        raw = read_all_frames(handle)
+    return len(raw) / float(rate * width * channels)
 
 
 def read_mono(path: str) -> array.array:
     """The samples in a WAV, for asserting on what was actually written."""
     with wave.open(path, "rb") as handle:
-        raw = handle.readframes(handle.getnframes())
+        raw = read_all_frames(handle)
     samples = array.array("h")
     samples.frombytes(raw)
     return samples
@@ -149,7 +180,7 @@ def _load_resampled(path: str) -> array.array:
         channels = handle.getnchannels()
         width = handle.getsampwidth()
         rate = handle.getframerate()
-        raw = handle.readframes(handle.getnframes())
+        raw = read_all_frames(handle)
     if width != 2:
         raise RuntimeError(f"expected 16-bit speech, got {width * 8}-bit")
     samples = array.array("h")
