@@ -205,11 +205,15 @@ def test_single_input_scene_selects_full_body_but_preserves_all_conceptual_views
     assert [entry.detail["view_slot"] for entry in selected.submitted_images] == [
         "full_body"
     ]
+    # Ranked, not sheet order: the view that best represents a character leads,
+    # so truncating to a workflow's capacity gives one view per character
+    # rather than several of the first one.
     assert [item["detail"]["view_slot"] for item in provenance["images"]] == [
-        "front", "expression", "full_body"
+        "full_body", "front", "expression"
     ]
-    assert [item["submitted"] for item in provenance["images"]] == [False, False, True]
-    assert provenance["images"][2]["selection_reason"] == (
+    # The primary view now leads the list, so it is the first flag too.
+    assert [item["submitted"] for item in provenance["images"]] == [True, False, False]
+    assert provenance["images"][0]["selection_reason"] == (
         "primary canonical character-set view (full_body preferred)"
     )
     assert selected.character_set_sha256s == [

@@ -312,6 +312,11 @@ def regenerate_shot(
             if plan.provider_id == media_providers.COMFYUI
             else None
         ),
+        min_images=(
+            shot_conditioning.workflow_minimum(db, plan.workflow_id)
+            if plan.provider_id == media_providers.COMFYUI
+            else None
+        ),
     )
     if conditioning.problems:
         raise HTTPException(

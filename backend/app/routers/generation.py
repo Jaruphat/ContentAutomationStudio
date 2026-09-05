@@ -285,6 +285,11 @@ async def preflight_validation(project_id: str, db: Session = Depends(get_db)):
                 if plan.provider_id == media_providers.COMFYUI
                 else None
             ),
+            min_images=(
+                shot_conditioning.workflow_minimum(db, plan.workflow_id)
+                if plan.provider_id == media_providers.COMFYUI
+                else None
+            ),
         )
         shot_issues.extend(conditioning.problems)
         if (
@@ -532,6 +537,11 @@ def start_generation(
             conditioning,
             max_images=(
                 shot_conditioning.workflow_capacity(db, plan.workflow_id)
+                if plan.provider_id == media_providers.COMFYUI
+                else None
+            ),
+            min_images=(
+                shot_conditioning.workflow_minimum(db, plan.workflow_id)
                 if plan.provider_id == media_providers.COMFYUI
                 else None
             ),

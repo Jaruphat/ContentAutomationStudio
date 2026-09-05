@@ -363,9 +363,11 @@ class TestRegenerate:
         assert response.status_code == 200, response.text
         images = response.json()["reference_provenance"]["images"]
         assert [item["detail"]["view_slot"] for item in images] == [
-            "front", "full_body"
+            # Ranked: the fullest view of a character leads.
+            "full_body", "front"
         ]
-        assert [item["submitted"] for item in images] == [False, True]
+        # The primary view leads the list, so it is the first flag too.
+        assert [item["submitted"] for item in images] == [True, False]
         assert response.json()["character_set_sha256s"] == [
             character_sets.canonical_digest(db_session, character_set)
         ]

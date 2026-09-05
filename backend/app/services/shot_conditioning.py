@@ -247,6 +247,17 @@ def _resolve_end_frame(
 # Identity
 # ---------------------------------------------------------------------------
 
+#: Which canonical view stands for a character when only one can be sent. A
+#: full body says more about who someone is than a portrait crop does, and a
+#: front view says more than a three-quarter. Anything unlisted sorts after
+#: these, in the order the sheet defines.
+_VIEW_RANK = {"full_body": 0, "front": 1, "three_quarter": 2, "side": 3}
+
+
+def _view_rank(slot: str) -> int:
+    return _VIEW_RANK.get((slot or "").lower(), len(_VIEW_RANK))
+
+
 def _resolve_character_sets(
     db: Session, project_id: str, set_ids: list[str]
 ) -> tuple[list[ConditioningImage], list[str], list[str]]:
@@ -266,18 +277,25 @@ def _resolve_character_sets(
     if problems:
         return [], problems, digests
 
-    entries: list[ConditioningImage] = []
-    for set_id in set_ids:
+    # Grouped per set first, then flattened by rank across the sets. Emitting
+    # one set's views before the next means the first character fills every
+    # slot a workflow has and the second is never sent - a shot bound to a
+    # hare and a tortoise arrives as two hares.
+    by_set: list[list[ConditioningImage]] = []
+    for order, set_id in enumerate(set_ids):
         character_set = character_sets.get_set(db, project_id, set_id)
         if character_set is None:
             continue
         version = character_sets.approved_version(db, character_set)
         if version is None:
             continue
-        for view in character_sets.list_views(db, version):
-            if view.image is None:
-                continue
-            entries.append(ConditioningImage(
+        views = [
+            view for view in character_sets.list_views(db, version)
+            if view.image is not None
+        ]
+        views.sort(key=lambda view: _view_rank(view.slot))
+        by_set.append([
+            ConditioningImage(
                 image=view.image,
                 source=SOURCE_CHARACTER_SET,
                 detail={
@@ -286,8 +304,19 @@ def _resolve_character_sets(
                     "character_set_version": version.version,
                     "character_set_version_id": version.id,
                     "view_slot": view.slot,
+                    # Which character this is among the shot's cast, kept so a
+                    # take can be read without re-deriving the binding order.
+                    "character_order": order,
                 },
-            ))
+            )
+            for view in views
+        ])
+
+    entries: list[ConditioningImage] = []
+    for rank in range(max((len(views) for views in by_set), default=0)):
+        for views in by_set:
+            if rank < len(views):
+                entries.append(views[rank])
     return entries, [], digests
 
 
@@ -390,8 +419,25 @@ def workflow_capacity(db: Session, workflow_id: str | None) -> int:
     )
 
 
+def workflow_minimum(db: Session, workflow_id: str | None) -> int:
+    """The fewest reference images the assigned workflow will accept.
+
+    Below its capacity when some slots are declared optional, which is what
+    lets one workflow serve a cast of one, two or three rather than needing a
+    registered workflow per size of cast.
+    """
+    workflow = (
+        db.query(Workflow).filter(Workflow.id == workflow_id).first()
+        if workflow_id
+        else None
+    )
+    return job_payload.required_reference_count(
+        workflow.parameter_mapping if workflow else None
+    )
+
+
 def select_for_submission(
-    resolved: ShotConditioning, *, max_images: int | None
+    resolved: ShotConditioning, *, max_images: int | None, min_images: int | None = None
 ) -> ShotConditioning:
     """Mark the conceptual images a provider route can truthfully submit."""
     if resolved.problems:
@@ -401,7 +447,8 @@ def select_for_submission(
 
     if max_images is None:
         return resolved
-    if max_images >= 1 and len(resolved.images) < max_images:
+    required = max_images if min_images is None else min_images
+    if max_images >= 1 and len(resolved.images) < required:
         # Injection overwrites values; it does not clear inputs. A bound
         # reference input nothing was sent to therefore keeps the filename
         # baked into the graph at export time - and where that file exists,
@@ -409,11 +456,11 @@ def select_for_submission(
         # else's project, with this take's lineage describing images the node
         # never saw. One image per bound input removes the case.
         resolved.problems.append(
-            f"The selected workflow takes {max_images} reference image(s) and "
-            f"this shot resolves {len(resolved.images)}. An input left unfilled "
-            f"keeps whichever image the workflow was exported with. Bind more "
-            f"conditioning to this shot, or choose a workflow that takes "
-            f"{len(resolved.images)}."
+            f"The selected workflow needs at least {required} reference "
+            f"image(s) and this shot resolves {len(resolved.images)}. An input "
+            f"left unfilled keeps whichever image the workflow was exported "
+            f"with. Bind more conditioning to this shot, or choose a workflow "
+            f"that takes {len(resolved.images)}."
         )
         for entry in resolved.images:
             entry.submitted = False

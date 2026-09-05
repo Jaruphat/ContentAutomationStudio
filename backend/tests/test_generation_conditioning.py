@@ -145,8 +145,10 @@ def test_real_e2e_scene_topology_preflights_and_queues_one_primary_view(
     assert response.status_code == 200, response.text
     job = response.json()[0]
     images = job["reference_provenance"]["images"]
-    assert [item["detail"]["view_slot"] for item in images] == ["front", "full_body"]
-    assert [item["submitted"] for item in images] == [False, True]
+    # Ranked: the fullest view of a character leads.
+    assert [item["detail"]["view_slot"] for item in images] == ["full_body", "front"]
+    # The primary view now leads the list, so it is the first flag too.
+    assert [item["submitted"] for item in images] == [True, False]
     assert job["character_set_sha256s"] == [
         character_sets.canonical_digest(db_session, character_set)
     ]
@@ -382,8 +384,9 @@ def test_generate_uses_the_exact_approved_scene_image_as_first_i2v_reference(
     assert first["detail"]["source_type"] == "approved_image_take"
     assert first["detail"]["selection"] == "source_image"
     assert [item["submitted"] for item in images] == [True, False, False]
+    # Ranked: the fullest view of a character leads.
     assert [item["detail"]["view_slot"] for item in images[1:]] == [
-        "front", "full_body"
+        "full_body", "front"
     ]
     assert job["character_set_sha256s"] == [
         character_sets.canonical_digest(db_session, character_set)

@@ -94,6 +94,27 @@ def reference_capacity(parameter_mapping: dict[str, Any] | None) -> int:
     return count
 
 
+def required_reference_count(parameter_mapping: dict[str, Any] | None) -> int:
+    """How many reference slots this workflow insists on being given.
+
+    Reference inputs on these nodes are autogrow - they take up to sixteen and
+    tolerate none - but an exported graph wires a fixed number of loaders, and
+    a wired loader nothing is sent to keeps the filename baked in at export.
+    Marking a slot ``optional`` says the graph tolerates it being absent, and
+    the loader is then removed from the submitted payload instead. Unmarked
+    stays mandatory, so every mapping written before this keeps its meaning.
+    """
+    mapping = parameter_mapping or {}
+    required = 0
+    for name in REFERENCE_IMAGE_FIELDS:
+        entry = mapping.get(name)
+        if entry is None:
+            break
+        if not (isinstance(entry, dict) and entry.get("optional")):
+            required += 1
+    return required
+
+
 LOGICAL_FIELDS: tuple[str, ...] = (
     POSITIVE_PROMPT,
     NEGATIVE_PROMPT,
@@ -156,6 +177,55 @@ def write_snapshot(job_id: str, payload: dict[str, Any]) -> str:
         json.dump(payload, f, indent=2, ensure_ascii=False)
     os.replace(tmp, dest)
     return dest
+
+
+def _prune_unfilled_optional_references(
+    payload: dict[str, Any],
+    parameter_mapping: dict[str, Any],
+    values: dict[str, Any],
+) -> dict[str, Any]:
+    """Drop the loaders for optional reference slots this run did not fill.
+
+    Left in place they would submit whatever the export baked in, which on the
+    machine that exported the graph is a real file - so the render succeeds
+    with a stranger in it. Removal is timid on purpose: a node is dropped only
+    when nothing else reads from it, because a loader that also sizes a latent
+    or feeds a comparison is load-bearing, and removing it would change the
+    render rather than trim it.
+    """
+    unfilled = []
+    for name in REFERENCE_IMAGE_FIELDS:
+        entry = parameter_mapping.get(name)
+        if entry is None:
+            break
+        if isinstance(entry, dict) and entry.get("optional") and not values.get(name):
+            unfilled.append(entry)
+    if not unfilled:
+        return payload
+
+    for entry in unfilled:
+        node_id = str(entry.get("nodeId") or "")
+        if not node_id or node_id not in payload:
+            continue
+        readers = [
+            (other_id, input_name)
+            for other_id, node in payload.items()
+            if other_id != node_id
+            for input_name, ref in (node.get("inputs") or {}).items()
+            if isinstance(ref, list) and ref and str(ref[0]) == node_id
+        ]
+        # More than one reader means the node is doing more than supplying
+        # this image, and pruning it would alter the graph rather than trim it.
+        if len({other_id for other_id, _ in readers}) > 1:
+            logger.info(
+                "Optional reference node %s feeds more than the reference "
+                "input; left in place.", node_id,
+            )
+            continue
+        for other_id, input_name in readers:
+            payload[other_id]["inputs"].pop(input_name, None)
+        payload.pop(node_id, None)
+    return payload
 
 
 def build_payload(
@@ -268,6 +338,7 @@ def build_payload(
         parameter_mapping=mapping,
         values=values,
     )
+    payload = _prune_unfilled_optional_references(payload, mapping, values)
     unmapped = sorted(k for k in values if k not in mapping)
     if unmapped:
         logger.info(
