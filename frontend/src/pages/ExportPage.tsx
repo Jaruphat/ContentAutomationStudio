@@ -19,6 +19,7 @@ import {
 import api, { toAIError } from "../api/client";
 import ActionError from "../components/ActionError";
 import AspectOverrideBanner from "../components/AspectOverrideBanner";
+import PublishGate from "../components/PublishGate";
 import SubtitleSettingsSection, {
   subtitlePresets,
   subtitlePreviewAspect,
@@ -262,6 +263,11 @@ export default function ExportPage() {
         Export your project data in various formats. Each export will download
         the file directly to your browser.
       </p>
+
+      {/* The decision that is made once, before the files leave: does this
+          episode go out. Placed above the export cards because a package that
+          is not ready makes every download below it premature. */}
+      <PublishGate projectId={currentProjectId} />
 
       {timelineQ.data && (
         <AspectOverrideBanner
