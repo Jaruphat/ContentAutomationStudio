@@ -236,6 +236,29 @@ SF01: dict[str, Any] = {
             "IT WAS HIM.", ["CHAR02"],
         ),
     ],
+    #: Appendix A: "do not let AI generate critical text/date/newspaper
+    #: layout; composite in post". These are those composites, keyed by beat.
+    #: Placed in fractions of the frame, so the same recipe survives the key
+    #: image being regenerated at another size.
+    #:
+    #: Each starts with a patch, because the model does not leave a blank area
+    #: when asked - it writes a plausible smear, and a real headline drawn over
+    #: a fake one is two headlines.
+    "composites": {
+        8: [
+            {"type": "rect", "colour": "#e8e2d4",
+             "x": 0.46, "y": 0.585, "width": 0.72, "height": 0.075},
+            {"type": "text", "text": "TOMORROW'S EDITION", "colour": "#141414",
+             "x": 0.46, "y": 0.575, "size": 0.026},
+            {"type": "text", "text": "{tomorrow}", "colour": "#141414",
+             "x": 0.46, "y": 0.607, "size": 0.017},
+        ],
+        9: [
+            {"type": "image", "reference_image_id": "{CHAR02}",
+             "grayscale": True,
+             "x": 0.505, "y": 0.505, "width": 0.30, "height": 0.20},
+        ],
+    },
     #: Section 6 of the blueprint, as an instruction a hosted voice can take.
     #: A platform voice has a name and a rate slider and no opinion about how
     #: a sentence should land; this is the reason to pay for one.

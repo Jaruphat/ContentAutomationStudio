@@ -34,14 +34,18 @@ from PIL import Image, ImageDraw, ImageFont
 from sqlalchemy.orm import Session
 
 from app import paths
-from app.models import Take
+from app.models import ReferenceImage, Take
 
 #: Extensions this stage can open. A clip is refused rather than reduced to a
 #: frame: accepting one and returning a still would silently turn four seconds
 #: of film into a photograph.
 IMAGE_EXTENSIONS = (".png", ".jpg", ".jpeg", ".webp", ".bmp")
 
-LAYER_TYPES = ("text", "image")
+#: "rect" exists because you cannot composite a real headline over a
+#: generated one without covering the generated one first. The blueprint
+#: says to leave a blank area; the model does not leave blank areas, it
+#: writes a plausible smear - so the blank is made here.
+LAYER_TYPES = ("text", "image", "rect")
 
 #: Fonts to try, in order, before falling back to PIL's built-in bitmap face.
 #: The fallback cannot be scaled, so a composite that lands on it is legible
@@ -116,19 +120,69 @@ def _draw_text(canvas: Image.Image, layer: dict[str, Any]) -> None:
         del exc
 
 
+def _draw_rect(canvas: Image.Image, layer: dict[str, Any]) -> None:
+    """A flat patch, for masking what the model wrote."""
+    width, height = canvas.size
+    x = _fraction(layer, "x")
+    y = _fraction(layer, "y")
+    box_w = max(1, int(_fraction(layer, "width", default=0.4) * width))
+    box_h = max(1, int(_fraction(layer, "height", default=0.1) * height))
+    fill = str(layer.get("colour") or layer.get("color") or "#000000")
+    left = int(x * width - box_w / 2)
+    top = int(y * height - box_h / 2)
+    ImageDraw.Draw(canvas).rectangle(
+        [left, top, left + box_w, top + box_h], fill=fill,
+    )
+
+
+def _layer_source(db: Session, layer: dict[str, Any]) -> str:
+    """The file an image layer draws from: a take, or a reference image.
+
+    Both, because the two things that get composited come from different
+    places. A newspaper page is a take of the shot being built; the portrait
+    that goes on it is a character's canonical view, which lives in the
+    reference bible. Without the second, the only way to composite a face is
+    to have generated it as a shot first - a shot nobody wants in the film.
+    """
+    take_id = str(layer.get("take_id") or "")
+    image_id = str(layer.get("reference_image_id") or "")
+    if take_id and image_id:
+        # A recipe with two sources cannot be read the same way twice.
+        raise CompositeError(
+            "An image layer names both a take and a reference image. Give it "
+            "one source."
+        )
+    if take_id:
+        source = db.query(Take).filter(Take.id == take_id).first()
+        if source is None:
+            raise CompositeError(f"Image layer take {take_id} does not exist.")
+        path = source.file_path or ""
+        what = f"take {take_id}"
+    elif image_id:
+        source = (
+            db.query(ReferenceImage)
+            .filter(ReferenceImage.id == image_id).first()
+        )
+        if source is None:
+            raise CompositeError(
+                f"Image layer reference image {image_id} does not exist."
+            )
+        path = source.file_path or ""
+        what = f"reference image {image_id}"
+    else:
+        raise CompositeError(
+            "An image layer needs a source: the take, or the reference image, "
+            "it is drawn from."
+        )
+    if not path or not os.path.isfile(path):
+        raise CompositeError(f"The file for image layer {what} is missing from disk.")
+    return path
+
+
 def _draw_image(
     db: Session, canvas: Image.Image, layer: dict[str, Any]
 ) -> None:
-    take_id = str(layer.get("take_id") or "")
-    if not take_id:
-        raise CompositeError("An image layer needs the take it is drawn from.")
-    source = db.query(Take).filter(Take.id == take_id).first()
-    if source is None:
-        raise CompositeError(f"Image layer take {take_id} does not exist.")
-    if not source.file_path or not os.path.isfile(source.file_path):
-        raise CompositeError(
-            f"The file for image layer take {take_id} is missing from disk."
-        )
+    source_path = _layer_source(db, layer)
 
     width, height = canvas.size
     x = _fraction(layer, "x")
@@ -136,7 +190,7 @@ def _draw_image(
     box_w = max(1, int(_fraction(layer, "width", default=0.5) * width))
     box_h = max(1, int(_fraction(layer, "height", default=0.5) * height))
 
-    with Image.open(source.file_path) as handle:
+    with Image.open(source_path) as handle:
         patch = handle.convert("RGBA")
     if layer.get("grayscale"):
         # A press photograph is monochrome, and a colour portrait composited
@@ -191,8 +245,12 @@ def composite_take(
         canvas = handle.convert("RGBA")
 
     for layer in layers:
+        # Drawn in the order given, which is how a patch and the words over it
+        # become one recipe rather than two calls.
         if layer["type"] == "text":
             _draw_text(canvas, layer)
+        elif layer["type"] == "rect":
+            _draw_rect(canvas, layer)
         else:
             _draw_image(db, canvas, layer)
 

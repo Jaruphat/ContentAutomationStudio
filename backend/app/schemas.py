@@ -97,6 +97,24 @@ class ProjectUpdate(BaseModel):
         return _validated_resolution(value)
 
 
+def _coerce_added_column(default: Any):
+    """Turn the NULL an ALTER TABLE left behind into the column's default.
+
+    Schema evolution here is ADD COLUMN, which SQLite can only do as NULL, so
+    every row older than a column carries None in it. A response model
+    declaring ``scene_role: str = ""`` does not coerce that - a default is not
+    a fallback - it fails validation, and FastAPI turns a plain GET into a
+    500. Adding two motion columns made every shot generated before that
+    moment unreadable and unsavable, which stopped a production run with no
+    message beyond "Internal Server Error".
+    """
+
+    def _coerce(value: Any) -> Any:
+        return default if value is None else value
+
+    return _coerce
+
+
 class ProjectResponse(BaseModel):
     model_config = {"from_attributes": True}
 
@@ -117,11 +135,15 @@ class ProjectResponse(BaseModel):
     #: was deleted - the episode outlives the channel deliberately.
     channel_id: Optional[str] = None
     #: What the analytics loop groups by. Blank on anything not made under a
-    #: channel.
+    #: channel, and NULL on any row older than the columns themselves.
     pillar: str = ""
     hook_type: str = ""
     ending_type: str = ""
     premise: str = ""
+
+    _coerce_added = field_validator(
+        "pillar", "hook_type", "ending_type", "premise", mode="before",
+    )(_coerce_added_column(""))
     brief_text: str
     plot_text: str
     created_at: datetime
@@ -414,14 +436,17 @@ class CompositeLayer(BaseModel):
 
     model_config = {"extra": "forbid"}
 
-    type: Literal["text", "image"]
+    type: Literal["text", "image", "rect"]
     #: Text layers
     text: str = ""
     size: float = 0.05
     colour: str = "#ffffff"
     anchor: str = "mm"
-    #: Image layers
+    #: Image layers. One source or the other: a take of a shot, or a
+    #: reference image - a character's canonical view lives in the reference
+    #: bible, not as a take.
     take_id: str = ""
+    reference_image_id: str = ""
     width: float = 0.5
     height: float = 0.5
     grayscale: bool = False
@@ -1220,6 +1245,14 @@ class ShotResponse(BaseModel):
     #: Blank on any row written before roles existed, which reads as "infer it
     #: from position" - the same thing an unset role means for a new shot.
     scene_role: str = ""
+
+    _coerce_added_strings = field_validator(
+        "scene_role", "emphasis_text", "subject_motion", "camera_motion",
+        mode="before",
+    )(_coerce_added_column(""))
+    _coerce_added_flags = field_validator("include_in_cut", mode="before")(
+        _coerce_added_column(True)
+    )
     image_prompt: str
     video_prompt: str
     #: What happens in the frame, and how the camera behaves - apart, because

@@ -26,6 +26,7 @@ import json
 import os
 import sys
 import time
+from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -101,6 +102,25 @@ def wait_for_jobs(pid: str, job_ids: list[str], budget: float) -> list[dict]:
             return jobs
         time.sleep(10)
     raise ProductionError(f"jobs did not settle within {budget}s")
+
+
+def canonical_view(pid: str, set_id: str) -> str:
+    """The approved canonical view of a character, as a reference image id.
+
+    A face composited onto a newspaper has to be *that* face, and the only
+    place the canonical one lives is the character set's approved version.
+    """
+    cset = call("GET", f"/api/projects/{pid}/character-sets/{set_id}")
+    approved = next(
+        (v for v in cset["versions"] if v["id"] == cset["approved_version_id"]),
+        None,
+    )
+    if approved is None:
+        raise ProductionError(f"Character set {set_id} has no approved version.")
+    for view in approved["views"]:
+        if view.get("reference_image_id"):
+            return view["reference_image_id"]
+    raise ProductionError(f"Character set {set_id} has no generated view.")
 
 
 def generate_and_approve(pid: str, shot_id: str, label: str, budget: float) -> str:
@@ -310,6 +330,39 @@ def main() -> int:
             state["beats"] = produced
             save_state(out, state)
 
+        # 1b. Composite what the model cannot write. The date and the
+        #     front-page photograph are the two things in this episode that
+        #     have to be *read*, and no prompt makes a model spell. The
+        #     composite is a new take of the same shot, reviewed like any
+        #     other, and it is the frame the clip animates.
+        recipe = ep.get("composites", {}).get(index)
+        if recipe and "composited_take_id" not in record:
+            tomorrow = (date.today() + timedelta(days=1)).strftime("%d %B %Y").upper()
+            layers = []
+            for layer in recipe:
+                resolved = dict(layer)
+                if resolved.get("text"):
+                    resolved["text"] = resolved["text"].format(tomorrow=tomorrow)
+                marker = str(resolved.get("reference_image_id") or "")
+                if marker.startswith("{") and marker.endswith("}"):
+                    name = marker.strip("{}")
+                    resolved["reference_image_id"] = canonical_view(
+                        pid, cast_ids[name]
+                    )
+                layers.append(resolved)
+            composited = call(
+                "POST", f"/api/takes/{record['key_take_id']}/composite",
+                expect=201, json={"layers": layers},
+            )
+            call("POST", f"/api/takes/{composited['id']}/approve")
+            record["composited_take_id"] = composited["id"]
+            produced[str(index)] = record
+            state["beats"] = produced
+            save_state(out, state)
+            log(f"beat {index}: composited {len(layers)} layer(s)")
+
+        start_frame_take = record.get("composited_take_id") or record["key_take_id"]
+
         # 2. The clip, animated from that approved frame.
         if "clip_take_id" not in record:
             if "clip_shot_id" not in record:
@@ -336,14 +389,14 @@ def main() -> int:
             # start on it - the same step a video take needs to have its end
             # frame extracted.
             call("POST",
-                 f"/api/projects/{pid}/takes/{record['key_take_id']}/continuity-frame",
+                 f"/api/projects/{pid}/takes/{start_frame_take}/continuity-frame",
                  json={"at_sec": 0.0}, expect=(200, 201))
             # Bind the approved key image as this clip's first frame. Never
             # inferred from shot order: the binding names a frame that exists.
             call("PUT",
                  f"/api/projects/{pid}/scenes/{sid}/shots/"
                  f"{record['clip_shot_id']}/continuity",
-                 json={"source_take_id": record["key_take_id"]})
+                 json={"source_take_id": start_frame_take})
             record["clip_take_id"] = generate_and_approve(
                 pid, record["clip_shot_id"], f"beat {index} clip", budget=2400)
             produced[str(index)] = record

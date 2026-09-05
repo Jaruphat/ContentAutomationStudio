@@ -280,3 +280,119 @@ def test_the_api_refuses_a_bad_recipe_with_the_reason(
 
     assert response.status_code == 422, response.text
     assert "9" in response.text
+
+
+# ---------------------------------------------------------------------------
+# A layer from the reference bible
+# ---------------------------------------------------------------------------
+
+def test_an_image_layer_can_come_from_a_reference_image(
+    db_session, sample_project, sample_shot, tmp_path, png_bytes,
+):
+    """The reveal needs a portrait of a character, and a character's canonical
+    view lives in the reference bible rather than as a take of a shot. Without
+    this the only way to composite a face is to have generated it as a shot
+    first, which is a shot nobody wants in the film."""
+    from app.services import reference_bible
+
+    sheet = reference_bible.create_sheet(
+        db_session, project_id=sample_project.id, kind="character",
+        name="The observer",
+    )
+    portrait = reference_bible.store_image(
+        db_session, sheet=sheet, data=png_bytes(200, 200),
+        original_filename="observer.png", content_type="image/png",
+    )
+    page = _take(db_session, sample_shot.id, _write_image(str(tmp_path / "p.png")))
+
+    result = compositing.composite_take(db_session, page, layers=[{
+        "type": "image", "reference_image_id": portrait.id, "grayscale": True,
+        "x": 0.5, "y": 0.4, "width": 0.6, "height": 0.3,
+    }])
+
+    assert os.path.isfile(result.file_path)
+    recorded = result.provenance["composite"]["layers"][0]
+    assert recorded["reference_image_id"] == portrait.id
+
+
+def test_an_image_layer_naming_neither_source_is_refused(
+    db_session, sample_shot, tmp_path,
+):
+    base = _take(db_session, sample_shot.id, _write_image(str(tmp_path / "a.png")))
+
+    with pytest.raises(compositing.CompositeError) as exc:
+        compositing.composite_take(db_session, base, layers=[{
+            "type": "image", "x": 0.5, "y": 0.5, "width": 0.4, "height": 0.4,
+        }])
+    assert "take" in str(exc.value).lower()
+
+
+def test_an_image_layer_naming_both_sources_is_refused(
+    db_session, sample_project, sample_shot, tmp_path, png_bytes,
+):
+    """Two sources is a recipe that cannot be read twice the same way."""
+    from app.services import reference_bible
+
+    sheet = reference_bible.create_sheet(
+        db_session, project_id=sample_project.id, kind="character", name="x",
+    )
+    portrait = reference_bible.store_image(
+        db_session, sheet=sheet, data=png_bytes(120, 120),
+        original_filename="x.png", content_type="image/png",
+    )
+    other = _take(db_session, sample_shot.id, _write_image(str(tmp_path / "b.png")))
+    base = _take(db_session, sample_shot.id, _write_image(str(tmp_path / "a.png")))
+
+    with pytest.raises(compositing.CompositeError):
+        compositing.composite_take(db_session, base, layers=[{
+            "type": "image", "take_id": other.id,
+            "reference_image_id": portrait.id,
+            "x": 0.5, "y": 0.5, "width": 0.4, "height": 0.4,
+        }])
+
+
+# ---------------------------------------------------------------------------
+# Covering what the model wrote
+# ---------------------------------------------------------------------------
+
+def test_a_rect_layer_covers_the_area_it_is_given(
+    db_session, sample_shot, tmp_path,
+):
+    """You cannot composite a real headline over a generated one without
+    covering the generated one first. The blueprint says to leave a blank
+    area; the model does not leave blank areas, it writes a plausible smear -
+    so the blank has to be made here."""
+    base = _take(
+        db_session, sample_shot.id,
+        _write_image(str(tmp_path / "a.png"), colour=(240, 240, 240)),
+    )
+
+    result = compositing.composite_take(db_session, base, layers=[{
+        "type": "rect", "colour": "#101014",
+        "x": 0.5, "y": 0.5, "width": 0.4, "height": 0.2,
+    }])
+
+    image = Image.open(result.file_path).convert("L")
+    w, h = image.size
+    assert image.getpixel((int(w * 0.5), int(h * 0.5))) < 40, "not covered"
+    assert image.getpixel((int(w * 0.5), int(h * 0.1))) > 200, "covered too much"
+
+
+def test_a_rect_and_the_text_over_it_are_one_recipe(
+    db_session, sample_shot, tmp_path,
+):
+    """Order matters and is the order given: the patch, then the words."""
+    base = _take(
+        db_session, sample_shot.id,
+        _write_image(str(tmp_path / "a.png"), colour=(240, 240, 240)),
+    )
+
+    result = compositing.composite_take(db_session, base, layers=[
+        {"type": "rect", "colour": "#f4f1e8",
+         "x": 0.5, "y": 0.5, "width": 0.8, "height": 0.12},
+        {"type": "text", "text": "TOMORROW", "colour": "#101014",
+         "x": 0.5, "y": 0.5, "size": 0.06},
+    ])
+
+    pixels = list(Image.open(result.file_path).convert("L").getdata())
+    assert min(pixels) < 60, "the dark text is not there"
