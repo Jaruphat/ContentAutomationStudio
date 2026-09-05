@@ -212,6 +212,45 @@ class ReferenceGenerateRequest(BaseModel):
     confirm_paid_generation: bool = False
 
 
+class SoundCueUpload(BaseModel):
+    """Where an uploaded sound landed. The path is the server's, not the
+    client's: a path from a request must never become one the server reads."""
+
+    file_path: str
+    original_filename: str = ""
+    size_bytes: int = 0
+
+
+class SoundCueCreate(BaseModel):
+    """A sound attached to a moment inside a shot.
+
+    The offset is measured from where the shot starts in the cut, so
+    re-editing moves the sound with it - a cue pinned to an absolute second
+    detaches silently the first time an earlier shot is trimmed.
+    """
+
+    model_config = {"extra": "forbid"}
+
+    shot_id: str
+    file_path: str
+    offset_sec: float = 0.0
+    gain_db: float = 0.0
+    label: str = ""
+
+
+class SoundCueResponse(BaseModel):
+    model_config = {"from_attributes": True}
+
+    id: str
+    project_id: str
+    shot_id: Optional[str] = None
+    file_path: str
+    offset_sec: float
+    gain_db: float
+    label: str = ""
+    created_at: datetime
+
+
 class RenderFinishRequest(BaseModel):
     """How the cut ends. Frames of black before a loop stop the last frame
     and the first from touching."""

@@ -56,7 +56,12 @@ from app.services.media_probe import (  # noqa: F401
     run_captured,
 )
 from app.services.timeline_service import aspect_override_warnings, get_timeline_manifest
-from app.services import generation_planning, narration, subtitle_service
+from app.services import (
+    generation_planning,
+    narration,
+    sound_cues,
+    subtitle_service,
+)
 
 logger = logging.getLogger("cas.render_service")
 
@@ -219,6 +224,7 @@ def _blocked(
             "adjusted_shots": {},
             "music": {"present": False, "gain_db": 0.0,
                       "ducked_under_narration": False, "path": ""},
+            "sound_cues": {"placed": 0, "skipped": 0},
         },
         "provenance_path": "",
         "embedded_metadata_keys": leaked_metadata_keys or [],
@@ -876,6 +882,79 @@ def render_review_video(
                     f"{len(track.failures)} narration line(s) could not be spoken."
                 )
 
+    # --- Sound cues ------------------------------------------------------
+    # A sound at a moment, placed against the cut as it stands. Mixed before
+    # the bed and the loudness pass so the whole programme is measured as one
+    # thing, and a cue is never louder than the film it belongs to.
+    cue_report: dict[str, Any] = {"placed": 0, "skipped": 0}
+    resolved_cues = [
+        entry for entry in sound_cues.resolve_cues(db, project_id)
+        if entry.get("placed")
+    ]
+    usable_cues = []
+    for entry in resolved_cues:
+        if not os.path.isfile(entry["file_path"] or ""):
+            # Losing a whole render to a moved sound file is the wrong trade;
+            # so is delivering a film missing a sound and saying nothing.
+            warnings.append(
+                f"The sound cue '{entry['label'] or entry['cue_id']}' is "
+                f"missing from disk, so the film was rendered without it: "
+                f"{entry['file_path']}"
+            )
+            cue_report["skipped"] += 1
+            continue
+        usable_cues.append(entry)
+
+    if usable_cues:
+        mixed = os.path.join(out_dir, "review.cued.mp4")
+        cue_cmd = [ffmpeg, "-y", "-loglevel", "error", "-i", concat_output]
+        for entry in usable_cues:
+            cue_cmd += ["-i", entry["file_path"]]
+
+        filters = []
+        labels = []
+        for index, entry in enumerate(usable_cues, start=1):
+            delay_ms = max(0, int(round(entry["start_sec"] * 1000)))
+            label = f"c{index}"
+            filters.append(
+                f"[{index}:a]volume={float(entry['gain_db']):g}dB,"
+                f"adelay={delay_ms}|{delay_ms},"
+                f"aformat=sample_rates={AUDIO_SAMPLE_RATE}:"
+                f"channel_layouts=stereo[{label}]"
+            )
+            labels.append(f"[{label}]")
+
+        if keep_audio:
+            sources_count = len(usable_cues) + 1
+            mix = "[0:a]" + "".join(labels)
+        else:
+            sources_count = len(usable_cues)
+            mix = "".join(labels)
+        # duration=first keeps the programme's length: a cue must never
+        # lengthen the film it is decorating.
+        filters.append(
+            f"{mix}amix=inputs={sources_count}:duration=first:normalize=0[aout]"
+        )
+
+        cue_cmd += ["-filter_complex", ";".join(filters)]
+        cue_cmd += ["-map", "0:v", "-map", "[aout]"]
+        cue_cmd += STRIP_METADATA_ARGS
+        cue_cmd += [
+            "-c:v", "copy", "-c:a", "aac",
+            "-ar", str(AUDIO_SAMPLE_RATE), "-ac", str(AUDIO_CHANNELS),
+            "-b:a", AUDIO_BITRATE, "-shortest", mixed,
+        ]
+        ok, err = _run(cue_cmd)
+        if not ok:
+            return _blocked(project_id, f"FFmpeg sound cue mix failed: {err}")
+        try:
+            os.remove(concat_output)
+        except OSError:
+            pass
+        concat_output = mixed
+        keep_audio = True
+        cue_report["placed"] = len(usable_cues)
+
     # --- Music bed -------------------------------------------------------
     # Laid after narration so it can be ducked under the voice, and before
     # loudness normalisation so the whole programme is measured together.
@@ -949,6 +1028,7 @@ def render_review_video(
         "muted_shots": muted_shots,
         "adjusted_shots": adjusted_shots,
         "music": music_report,
+        "sound_cues": cue_report,
     }
 
     if keep_audio:

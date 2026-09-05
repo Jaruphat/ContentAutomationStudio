@@ -76,6 +76,32 @@ class Channel(Base):
     updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
 
 
+class SoundCue(Base):
+    """A sound, a place in the cut, and a level.
+
+    The place is stored relative to a shot rather than as an absolute second.
+    A cue pinned to a second detaches from the thing it was made for the first
+    time somebody trims an earlier shot, and it detaches silently - the film
+    still renders and the door still bangs, just not when the door opens.
+    """
+
+    __tablename__ = "sound_cues"
+
+    id = Column(String, primary_key=True, default=_uuid)
+    project_id = Column(
+        String, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False,
+        index=True,
+    )
+    #: The shot this cue is anchored to. The offset is measured from where
+    #: that shot starts in the cut, so re-editing moves the sound with it.
+    shot_id = Column(String, nullable=True, index=True)
+    file_path = Column(String, default="")
+    offset_sec = Column(Float, default=0.0)
+    gain_db = Column(Float, default=0.0)
+    label = Column(String, default="")
+    created_at = Column(DateTime, default=_utcnow)
+
+
 class EpisodeAnalytics(Base):
     """One capture of what a platform reported for one episode.
 

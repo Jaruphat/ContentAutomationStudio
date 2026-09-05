@@ -21,6 +21,7 @@ from app.models import Workflow
 from app.routers import (
     analytics,
     publishing,
+    sound,
     channels,
     quality,
     ai,
@@ -176,6 +177,7 @@ app.include_router(review.router)
 app.include_router(quality.router)
 app.include_router(analytics.router)
 app.include_router(publishing.router)
+app.include_router(sound.router)
 app.include_router(timeline.router)
 app.include_router(exports.router)
 app.include_router(ai.router)
