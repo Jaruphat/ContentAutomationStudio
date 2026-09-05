@@ -1,7 +1,7 @@
 # Content Automation Studio — PRD v0.3 (current state)
 
 **Status date:** 2026-09-05 · **Supersedes:** v0.2 (preserved unchanged) ·
-**Backend tests:** 1198 passing · **Frontend tests:** 172 passing
+**Backend tests:** 1251 passing · **Frontend tests:** 179 passing
 
 v0.2 described a product to build. This describes the one that exists, what it
 proved on real hardware, and what is still missing. Where the two disagree, the
@@ -158,8 +158,16 @@ shot. Identity comes from the canonical view used when making the key image;
 composition comes from the key image.
 
 Neither is wrong. They are a speed/composition trade, and the app supports
-both. What is missing is guidance — and, ideally, a per-shot choice between
-"this shot establishes a scene" and "this shot continues one".
+both.
+
+**Partly addressed since.** A shot now carries a *scene role* — establishing
+or continuation, inferred from position within its scene and overridable — and
+the inspector and preflight say, before the render, when a shot that opens a
+scene is routed to compose from a character sheet, naming the key-image route
+as the alternative. It advises and never reroutes: the trade is real, and the
+fast route is why a three-minute film is an overnight job. What is still
+missing is the app *doing* the recommended thing on request, rather than the
+user configuring it shot by shot.
 
 ### 4.2 The Story Bible is wired but unused in practice
 
@@ -190,31 +198,45 @@ provider's memory first makes it reliable.
 
 ---
 
-## 5. What is not built yet
+## 5. Built since this document was first written
+
+1. **Scene-role routing.** A per-shot `scene_role`, inferred from position
+   within the scene and overridable, driving advice in the inspector and in
+   preflight. Scoped to the scene, so continuity resets at a scene boundary and
+   a start frame bound across one is flagged. Advice only — never a reroute.
+2. **Identity from a picture.** A character set may carry a source image and
+   the canonical sheet becomes an edit of it: six angles of one subject rather
+   than six people matching one paragraph. Filed with role `source`, never
+   `canonical`, so it cannot be handed to a shot as a view. Refuses a
+   text-to-image workflow once a picture is attached, and still refuses a
+   reference workflow when there is none.
+3. **Regeneration by intent.** "Same shot, different framing" and "same
+   framing, later in the day" want opposite things from the sampler, and the
+   difference is the seed, not the words. An intent carries the seed policy as
+   well as the directive; the shot is never edited, so an intent cannot mark
+   every earlier take of it stale.
+4. **Batch review.** One decision applied to many takes, membership checked
+   before anything is written. Deliberately no stricter than the single-take
+   path.
+5. **Watching the film in the app.** The render is found on load rather than
+   living only in the response that made it, and is served with HTTP range
+   support so it can be scrubbed — takes too. The player takes its aspect
+   ratio from the file.
+
+## 5b. What is still not built
 
 Ranked by how much each would change the product.
 
-1. **Scene-establishing vs continuation routing.** A per-shot declaration that
-   picks the pipeline — key-image-then-animate for a new scene, reference or
-   end-frame continuation within one — instead of the user choosing a workflow
-   per shot. This is 4.1's fix and the single biggest quality lever.
-2. **Multi-scene structure.** Both films are one scene of 23 shots. Scenes
-   exist in the model and the UI but nothing yet reasons about scene boundaries
-   — where continuity should reset, where the look may change.
-3. **Shot-level audio direction.** H3 produces native audio per clip, which is
-   accepted wholesale. No control over ambience, no music bed, no ducking
-   beyond the narration mix.
-4. **A cut that is not one shot per line.** Every film so far is N equal-length
-   shots. No pacing control, no held beats, no cutting inside a take.
-5. **Character sheet from a supplied image.** Identity can only be described,
-   not shown. Uploading a reference photo and deriving canonical views from it
-   is the obvious next input.
-6. **Regeneration by intent.** "Same shot, different framing" or "same framing,
-   later in the day" as first-class operations rather than prompt edits.
-7. **Batch review.** Approving 23 takes is 23 clicks.
-8. **Cost/time budget for a whole project**, not per run.
-
----
+1. **Acting on the routing recommendation.** The advice exists; making the app
+   generate the key image, wait for approval and animate it is not automated.
+2. **Multi-scene structure in practice.** Scene boundaries now mean something
+   to routing, but both films are still one scene of 23 shots.
+3. **Shot-level audio direction.** H3's native per-clip audio is accepted
+   wholesale. No ambience control, no music bed, no ducking beyond the
+   narration mix.
+4. **A cut that is not one shot per line.** `planned_duration_sec` is honoured,
+   but nothing decides pacing, holds a beat, or cuts inside a take.
+5. **Cost/time budget for a whole project**, not per run.
 
 ## 6. Unchanged from v0.2
 
