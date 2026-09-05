@@ -18,6 +18,7 @@ from app.schemas import (
     GenerationEstimate,
     GenerationJobResponse,
     RegenerateRequest,
+    RegenerationIntentOption,
     TakeResponse,
     TakeReviewRequest,
 )
@@ -27,6 +28,7 @@ from app.services import (
     job_payload,
     media_providers,
     prompt_context,
+    regeneration_intent,
     revisions,
     shot_conditioning,
     workflow_registry,
@@ -339,6 +341,44 @@ def batch_review_takes(
 # ---------------------------------------------------------------------------
 
 @router.get(
+    "/api/regeneration-intents",
+    response_model=list[RegenerationIntentOption],
+)
+def list_regeneration_intents():
+    """The vocabulary a regenerate picker offers, server-side.
+
+    Kept here rather than duplicated in the client so the seed policy shown
+    beside each choice is the one the endpoint will actually apply.
+    """
+    return [
+        RegenerationIntentOption(
+            key=intent.key, label=intent.label, directive=intent.directive,
+            keep_seed=intent.keep_seed, explanation=intent.explanation,
+        )
+        for intent in regeneration_intent.all_intents()
+    ]
+
+
+def _previous_seed(db: Session, shot_id: str) -> int | None:
+    """The seed of the take this regeneration is meant to improve on.
+
+    Takes carry no seed of their own; the job that produced one does. Newest
+    first, because the take on screen when somebody presses Regenerate is the
+    most recent one.
+    """
+    take = (
+        db.query(Take)
+        .filter(Take.shot_id == shot_id)
+        .order_by(Take.created_at.desc())
+        .first()
+    )
+    if take is None or not take.job_id:
+        return None
+    job = db.query(GenerationJob).filter(GenerationJob.id == take.job_id).first()
+    return job.seed if job and job.seed is not None else None
+
+
+@router.get(
     "/api/shots/{shot_id}/regenerate/estimate",
     response_model=GenerationEstimate,
 )
@@ -385,6 +425,13 @@ def regenerate_shot(
     shot = db.query(Shot).filter(Shot.id == shot_id).first()
     if not shot:
         raise HTTPException(status_code=404, detail="Shot not found")
+
+    # Resolved before anything is created: an unrecognised name must cost
+    # nothing and leave no run behind in the history.
+    try:
+        intent = regeneration_intent.get(payload.intent if payload else "")
+    except regeneration_intent.UnknownIntent as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     scene = db.query(Scene).filter(Scene.id == shot.scene_id).first()
     project = (
@@ -519,11 +566,26 @@ def regenerate_shot(
 
     compiled = prompt_context.compile_for_shot(db, shot).compiled
 
-    # Generate new seed for regeneration
+    # An intent modifies this run and nothing else. The directive is appended
+    # to the compiled prompt rather than written back to the shot: the shot's
+    # own prompt is still what the shot is, and editing it would advance the
+    # content revision and mark every earlier take of it stale.
+    positive_prompt = regeneration_intent.apply_to_prompt(
+        compiled.positive_prompt, intent, payload.intent_note if payload else "",
+    )
+
+    # A new seed by default. An intent that asks to keep the framing holds the
+    # seed of the take being improved instead - the seed is most of what fixes
+    # a composition, so re-rolling it would answer "same framing, different
+    # light" by changing the framing.
     seed = random.randint(0, 2**31 - 1)
+    if intent is not None and intent.keep_seed:
+        previous = _previous_seed(db, shot_id)
+        if previous is not None:
+            seed = previous
     width, height = generation_planning.parse_resolution(project.target_resolution)
     parameter_map = {
-        job_payload.POSITIVE_PROMPT: compiled.positive_prompt,
+        job_payload.POSITIVE_PROMPT: positive_prompt,
         job_payload.NEGATIVE_PROMPT: compiled.negative_prompt,
         job_payload.SEED: seed,
         job_payload.WIDTH: width,
@@ -543,6 +605,12 @@ def regenerate_shot(
         )
 
     request_params = dict(plan.request_params)
+    if intent is not None:
+        # Six takes of one shot are unreadable without knowing what each was
+        # asking for, and the seed policy has to be recoverable too.
+        request_params["regeneration_intent"] = intent.key
+        request_params["regeneration_note"] = (payload.intent_note if payload else "")
+        request_params["regeneration_kept_seed"] = intent.keep_seed
     if plan.paid:
         request_params["paid_generation_confirmed"] = True
         request_params["cost_basis"] = plan.cost_basis

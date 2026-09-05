@@ -1301,6 +1301,27 @@ class RegenerateRequest(BaseModel):
     """Body for a single-shot regeneration; same confirmation gate as above."""
 
     confirm_paid_generation: bool = False
+    #: What this regeneration is for - "reframe", "relight" and so on. Blank
+    #: is the plain re-roll. The intent decides the seed policy as well as the
+    #: directive, which is the half a user cannot be expected to work out.
+    intent: str = ""
+    #: The user's own words, added to the prompt for this run only.
+    intent_note: str = ""
+
+
+class RegenerationIntentOption(BaseModel):
+    """One entry in the regenerate picker, with what it will do to the image.
+
+    ``explanation`` is not decoration: the seed policy is the half of this a
+    user cannot work out, and a dropdown of bare verbs would be a worse prompt
+    box.
+    """
+
+    key: str
+    label: str
+    directive: str
+    keep_seed: bool
+    explanation: str
 
 
 class QueueStatus(BaseModel):
