@@ -561,9 +561,22 @@ export const timeline = {
       .then((r) => r.data),
 
   /** Executes the render. Reports why it was skipped rather than faking one. */
-  render: (projectId: string, narrate = false) =>
+  /** `voiceProvider: "openai"` is metered, so it carries its own explicit
+   *  confirmation - the backend refuses without one. Blank instructions fall
+   *  back to the channel's voice direction. */
+  render: (
+    projectId: string,
+    narrate = false,
+    voiceProvider: "system" | "openai" = "system",
+    voice = "",
+  ) =>
     http
-      .post<RenderResult>(`/projects/${projectId}/render`, { narrate })
+      .post<RenderResult>(`/projects/${projectId}/render`, {
+        narrate,
+        voice_provider: voiceProvider,
+        voice,
+        confirm_paid_generation: voiceProvider === "openai",
+      })
       .then((r) => r.data),
 };
 

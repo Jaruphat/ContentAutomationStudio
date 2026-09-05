@@ -449,6 +449,10 @@ export default function TimelinePage() {
 
   // Off by default: speaking a film takes time and is a choice, not a default.
   const [narrate, setNarrate] = useState(false);
+  // The local voice costs nothing and cannot be directed; the hosted one is
+  // metered and takes the channel's reading direction. Defaulting to the free
+  // one keeps an overnight render from quietly spending.
+  const [voiceProvider, setVoiceProvider] = useState<"system" | "openai">("system");
   // Asked on load, so a film rendered in a previous session is on screen
   // rather than living only in the response that produced it.
   const filmQ = useQuery({
@@ -458,7 +462,8 @@ export default function TimelinePage() {
   });
 
   const renderMut = useMutation({
-    mutationFn: (projectId: string) => api.timeline.render(projectId, narrate),
+    mutationFn: (projectId: string) =>
+      api.timeline.render(projectId, narrate, voiceProvider),
     onSuccess: (data, projectId) => {
       if (currentProjectRef.current === projectId) {
         setScopedRenderResult({ projectId, data });
@@ -540,6 +545,23 @@ export default function TimelinePage() {
             />
             Narrate
           </label>
+          {narrate && (
+            <select
+              value={voiceProvider}
+              onChange={(e) =>
+                setVoiceProvider(e.target.value as "system" | "openai")
+              }
+              title={
+                voiceProvider === "openai"
+                  ? "Metered. Reads with the channel's voice direction."
+                  : "This machine's own voice. Free, and cannot be directed."
+              }
+              className="h-8 rounded-md border border-zinc-700 bg-zinc-900 px-2 text-xs text-zinc-300"
+            >
+              <option value="system">System voice (free)</option>
+              <option value="openai">OpenAI voice (metered)</option>
+            </select>
+          )}
           <button
             onClick={() => renderMut.mutate(currentProjectId)}
             disabled={renderMut.isPending || items.length === 0}
