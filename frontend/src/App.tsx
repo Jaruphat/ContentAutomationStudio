@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ProjectStoreProvider } from "./store/useProjectStore";
 import AppLayout from "./components/AppLayout";
+import ChannelPage from "./pages/ChannelPage";
 import StoryPage from "./pages/StoryPage";
 import StoryboardPage from "./pages/StoryboardPage";
 import GeneratePage from "./pages/GeneratePage";
@@ -32,6 +33,7 @@ export default function App() {
         <BrowserRouter>
           <Routes>
             <Route element={<AppLayout />}>
+              <Route path="/channel" element={<ChannelPage />} />
               <Route path="/story" element={<StoryPage />} />
               <Route path="/storyboard" element={<StoryboardPage />} />
               <Route path="/generate" element={<GeneratePage />} />

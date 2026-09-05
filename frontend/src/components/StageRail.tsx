@@ -21,6 +21,7 @@ import {
   Sun,
   Moon,
   PanelRight,
+  Radio,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useTheme, type ThemePreference } from "../theme";
@@ -33,6 +34,7 @@ interface Stage {
 }
 
 const stages: Stage[] = [
+  { label: "Channel", path: "/channel", icon: Radio },
   { label: "Story", path: "/story", icon: BookOpen },
   { label: "Storyboard", path: "/storyboard", icon: LayoutGrid },
   { label: "Generate", path: "/generate", icon: Zap },

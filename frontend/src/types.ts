@@ -91,6 +91,15 @@ export interface Project {
   default_image_workflow_id: string | null;
   default_video_workflow_id: string | null;
   status: ProjectStatus;
+  /** The channel this episode belongs to, if any. Null for a project made
+   *  before channels existed, or one whose channel was deleted - the episode
+   *  outlives the channel deliberately. */
+  channel_id: string | null;
+  /** What the analytics loop groups by, recorded when the episode is made. */
+  pillar: string;
+  hook_type: string;
+  ending_type: string;
+  premise: string;
   brief_text: string;
   plot_text: string;
   created_at: string;
@@ -1066,4 +1075,96 @@ export interface RenderedFilm {
   has_audio: boolean;
   rendered_at: string;
   stale: boolean;
+}
+
+/** One pillar or hook: the channel's own vocabulary, not an enum. */
+export interface ChannelVocabularyEntry {
+  key: string;
+  name: string;
+  share?: number | null;
+  purpose?: string;
+  example?: string;
+}
+
+/** What recurs across episodes. A project is one film; this outlives one. */
+export interface Channel {
+  id: string;
+  name: string;
+  handle: string;
+  tagline: string;
+  description: string;
+  audience: string;
+  brand_notes: string;
+  visual_style: string;
+  negative_prompt: string;
+  camera_language: string;
+  voice_direction: string;
+  sound_direction: string;
+  aspect_ratio: string;
+  target_resolution: string;
+  frame_rate: number;
+  target_duration_sec: number;
+  pillars: ChannelVocabularyEntry[];
+  hooks: ChannelVocabularyEntry[];
+  created_at: string;
+  updated_at: string;
+}
+
+export type ChannelCreate = Partial<
+  Omit<Channel, "id" | "created_at" | "updated_at">
+> & { name: string };
+
+export interface EpisodeCreate {
+  title: string;
+  objective?: string;
+  premise?: string;
+  pillar?: string;
+  hook_type?: string;
+  ending_type?: string;
+  target_duration_sec?: number | null;
+}
+
+/** One metric on the publish gate, and what it is really asking. */
+export interface QualityRubricEntry {
+  key: string;
+  label: string;
+  target: number;
+  question: string;
+}
+
+export interface QualityReview {
+  project_id: string;
+  reviewed: boolean;
+  passed: boolean;
+  scores: Record<string, number | null>;
+  ai_tell: boolean;
+  ai_tell_causes: string;
+  shortfalls: { key: string; label: string; scored: number | null; target: number }[];
+  reasons: string[];
+  notes: string;
+  reviewer: string;
+  created_at: string | null;
+}
+
+/** Everything needed to upload, with the gate in front of it. */
+export interface PublishPackage {
+  project_id: string;
+  ready: boolean;
+  blockers: string[];
+  warnings: string[];
+  publish_title: string;
+  series_label: string;
+  publish_description: string;
+  publish_hashtags: string;
+  pillar: string;
+  hook_type: string;
+  ending_type: string;
+  premise: string;
+  video_url: string;
+  video_path: string;
+  duration_sec: number;
+  width: number;
+  height: number;
+  subtitle_path: string;
+  quality_passed: boolean;
 }

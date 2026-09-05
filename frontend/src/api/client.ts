@@ -6,6 +6,12 @@
 import axios from "axios";
 import type {
   BatchReviewResult,
+  Channel,
+  ChannelCreate,
+  EpisodeCreate,
+  PublishPackage,
+  QualityReview,
+  QualityRubricEntry,
   RenderedFilm,
   RegenerationIntentOption,
   AIErrorBody,
@@ -680,6 +686,57 @@ export const exports_ = {
 
 // ── Default export for convenience ───────────────────────────────────────
 
+
+
+/** A channel owns what recurs; starting an episode copies it into a project. */
+export const channels = {
+  list: () => http.get<Channel[]>("/channels").then((r) => r.data),
+  get: (id: string) => http.get<Channel>(`/channels/${id}`).then((r) => r.data),
+  create: (data: ChannelCreate) =>
+    http.post<Channel>("/channels", data).then((r) => r.data),
+  update: (id: string, data: Partial<ChannelCreate>) =>
+    http.put<Channel>(`/channels/${id}`, data).then((r) => r.data),
+  remove: (id: string) => http.delete(`/channels/${id}`).then((r) => r.data),
+  episodes: (id: string) =>
+    http.get<Project[]>(`/channels/${id}/episodes`).then((r) => r.data),
+  startEpisode: (id: string, data: EpisodeCreate) =>
+    http.post<Project>(`/channels/${id}/episodes`, data).then((r) => r.data),
+};
+
+/** The publish gate: nine measures, and the two-second question. */
+export const quality = {
+  rubric: () =>
+    http.get<QualityRubricEntry[]>("/quality-rubric").then((r) => r.data),
+  latest: (projectId: string) =>
+    http
+      .get<QualityReview>(`/projects/${projectId}/quality-review`)
+      .then((r) => r.data),
+  record: (
+    projectId: string,
+    body: {
+      scores: Record<string, number | null>;
+      ai_tell: boolean;
+      ai_tell_causes?: string;
+      notes?: string;
+      reviewer?: string;
+    },
+  ) =>
+    http
+      .post<QualityReview>(`/projects/${projectId}/quality-review`, body)
+      .then((r) => r.data),
+};
+
+export const publishing = {
+  get: (projectId: string) =>
+    http
+      .get<PublishPackage>(`/projects/${projectId}/publish-package`)
+      .then((r) => r.data),
+  save: (projectId: string, body: Partial<PublishPackage>) =>
+    http
+      .put<PublishPackage>(`/projects/${projectId}/publish`, body)
+      .then((r) => r.data),
+};
+
 const api = {
   ai,
   health,
@@ -700,6 +757,9 @@ const api = {
   timeline,
   subtitles,
   exports: exports_,
+  channels,
+  quality,
+  publishing,
 };
 
 export default api;
