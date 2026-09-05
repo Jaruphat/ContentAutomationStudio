@@ -276,6 +276,7 @@ def main() -> int:
                     "scene_role": "continuation",
                     "planned_duration_sec": seconds,
                     "dialogue": narration,
+                    "emphasis_text": emphasis,
                     "video_prompt": motion,
                     "negative_prompt": ep["negative"],
                     "workflow_preset_id": WF_I2V,
@@ -303,6 +304,18 @@ def main() -> int:
             produced[str(index)] = record
             state["beats"] = produced
             save_state(out, state)
+
+    # -- captions -----------------------------------------------------------
+    # Emphasis cards are post-production, not a generation input: setting them
+    # does not move a shot's content digest, so a run already generated can
+    # have its cards written without any take going stale.
+    for index, beat in enumerate(beats, start=1):
+        record = produced.get(str(index), {})
+        if not record.get("clip_shot_id"):
+            continue
+        call("PUT",
+             f"/api/projects/{pid}/scenes/{sid}/shots/{record['clip_shot_id']}",
+             json={"emphasis_text": beat[5], "dialogue": beat[4]})
 
     # -- timeline and render ----------------------------------------------
     manifest = call("POST", f"/api/projects/{pid}/timeline/build")
