@@ -34,6 +34,7 @@ from app.services import (
     generation_planning,
     generation_runs,
     job_payload,
+    dialogue_fit,
     media_providers,
     motion_direction,
     revisions,
@@ -375,6 +376,12 @@ async def preflight_validation(project_id: str, db: Session = Depends(get_db)):
                 camera_motion=shot.camera_motion or "",
             ):
                 advice_shots.setdefault(line, []).append(shot.order or 0)
+    # A script and a shot plan that disagree is knowable now, with no audio,
+    # no provider and no money - and every cut so far has learned it at the
+    # end instead, after forty minutes of generation.
+    for problem in dialogue_fit.review(db, project_id):
+        warnings.append("Narration: " + problem["message"])
+
     for line, orders in advice_shots.items():
         listed = ", ".join(str(order) for order in sorted(set(orders)))
         warnings.append(f"Shot {listed}: {line}")

@@ -414,6 +414,20 @@ def main() -> int:
             state["beats"] = produced
             save_state(out, state)
 
+    # -- retire what this run replaced --------------------------------------
+    # Redoing a beat creates a new clip shot; the one it replaced still has an
+    # approved take and would still be assembled. Four extra shots turned a
+    # 32-second cut into 48 without a single error, which is the shape of
+    # mistake that only shows up as a duration.
+    kept = {b["clip_shot_id"] for b in produced.values() if b.get("clip_shot_id")}
+    for shot in call("GET", f"/api/projects/{pid}/scenes/{sid}/shots"):
+        if (shot["generation_mode"] == "image-to-video"
+                and shot["id"] not in kept
+                and shot["include_in_cut"]):
+            call("PUT", f"/api/projects/{pid}/scenes/{sid}/shots/{shot['id']}",
+                 json={"include_in_cut": False})
+            log(f"retired superseded clip shot {shot['id'][:8]}")
+
     # -- captions -----------------------------------------------------------
     # Emphasis cards are post-production, not a generation input: setting them
     # does not move a shot's content digest, so a run already generated can
