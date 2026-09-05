@@ -691,6 +691,7 @@ class ShotCreate(BaseModel):
     dialogue: str = ""
     planned_duration_sec: float = 0.0
     generation_mode: str = "image"
+    scene_role: str = ""
     image_prompt: str = ""
     video_prompt: str = ""
     negative_prompt: str = ""
@@ -721,6 +722,7 @@ class ShotUpdate(BaseModel):
     dialogue: Optional[str] = None
     planned_duration_sec: Optional[float] = None
     generation_mode: Optional[str] = None
+    scene_role: Optional[str] = None
     image_prompt: Optional[str] = None
     video_prompt: Optional[str] = None
     negative_prompt: Optional[str] = None
@@ -756,6 +758,17 @@ class ShotRoute(BaseModel):
     accepts_end_frame: bool = False
     detail: str = ""
 
+    # -- Where the shot sits in its scene, and what that implies -------------
+    # Bundled into the route rather than given an endpoint of its own: the
+    # advice is about the route, and asking twice would let the two answers be
+    # computed against different states of the same shot.
+    scene_role: str = ""
+    role_inferred: bool = True
+    pipeline: str = ""
+    recommended_pipeline: str = ""
+    role_summary: str = ""
+    advice: list[str] = Field(default_factory=list)
+
 
 class ShotResponse(BaseModel):
     model_config = {"from_attributes": True}
@@ -773,6 +786,9 @@ class ShotResponse(BaseModel):
     dialogue: str
     planned_duration_sec: float
     generation_mode: str
+    #: Blank on any row written before roles existed, which reads as "infer it
+    #: from position" - the same thing an unset role means for a new shot.
+    scene_role: str = ""
     image_prompt: str
     video_prompt: str
     negative_prompt: str
@@ -1055,6 +1071,34 @@ class TakeResponse(BaseModel):
 class TakeReviewRequest(BaseModel):
     rating: Optional[int] = None
     notes: str = ""
+
+
+class BatchReviewRequest(BaseModel):
+    """One review decision applied to many takes.
+
+    ``take_ids`` is required to be non-empty: an empty batch reported as a
+    success looks exactly like a batch that worked, and the difference only
+    surfaces later at the timeline.
+    """
+
+    take_ids: list[str] = Field(..., min_length=1)
+    action: Literal["approve", "reject"]
+    reason: str = ""
+
+
+class BatchReviewItemResult(BaseModel):
+    """What happened to one take, so a count can be checked against intent."""
+
+    take_id: str
+    status: str
+    detail: str = ""
+
+
+class BatchReviewResponse(BaseModel):
+    approved: int = 0
+    rejected: int = 0
+    failed: int = 0
+    results: list[BatchReviewItemResult] = Field(default_factory=list)
 
 
 # ============================================================================

@@ -36,6 +36,7 @@ from app.services import (
     job_payload,
     media_providers,
     revisions,
+    scene_routing,
     shot_conditioning,
     workflow_registry,
 )
@@ -353,6 +354,20 @@ async def preflight_validation(project_id: str, db: Session = Depends(get_db)):
             })
         else:
             ready_count += 1
+
+    # -- Scene routing advice ----------------------------------------------
+    # Where a shot sits in its scene decides whether its composition has to be
+    # invented or is already sitting in the previous clip's last frame, and
+    # the fast route composes from the reference rather than the prompt. That
+    # is a trade, not a fault, so it warns and never blocks - and it is
+    # aggregated, because the same sentence twenty-three times is unreadable.
+    advice_shots: dict[str, list[int]] = {}
+    for shot in shots:
+        for line in scene_routing.plan(db, project_id, shot).warnings:
+            advice_shots.setdefault(line, []).append(shot.order or 0)
+    for line, orders in advice_shots.items():
+        listed = ", ".join(str(order) for order in sorted(set(orders)))
+        warnings.append(f"Shot {listed}: {line}")
 
     # -- Paid generation ---------------------------------------------------
     summary = generation_planning.summarise(list(plans.values()), db)

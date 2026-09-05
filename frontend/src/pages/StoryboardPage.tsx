@@ -25,7 +25,7 @@ import AIGenerationPanel from "../components/AIGenerationPanel";
 import MediaProviderFields from "../components/MediaProviderFields";
 import { ShotReferenceAssignment } from "../components/VisualReferenceBible";
 import { ShotCharacterBinding, ShotContinuityControls } from "../components/ShotContinuityControls";
-import type { MediaProviderId, Scene, Shot, ShotCreate } from "../types";
+import type { MediaProviderId, Scene, SceneRole, Shot, ShotCreate } from "../types";
 
 // ── Shot row ─────────────────────────────────────────────────────────────
 
@@ -52,6 +52,7 @@ function ShotRow({
   const [imagePrompt, setImagePrompt] = useState(shot.image_prompt);
   const [duration, setDuration] = useState(String(shot.planned_duration_sec));
   const [genMode, setGenMode] = useState(shot.generation_mode);
+  const [sceneRole, setSceneRole] = useState<SceneRole>(shot.scene_role ?? "");
   const [imageProviderId, setImageProviderId] = useState<MediaProviderId>(
     shot.image_provider_id ?? "comfyui",
   );
@@ -130,6 +131,23 @@ function ShotRow({
                 </select>
               </div>
             </div>
+            <div>
+              {/* Whether this shot has to invent a composition or already has
+                  one in the previous clip's last frame. Left on "From shot
+                  order" it is read from position in the scene, which is right
+                  almost always; stating it covers the case position cannot
+                  express, such as cutting back to a location already seen. */}
+              <label className="text-[10px] text-zinc-500 uppercase">Scene Role</label>
+              <select
+                value={sceneRole}
+                onChange={(e) => setSceneRole(e.target.value as SceneRole)}
+                className="w-full rounded px-2 py-1 text-xs"
+              >
+                <option value="">From shot order</option>
+                <option value="establishing">Establishes the scene</option>
+                <option value="continuation">Continues the scene</option>
+              </select>
+            </div>
             <MediaProviderFields
               catalogue={mediaProvidersQ.data}
               generationMode={genMode}
@@ -179,6 +197,7 @@ function ShotRow({
                     image_prompt: imagePrompt,
                     planned_duration_sec: parseFloat(duration) || 0,
                     generation_mode: genMode,
+                    scene_role: sceneRole,
                     image_provider_id: imageProviderId,
                     image_model: imageModel,
                     reference_asset_ids: referenceAssetIds,

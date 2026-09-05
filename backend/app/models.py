@@ -451,6 +451,13 @@ class Shot(Base):
     dialogue = Column(Text, default="")
     planned_duration_sec = Column(Float, default=0.0)
     generation_mode = Column(String, default="image")  # image / video / image-to-video
+    #: "" / establishing / continuation. Whether this shot opens its scene or
+    #: carries on from the one before it, which is what decides whether its
+    #: composition has to be invented or is already sitting in the previous
+    #: clip's last frame. Blank means "read it from position in the scene";
+    #: stated means the writer knows something position cannot express, such
+    #: as a cut back to a location already established.
+    scene_role = Column(String, default="")
     image_prompt = Column(Text, default="")
     video_prompt = Column(Text, default="")
     negative_prompt = Column(Text, default="")

@@ -190,6 +190,8 @@ export interface ShotContinuityStatus {
 
 /** How a shot will actually be generated. The mode alone cannot separate
  *  text-to-video from reference-to-video, which is the pair people confuse. */
+export type SceneRole = "" | "establishing" | "continuation";
+
 export interface ShotRoute {
   label: string;
   mode: string;
@@ -200,6 +202,15 @@ export interface ShotRoute {
   reference_minimum: number;
   accepts_end_frame: boolean;
   detail: string;
+  /** Where the shot sits in its scene, and what that implies about the route.
+   *  Advice only: the composition trade it describes is a real trade, and the
+   *  faster route is why a three-minute film is an overnight job. */
+  scene_role: SceneRole;
+  role_inferred: boolean;
+  pipeline: string;
+  recommended_pipeline: string;
+  role_summary: string;
+  advice: string[];
 }
 
 export interface Location {
@@ -304,6 +315,8 @@ export interface Shot {
   dialogue: string;
   planned_duration_sec: number;
   generation_mode: GenerationMode;
+  /** "" (read it from position in the scene) | establishing | continuation. */
+  scene_role: SceneRole;
   image_prompt: string;
   video_prompt: string;
   negative_prompt: string;

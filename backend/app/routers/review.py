@@ -12,6 +12,9 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import GenerationJob, Project, Scene, Shot, Take, Workflow
 from app.schemas import (
+    BatchReviewItemResult,
+    BatchReviewRequest,
+    BatchReviewResponse,
     GenerationEstimate,
     GenerationJobResponse,
     RegenerateRequest,
@@ -30,6 +33,15 @@ from app.services import (
 )
 
 router = APIRouter(tags=["review"])
+
+#: Why an approval is refused when the shot moved on after the take was made.
+#: Shared so the one-at-a-time and batch paths cannot drift into disagreeing
+#: about what a stale take is.
+STALE_TAKE_DETAIL = (
+    "This take is out of date: the shot changed after it was generated, so "
+    "approving it would mark content that no longer matches the brief as "
+    "delivered. Regenerate the shot, then approve the new take."
+)
 
 
 # ---------------------------------------------------------------------------
@@ -131,15 +143,7 @@ def approve_take(
         revisions.refresh_project(db, scene.project_id)
         db.refresh(shot)
     if shot and revisions.take_lineage_state(take, shot) == revisions.LINEAGE_STALE:
-        raise HTTPException(
-            status_code=409,
-            detail=(
-                "This take is out of date: the shot changed after it was "
-                "generated, so approving it would mark content that no longer "
-                "matches the brief as delivered. Regenerate the shot, then "
-                "approve the new take."
-            ),
-        )
+        raise HTTPException(status_code=409, detail=STALE_TAKE_DETAIL)
 
     take.review_status = "Approved"
     take.approved_at = datetime.now(timezone.utc)
@@ -194,6 +198,140 @@ def reject_take(
             db.commit()
 
     return take
+
+
+# ---------------------------------------------------------------------------
+# Batch review
+# ---------------------------------------------------------------------------
+
+@router.post(
+    "/api/projects/{project_id}/takes/batch-review",
+    response_model=BatchReviewResponse,
+)
+def batch_review_takes(
+    project_id: str,
+    payload: BatchReviewRequest,
+    db: Session = Depends(get_db),
+):
+    """Apply one review decision to many takes of one project.
+
+    A three-minute film is twenty-odd takes, and reviewing it a click at a
+    time is the slowest part of using this application. This is that loop,
+    with two things a loop in the browser could not give:
+
+    * **Membership is checked before anything is written.** An id that is not
+      this project's - a stale tab, a copied list, an unknown id - refuses the
+      whole request. Half-applied is the worst outcome at this size, because
+      the user cannot tell by eye which half.
+    * **The result names every take.** A count alone cannot be compared with
+      what was intended, and a take that could not be approved (already
+      approved, or made before the shot was edited) has to say so rather than
+      disappear into a smaller number.
+
+    Those per-take refusals are reported, not fatal: the rest of the batch
+    still applies, because one stale take should not cost the other twenty.
+    """
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    requested = list(dict.fromkeys(payload.take_ids))
+    takes = db.query(Take).filter(Take.id.in_(requested)).all()
+    by_id = {take.id: take for take in takes}
+
+    shot_ids = {take.shot_id for take in takes}
+    shots = (
+        db.query(Shot).filter(Shot.id.in_(shot_ids)).all() if shot_ids else []
+    )
+    shots_by_id = {shot.id: shot for shot in shots}
+    scene_ids = {shot.scene_id for shot in shots}
+    project_scene_ids = {
+        scene.id
+        for scene in db.query(Scene).filter(Scene.id.in_(scene_ids)).all()
+        if scene.project_id == project_id
+    } if scene_ids else set()
+
+    foreign = [
+        take_id
+        for take_id in requested
+        if take_id not in by_id
+        or shots_by_id.get(by_id[take_id].shot_id) is None
+        or shots_by_id[by_id[take_id].shot_id].scene_id not in project_scene_ids
+    ]
+    if foreign:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "These takes are not part of this project, so nothing was "
+                f"applied: {', '.join(foreign)}. Reload the review page and "
+                "select again."
+            ),
+        )
+
+    # Approval marks a shot delivered, so lineage is recomputed once for the
+    # whole batch rather than trusted from the last write - the same reason
+    # the single-take path refreshes before deciding.
+    if payload.action == "approve":
+        revisions.refresh_project(db, project_id)
+        for shot in shots:
+            db.refresh(shot)
+
+    results: list[BatchReviewItemResult] = []
+    now = datetime.now(timezone.utc)
+
+    for take_id in requested:
+        take = by_id[take_id]
+        shot = shots_by_id[take.shot_id]
+
+        if payload.action == "approve":
+            if take.review_status == "Approved":
+                results.append(BatchReviewItemResult(
+                    take_id=take_id, status="Failed",
+                    detail="This take was already approved.",
+                ))
+                continue
+            if revisions.take_lineage_state(take, shot) == revisions.LINEAGE_STALE:
+                results.append(BatchReviewItemResult(
+                    take_id=take_id, status="Failed", detail=STALE_TAKE_DETAIL,
+                ))
+                continue
+            take.review_status = "Approved"
+            take.approved_at = now
+            if payload.reason:
+                take.notes = payload.reason
+            shot.status = "Approved"
+            results.append(BatchReviewItemResult(take_id=take_id, status="Approved"))
+        else:
+            take.review_status = "Rejected"
+            if payload.reason:
+                take.notes = payload.reason
+            results.append(BatchReviewItemResult(take_id=take_id, status="Rejected"))
+
+    db.commit()
+
+    # A shot every take of which is now rejected goes back to needing review,
+    # matching the single-take path. Done after the commit so the counts see
+    # the whole batch rather than each take in turn.
+    if payload.action == "reject":
+        for shot in shots:
+            remaining = (
+                db.query(Take)
+                .filter(
+                    Take.shot_id == shot.id,
+                    Take.review_status.in_(["Pending", "Approved"]),
+                )
+                .count()
+            )
+            if remaining == 0:
+                shot.status = "NeedsReview"
+        db.commit()
+
+    return BatchReviewResponse(
+        approved=sum(1 for r in results if r.status == "Approved"),
+        rejected=sum(1 for r in results if r.status == "Rejected"),
+        failed=sum(1 for r in results if r.status == "Failed"),
+        results=results,
+    )
 
 
 # ---------------------------------------------------------------------------

@@ -216,3 +216,62 @@ def test_a_required_slot_left_empty_is_not_quietly_pruned(
     built = job_payload.build_payload(db_session, job, require_workflow=True)
 
     assert "5" in built.payload
+
+
+def test_a_shot_with_no_cast_at_all_runs_on_a_fully_optional_workflow(
+    db_session: Session, sample_shot, two_loader_graph,
+):
+    """A scene needs to be allowed to have nobody in it.
+
+    An establishing shot - a street, a sky, a room before anyone walks in -
+    binds no character set, and demanding a reference anyway would mean every
+    frame of a film has to contain the cast. With both slots optional the
+    loaders simply go, and the same graph runs as text to image.
+    """
+    workflow = _register(db_session, two_loader_graph, {
+        job_payload.POSITIVE_PROMPT: {"nodeId": "6", "field": "text"},
+        job_payload.SEED: {"nodeId": "3", "field": "seed"},
+        job_payload.REFERENCE_IMAGE: {
+            "nodeId": "4", "field": "image", "optional": True,
+        },
+        job_payload.reference_image_field(1): {
+            "nodeId": "5", "field": "image", "optional": True,
+        },
+    }, name="Cast optional")
+    job = _job(db_session, sample_shot.id, workflow, {
+        job_payload.POSITIVE_PROMPT: "an empty cobbled square at dawn",
+        job_payload.SEED: 11,
+    })
+
+    built = job_payload.build_payload(db_session, job, require_workflow=True)
+
+    assert "4" not in built.payload and "5" not in built.payload
+    assert built.payload["6"]["inputs"]["text"] == "an empty cobbled square at dawn"
+    assert job_payload.required_reference_count(workflow.parameter_mapping) == 0
+
+
+def test_a_fully_optional_workflow_still_accepts_a_cast_when_there_is_one(
+    db_session: Session, sample_shot, two_loader_graph,
+):
+    """One workflow for both cases, which is the point of declaring optional."""
+    workflow = _register(db_session, two_loader_graph, {
+        job_payload.POSITIVE_PROMPT: {"nodeId": "6", "field": "text"},
+        job_payload.SEED: {"nodeId": "3", "field": "seed"},
+        job_payload.REFERENCE_IMAGE: {
+            "nodeId": "4", "field": "image", "optional": True,
+        },
+        job_payload.reference_image_field(1): {
+            "nodeId": "5", "field": "image", "optional": True,
+        },
+    }, name="Cast optional two")
+    job = _job(db_session, sample_shot.id, workflow, {
+        job_payload.POSITIVE_PROMPT: "a hare and a tortoise",
+        job_payload.SEED: 11,
+        job_payload.REFERENCE_IMAGE: "cas/job/hare.png",
+        job_payload.reference_image_field(1): "cas/job/tortoise.png",
+    })
+
+    built = job_payload.build_payload(db_session, job, require_workflow=True)
+
+    assert built.payload["4"]["inputs"]["image"] == "cas/job/hare.png"
+    assert built.payload["5"]["inputs"]["image"] == "cas/job/tortoise.png"

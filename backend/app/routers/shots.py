@@ -17,7 +17,7 @@ from app.schemas import (
     ShotRoute,
     ShotUpdate,
 )
-from app.services import reference_bible, revisions, shot_route
+from app.services import reference_bible, revisions, scene_routing, shot_route
 
 router = APIRouter(
     prefix="/api/projects/{project_id}/scenes/{scene_id}/shots",
@@ -255,4 +255,17 @@ def get_shot_route(
     )
     if shot is None:
         raise HTTPException(status_code=404, detail="Shot not found")
-    return ShotRoute(**shot_route.describe(db, project_id, shot))
+    described = shot_route.describe(db, project_id, shot)
+    # The scene plan is folded in here rather than fetched separately so the
+    # route and the advice about it cannot be computed against two different
+    # states of the same shot.
+    planned = scene_routing.plan(db, project_id, shot)
+    described.update(
+        scene_role=planned.role,
+        role_inferred=planned.inferred,
+        pipeline=planned.pipeline,
+        recommended_pipeline=planned.recommended_pipeline,
+        role_summary=planned.summary,
+        advice=planned.warnings,
+    )
+    return ShotRoute(**described)

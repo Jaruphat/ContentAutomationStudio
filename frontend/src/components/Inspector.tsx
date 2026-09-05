@@ -79,6 +79,20 @@ function ShotPanel({ shot, projectId }: { shot: Shot; projectId?: string }) {
         <div className="mt-2 rounded border border-zinc-800 bg-zinc-900/60 p-2">
           <p className="text-xs font-medium text-zinc-200">{route.label}</p>
           <p className="mt-0.5 text-[11px] text-zinc-500">{route.detail}</p>
+          {route.role_summary && (
+            <p className="mt-1 text-[11px] text-zinc-500">{route.role_summary}</p>
+          )}
+          {/* Advice, never a block. The composition trade it describes is a
+              real trade - the fast route is why a three-minute film is an
+              overnight job - so it is styled as a caution, not an error. */}
+          {route.advice.map((line) => (
+            <p
+              key={line}
+              className="mt-1.5 rounded border border-amber-900/60 bg-amber-950/30 p-1.5 text-[11px] leading-snug text-amber-200"
+            >
+              {line}
+            </p>
+          ))}
         </div>
       )}
       <Field label="Seed Policy">{shot.seed_policy}</Field>
