@@ -37,6 +37,9 @@ WF_T2I = os.environ.get("CAS_ODD_WF_T2I", "359c2852-f880-430f-a096-07e6ef5625a3"
 #: Reference-conditioned image edit, for the key image of a shot with a
 #: character in it: the canonical view goes in, the composed scene comes out.
 WF_EDIT = os.environ.get("CAS_ODD_WF_EDIT", "75a73b44-5c6f-4661-87f6-26e66a639efd")
+#: Reference-conditioned edit with two inputs, for a key image that has both a
+#: character and the world plate to match.
+WF_EDIT2 = os.environ.get("CAS_ODD_WF_EDIT2", "9da5f99b-0ba4-4a5c-a7c2-fd1b2eb4e1c9")
 #: Image to video: animates the approved key image.
 WF_I2V = os.environ.get("CAS_ODD_WF_I2V", "711d55b8-fc50-41b3-92eb-d706653fde4f")
 
@@ -128,10 +131,15 @@ def main() -> int:
     parser.add_argument("--shots", type=int, default=0,
                         help="Produce only the first N beats; 0 means all.")
     parser.add_argument("--reset", action="store_true")
+    parser.add_argument("--tag", default="",
+                        help="A separate state directory, for a second cut of "
+                             "the same episode.")
     args = parser.parse_args()
 
     ep = EPISODES[args.episode]
-    out = ROOT / "backend" / "data" / "film" / f"oddverse-{args.episode}"
+    out = ROOT / "backend" / "data" / "film" / (
+        f"oddverse-{args.episode}" + (f"-{args.tag}" if args.tag else "")
+    )
     out.mkdir(parents=True, exist_ok=True)
     state = {} if args.reset else load_state(out)
     beats = ep["shots"][: args.shots] if args.shots else ep["shots"]
@@ -190,6 +198,39 @@ def main() -> int:
         state["location_id"] = location["id"]
         save_state(out, state)
         log("style and world written to the Story Bible")
+
+    # -- the world, established once --------------------------------------
+    # Nine key images generated from nine paragraphs are nine places. One
+    # approved plate, referenced by all of them, is one place - the same thing
+    # a character sheet does for a face.
+    if "world_image_id" not in state:
+        sheet = call("POST", f"/api/projects/{pid}/references", expect=201, json={
+            "kind": "location",
+            "name": "The abandoned station",
+            "canonical_description": ep["world"],
+            "negative_tokens": ep["negative"],
+        })
+        log("generating the world plate...")
+        plate = call(
+            "POST", f"/api/projects/{pid}/references/{sheet['id']}/generate",
+            expect=201, timeout=1800,
+            json={
+                "prompt": (
+                    f"{ep['world']} Wide establishing photograph of the whole "
+                    f"station at night, no people. {ep['style']}"
+                ),
+                "negative_prompt": ep["negative"],
+                "workflow_id": WF_T2I,
+                "seed": 317317,
+                "width": 768,
+                "height": 1024,
+            },
+        )
+        state["world_sheet_id"] = sheet["id"]
+        state["world_image_id"] = plate["id"]
+        save_state(out, state)
+        log(f"world plate {plate['id'][:8]} established")
+    world_ref = [state["world_image_id"]]
 
     # -- canonical cast ---------------------------------------------------
     cast_ids: dict[str, str] = state.get("cast_ids", {})
@@ -252,7 +293,11 @@ def main() -> int:
                     "image_prompt": f"{image_prompt} {ep['style']}",
                     "negative_prompt": ep["negative"],
                     "character_set_ids": sets,
-                    "workflow_preset_id": WF_EDIT if sets else WF_T2I,
+                    # Every key image is an edit of the world plate, so all
+                    # nine are the same station. A shot with a character
+                    # carries two inputs: the canonical view, then the plate.
+                    "reference_asset_ids": world_ref,
+                    "workflow_preset_id": WF_EDIT2 if sets else WF_EDIT,
                     "image_provider_id": "comfyui", "image_model": "workflow",
                 })
                 record["key_shot_id"] = shot["id"]
