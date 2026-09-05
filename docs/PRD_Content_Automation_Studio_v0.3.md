@@ -169,6 +169,37 @@ fast route is why a three-minute film is an overnight job. What is still
 missing is the app *doing* the recommended thing on request, rather than the
 user configuring it shot by shot.
 
+### 4.1b Image-to-video produces near-static clips here, whatever the prompt
+
+Measured, after three attempts at fixing it by writing better prompts.
+
+| Route | Prompt | Mean frame-to-frame difference | Still frames |
+|---|---|---|---|
+| H3 Reference-to-video | cel-animation brief | **12.74** | 9.4% |
+| H3 Reference-to-video | "slow gentle camera drift" | 3.96 | - |
+| H3 Image-to-video | style paragraph, motion last | 0.76 | 85.7% |
+| H3 Image-to-video | motion leading, verbs, no negations | 0.45 | 97.6% |
+| H3 Image-to-video | same, reaching the model (bug fixed) | 0.25 | 98.3% |
+| H3 Image-to-video | the model's own "SHOT 1: ... Audio:" format | 0.30 | 97.5% |
+
+The first three rows were confounded: the motion text was not reaching the
+model at all, because the generate path built its own copy of the compiler
+input and the copy had fallen behind. That was a real defect and is fixed. It
+was also not the cause.
+
+With the direction verifiably in the submitted prompt, and again with the
+prompt rewritten into the shot-script format the workflow's own baked-in
+example uses, the clips stay 97% identical frames. Three prompts, one result:
+**on this workflow the prompt is not the lever.** Reference-to-video on the
+same machine moves forty times more.
+
+So the trade in 4.1 has numbers on both sides now. Key-image-then-animate buys
+a composition somebody chose and costs nearly all the movement;
+reference-to-video moves, and takes its opening composition from the reference.
+What has not been tried is the workflow's own unmapped parameters - two
+integers and a boolean that the export bakes in - and that is where to look
+next rather than at another prompt.
+
 ### 4.2 The Story Bible is wired but unused in practice
 
 Characters, Locations and Visual Style feed layers 1–3 of the prompt compiler
