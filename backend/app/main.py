@@ -19,6 +19,7 @@ from app.config import load_env_file
 from app.database import SessionLocal, init_db
 from app.models import Workflow
 from app.routers import (
+    analytics,
     channels,
     quality,
     ai,
@@ -172,6 +173,7 @@ app.include_router(workflows.router)
 app.include_router(generation.router)
 app.include_router(review.router)
 app.include_router(quality.router)
+app.include_router(analytics.router)
 app.include_router(timeline.router)
 app.include_router(exports.router)
 app.include_router(ai.router)

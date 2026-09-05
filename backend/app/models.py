@@ -76,6 +76,43 @@ class Channel(Base):
     updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
 
 
+class EpisodeAnalytics(Base):
+    """One capture of what a platform reported for one episode.
+
+    Kept per capture rather than overwritten: a single snapshot cannot tell a
+    video that died at 200 views from one on its way to 20,000, and the shape
+    of the movement is most of what the number means.
+    """
+
+    __tablename__ = "episode_analytics"
+
+    id = Column(String, primary_key=True, default=_uuid)
+    project_id = Column(
+        String, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False,
+        index=True,
+    )
+    #: Where the numbers came from - typed in, or pulled from an API later.
+    source = Column(String, default="manual")
+    captured_at = Column(DateTime, default=_utcnow)
+
+    views_24h = Column(Integer, nullable=True)
+    views_7d = Column(Integer, nullable=True)
+    impressions = Column(Integer, nullable=True)
+    engaged_views = Column(Integer, nullable=True)
+    likes = Column(Integer, nullable=True)
+    comments = Column(Integer, nullable=True)
+    shares = Column(Integer, nullable=True)
+    subscribers_gained = Column(Integer, nullable=True)
+
+    #: Percentages, 0-100. Held apart from the counts because the same number
+    #: pasted as a fraction turns 60% into 0.6 and nothing would notice.
+    avg_percent_viewed = Column(Float, nullable=True)
+    chose_to_view_percent = Column(Float, nullable=True)
+    avg_view_duration_sec = Column(Float, nullable=True)
+
+    notes = Column(Text, default="")
+
+
 class QualityReview(Base):
     """One pass of the publish gate over one episode.
 

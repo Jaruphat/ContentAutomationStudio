@@ -191,6 +191,66 @@ class CharacterResponse(BaseModel):
 # Location
 # ============================================================================
 
+class AnalyticsCaptureRequest(BaseModel):
+    """One capture of a platform's numbers. Every field optional: a capture
+    taken at 24 hours has different fields filled than one taken at 7 days."""
+
+    model_config = {"extra": "forbid"}
+
+    source: str = "manual"
+    views_24h: Optional[int] = None
+    views_7d: Optional[int] = None
+    impressions: Optional[int] = None
+    engaged_views: Optional[int] = None
+    likes: Optional[int] = None
+    comments: Optional[int] = None
+    shares: Optional[int] = None
+    subscribers_gained: Optional[int] = None
+    avg_percent_viewed: Optional[float] = None
+    chose_to_view_percent: Optional[float] = None
+    avg_view_duration_sec: Optional[float] = None
+    notes: str = ""
+
+
+class AnalyticsCaptureResponse(BaseModel):
+    model_config = {"from_attributes": True}
+
+    id: str
+    project_id: str
+    source: str = "manual"
+    captured_at: datetime
+    views_24h: Optional[int] = None
+    views_7d: Optional[int] = None
+    impressions: Optional[int] = None
+    engaged_views: Optional[int] = None
+    likes: Optional[int] = None
+    comments: Optional[int] = None
+    shares: Optional[int] = None
+    subscribers_gained: Optional[int] = None
+    avg_percent_viewed: Optional[float] = None
+    chose_to_view_percent: Optional[float] = None
+    avg_view_duration_sec: Optional[float] = None
+    notes: str = ""
+
+
+class ChannelAnalyticsReport(BaseModel):
+    """Measured episodes grouped by the choices that varied.
+
+    ``winner`` carries a null value and a reason whenever the sample cannot
+    support naming one - which is the part of this report that changes what
+    somebody does next.
+    """
+
+    ranked_on: str
+    minimum_group_size: int
+    episode_count: int
+    unmeasured_count: int
+    episodes: list[dict[str, Any]] = Field(default_factory=list)
+    groups: dict[str, list[dict[str, Any]]] = Field(default_factory=dict)
+    winner: dict[str, Any] = Field(default_factory=dict)
+    winner_by_hook: dict[str, Any] = Field(default_factory=dict)
+
+
 class CompositeLayer(BaseModel):
     """One layer drawn over a generated frame.
 
