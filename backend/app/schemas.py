@@ -738,6 +738,25 @@ class ShotUpdate(BaseModel):
         return _validated_provider_id(value)
 
 
+class ShotRoute(BaseModel):
+    """How a shot will actually be generated, in words.
+
+    The mode alone cannot separate text-to-video from reference-to-video,
+    which is the pair people confuse; the route names the workflow and the
+    references it takes as well.
+    """
+
+    label: str
+    mode: str
+    provider_id: str
+    model: str = ""
+    workflow_name: str = ""
+    reference_capacity: int = 0
+    reference_minimum: int = 0
+    accepts_end_frame: bool = False
+    detail: str = ""
+
+
 class ShotResponse(BaseModel):
     model_config = {"from_attributes": True}
 

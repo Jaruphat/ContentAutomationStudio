@@ -10,8 +10,14 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models import CharacterSet, Project, Scene, Shot
-from app.schemas import ShotCreate, ShotReorderRequest, ShotResponse, ShotUpdate
-from app.services import reference_bible, revisions
+from app.schemas import (
+    ShotCreate,
+    ShotReorderRequest,
+    ShotResponse,
+    ShotRoute,
+    ShotUpdate,
+)
+from app.services import reference_bible, revisions, shot_route
 
 router = APIRouter(
     prefix="/api/projects/{project_id}/scenes/{scene_id}/shots",
@@ -225,3 +231,28 @@ def reorder_shots(
         .order_by(Shot.order)
         .all()
     )
+
+
+@router.get("/{shot_id}/route", response_model=ShotRoute)
+def get_shot_route(
+    project_id: str,
+    scene_id: str,
+    shot_id: str,
+    db: Session = Depends(get_db),
+):
+    """Name the route this shot will take, and what it will be given.
+
+    Its own endpoint rather than a field on every shot: naming a route means
+    reading the workflow behind it, and a storyboard listing forty shots
+    should not pay for forty of those. The inspector asks about the one shot
+    somebody is looking at.
+    """
+    _get_scene_or_404(db, project_id, scene_id)
+    shot = (
+        db.query(Shot)
+        .filter(Shot.id == shot_id, Shot.scene_id == scene_id)
+        .first()
+    )
+    if shot is None:
+        raise HTTPException(status_code=404, detail="Shot not found")
+    return ShotRoute(**shot_route.describe(db, project_id, shot))

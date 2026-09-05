@@ -29,6 +29,7 @@ import type {
   ReferenceSheetCreate,
   Scene,
   SceneCreate,
+  ShotRoute,
   Shot,
   ShotCreate,
   Workflow,
@@ -285,6 +286,14 @@ export const shots = {
       .put<Shot[]>(`/projects/${projectId}/scenes/${sceneId}/shots`, {
         shots: shotIds.map((id, order) => ({ id, order })),
       })
+      .then((r) => r.data),
+};
+
+export const shotRoute = {
+  /** How this shot will be generated: mode, workflow and reference budget. */
+  get: (projectId: string, sceneId: string, shotId: string) =>
+    http
+      .get<ShotRoute>(`/projects/${projectId}/scenes/${sceneId}/shots/${shotId}/route`)
       .then((r) => r.data),
 };
 
@@ -632,6 +641,7 @@ const api = {
   scenes,
   shots,
   continuity,
+  shotRoute,
   workflows,
   generation,
   review,

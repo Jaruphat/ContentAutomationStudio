@@ -188,6 +188,20 @@ export interface ShotContinuityStatus {
   candidates: ContinuityCandidate[];
 }
 
+/** How a shot will actually be generated. The mode alone cannot separate
+ *  text-to-video from reference-to-video, which is the pair people confuse. */
+export interface ShotRoute {
+  label: string;
+  mode: string;
+  provider_id: string;
+  model: string;
+  workflow_name: string;
+  reference_capacity: number;
+  reference_minimum: number;
+  accepts_end_frame: boolean;
+  detail: string;
+}
+
 export interface Location {
   id: string;
   project_id: string;

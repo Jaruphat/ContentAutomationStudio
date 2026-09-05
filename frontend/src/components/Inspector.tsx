@@ -50,7 +50,14 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 // ── Sub-panels ───────────────────────────────────────────────────────────
 
-function ShotPanel({ shot }: { shot: Shot }) {
+function ShotPanel({ shot, projectId }: { shot: Shot; projectId?: string }) {
+  // The mode alone cannot tell reference-to-video from text-to-video, so the
+  // route is asked for rather than inferred from what is already on screen.
+  const { data: route } = useQuery({
+    queryKey: ["shot-route", projectId, shot.scene_id, shot.id],
+    queryFn: () => api.shotRoute.get(projectId as string, shot.scene_id, shot.id),
+    enabled: Boolean(projectId),
+  });
   return (
     <dl className="space-y-1">
       <div className="mb-3 flex items-center gap-2">
@@ -68,6 +75,12 @@ function ShotPanel({ shot }: { shot: Shot }) {
       <Field label="Dialogue">{shot.dialogue}</Field>
       <Field label="Duration">{shot.planned_duration_sec}s</Field>
       <Field label="Generation Mode">{shot.generation_mode}</Field>
+      {route && (
+        <div className="mt-2 rounded border border-zinc-800 bg-zinc-900/60 p-2">
+          <p className="text-xs font-medium text-zinc-200">{route.label}</p>
+          <p className="mt-0.5 text-[11px] text-zinc-500">{route.detail}</p>
+        </div>
+      )}
       <Field label="Seed Policy">{shot.seed_policy}</Field>
 
       <div className="mt-4 border-t border-zinc-800 pt-3">
@@ -265,7 +278,7 @@ export default function Inspector({
     content = <TakePanel take={selectedTake} />;
     hasSelection = true;
   } else if (selectedShotId && selectedShot) {
-    content = <ShotPanel shot={selectedShot} />;
+    content = <ShotPanel shot={selectedShot} projectId={currentProjectId ?? undefined} />;
     hasSelection = true;
   } else if (selectedSceneId && selectedScene) {
     content = <ScenePanel scene={selectedScene} />;
