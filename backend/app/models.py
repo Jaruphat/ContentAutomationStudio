@@ -548,6 +548,13 @@ class Shot(Base):
     action = Column(Text, default="")
     environment = Column(Text, default="")
     dialogue = Column(Text, default="")
+    #: Three to six words punched on screen for a beat - the job a title card
+    #: does. Deliberately not the dialogue: a subtitle is an accessibility
+    #: track of everything said, and rendering both in one style makes the
+    #: subtitle shout and the emphasis look like a caption. "/" is where the
+    #: line turns, because where a two-line card breaks is a design decision
+    #: rather than a wrapping outcome.
+    emphasis_text = Column(String, default="")
     planned_duration_sec = Column(Float, default=0.0)
     generation_mode = Column(String, default="image")  # image / video / image-to-video
     #: Whether this shot is a piece of the film or a piece of production.

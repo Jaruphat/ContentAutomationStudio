@@ -897,6 +897,7 @@ class ShotCreate(BaseModel):
     generation_mode: str = "image"
     scene_role: str = ""
     include_in_cut: bool = True
+    emphasis_text: str = ""
     image_prompt: str = ""
     video_prompt: str = ""
     negative_prompt: str = ""
@@ -929,6 +930,7 @@ class ShotUpdate(BaseModel):
     generation_mode: Optional[str] = None
     scene_role: Optional[str] = None
     include_in_cut: Optional[bool] = None
+    emphasis_text: Optional[str] = None
     image_prompt: Optional[str] = None
     video_prompt: Optional[str] = None
     negative_prompt: Optional[str] = None
@@ -995,6 +997,9 @@ class ShotResponse(BaseModel):
     #: False only for production intermediates such as a key image. Defaulted
     #: for rows an ALTER TABLE could only add as NULL.
     include_in_cut: bool = True
+    #: Three to six words punched on screen for a beat. A separate track from
+    #: the dialogue, doing a different job.
+    emphasis_text: str = ""
     #: Blank on any row written before roles existed, which reads as "infer it
     #: from position" - the same thing an unset role means for a new shot.
     scene_role: str = ""

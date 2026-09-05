@@ -24,6 +24,21 @@ from app.services.timeline_service import get_timeline_manifest
 #: reverse, and a shared constant is what keeps that from drifting.
 DIALOGUE_FIELD = "dialogue"
 
+#: The Shot field an emphasis card comes from. A separate track doing a
+#: different job: a subtitle carries everything said, an emphasis card carries
+#: three to six words for a beat.
+EMPHASIS_FIELD = "emphasis_text"
+#: How long a card is held. It is a punch, not a lower third - held for the
+#: whole shot it stops being emphasis and becomes furniture.
+EMPHASIS_SECONDS = 1.8
+#: Where a two-line card breaks, written by hand.
+EMPHASIS_BREAK = "/"
+#: Caps that catch a mistake rather than police a style. A pasted paragraph in
+#: this field is not a long emphasis; it is a paragraph, and it covers the
+#: frame.
+EMPHASIS_MAX_WORDS = 8
+EMPHASIS_MAX_LINES = 2
+
 #: Below this the text stops being readable at all, so a very narrow canvas
 #: gets a slightly overrunning line rather than an unreadable one.
 MIN_RENDERED_FONT_SIZE = 14
@@ -251,6 +266,62 @@ def build_subtitle_cues(
     return cues
 
 
+def _emphasis_lines(raw: str) -> str:
+    """Normalise one card's text, refusing what would cover the frame."""
+    parts = [part.strip() for part in raw.split(EMPHASIS_BREAK)]
+    lines = [part for part in parts if part]
+    if len(lines) > EMPHASIS_MAX_LINES:
+        raise ValueError(
+            f"An emphasis card may be at most {EMPHASIS_MAX_LINES} lines; "
+            f"'{raw}' has {len(lines)}. Use one '{EMPHASIS_BREAK}' at most."
+        )
+    words = sum(len(line.split()) for line in lines)
+    if words > EMPHASIS_MAX_WORDS:
+        raise ValueError(
+            f"An emphasis card may be at most {EMPHASIS_MAX_WORDS} words; "
+            f"this one has {words}. Long text here is not emphasis, it is a "
+            f"paragraph across the frame - put it in the shot's dialogue "
+            f"instead, where it becomes a subtitle."
+        )
+    return "\n".join(lines)
+
+
+def build_emphasis_cues(db: Session, project_id: str) -> list[dict[str, Any]]:
+    """Cards from Shot.emphasis_text, timed to the cut rather than the clips.
+
+    The same trap the dialogue track has: timing from source clip lengths
+    while the cut uses planned lengths puts every later card in the wrong
+    place. Both read the placed item's cumulative position instead.
+    """
+    manifest = get_timeline_manifest(db, project_id, strict_lineage=True)
+    shot_ids = [item.get("shot_id") for item in manifest.get("items", [])]
+    shots = {
+        shot.id: shot
+        for shot in db.query(Shot).filter(Shot.id.in_(shot_ids)).all()
+    } if shot_ids else {}
+
+    cues: list[dict[str, Any]] = []
+    cursor = 0.0
+    for item in manifest.get("items", []):
+        duration = float(item["duration_sec"])
+        start = cursor
+        cursor += duration
+
+        shot = shots.get(item.get("shot_id"))
+        raw = (getattr(shot, EMPHASIS_FIELD, "") if shot is not None else "") or ""
+        if not raw.strip():
+            continue
+        cues.append({
+            "index": len(cues) + 1,
+            "start_sec": start,
+            # Never outlives its shot: on a one-second cut a card held for
+            # 1.8s bleeds onto the next shot.
+            "end_sec": start + min(EMPHASIS_SECONDS, duration),
+            "text": _emphasis_lines(raw),
+        })
+    return cues
+
+
 def _ass_time(seconds: float) -> str:
     centiseconds = max(0, int(round(seconds * 100)))
     hours, rem = divmod(centiseconds, 360000)
@@ -289,10 +360,45 @@ def _sanitize_srt_text(text: str) -> str:
     return html.escape(cleaned, quote=False)
 
 
-def render_ass(
-    cues: list[dict[str, Any]], settings: SubtitleSettings, width: int, height: int
+#: How much larger a card is than the subtitle beneath it, and how far down
+#: the frame it sits. A card that rendered identically to a subtitle would
+#: make separating the two tracks pointless.
+EMPHASIS_SIZE_RATIO = 1.7
+EMPHASIS_VERTICAL_FRACTION = 0.28
+
+
+def _emphasis_style(
+    settings: SubtitleSettings, subtitle_size: int, height: int, margin: int
 ) -> str:
-    """Render deterministic UTF-8 ASS using a single validated style."""
+    """The card style: bigger, bolder, in the upper third, always centred."""
+    size = max(MIN_RENDERED_FONT_SIZE, int(subtitle_size * EMPHASIS_SIZE_RATIO))
+    vertical = max(1, int(height * EMPHASIS_VERTICAL_FRACTION))
+    return (
+        "Style: Emphasis,"
+        f"{settings.font_family},{size},{_ass_color(settings.text_color)},"
+        f"{_ass_color(settings.text_color)},{_ass_color(settings.outline_color)},"
+        f"{_ass_color(settings.shadow_color, '80')},"
+        # Always bold, never italic, always top-centre: it is a title card,
+        # not a caption that inherits the subtitle's placement.
+        "-1,0,0,0,100,100,0,0,"
+        f"1,{max(settings.outline_width, 2)},{settings.shadow_depth},8,"
+        f"{margin},{margin},{vertical},1\n"
+    )
+
+
+def render_ass(
+    cues: list[dict[str, Any]],
+    settings: SubtitleSettings,
+    width: int,
+    height: int,
+    emphasis_cues: list[dict[str, Any]] | None = None,
+) -> str:
+    """Render deterministic UTF-8 ASS: the subtitle track, and the cards.
+
+    One file with two styles rather than two files. Two burn-in passes would
+    re-encode the picture twice for no reason, and two sidecars cannot be
+    layered by the same filter.
+    """
     horizontal_margin = max(1, round(width * 0.05))
     vertical_margin = max(
         1, round(height * 0.05), round(settings.vertical_margin * height / 1080)
@@ -329,8 +435,9 @@ def render_ass(
         f"{_ass_color(back_color, back_alpha)},"
         f"{-1 if settings.bold else 0},{-1 if settings.italic else 0},0,0,100,100,0,0,"
         f"{border_style},{settings.outline_width},{settings.shadow_depth},{alignment},"
-        f"{horizontal_margin},{horizontal_margin},{vertical_margin},1\n\n"
-        "[Events]\n"
+        f"{horizontal_margin},{horizontal_margin},{vertical_margin},1\n"
+        + _emphasis_style(settings, font_size, height, horizontal_margin)
+        + "\n[Events]\n"
         "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n"
     )
     safe_cues = _validated_cues(cues, settings.max_chars_per_line)
@@ -341,6 +448,20 @@ def render_ass(
         f"Default,,0,0,0,,{_escape_ass_text(cue['text'], settings.max_chars_per_line)}\n"
         for cue in safe_cues
     )
+
+    # The cards, on their own style and their own layer, so they sit over the
+    # picture without displacing the subtitle track below them. The hand-written
+    # break becomes ASS's own, which is the one thing that must survive.
+    for cue in emphasis_cues or []:
+        text = str(cue.get("text") or "").strip()
+        if not text:
+            continue
+        events += (
+            "Dialogue: 1,"
+            f"{_ass_time(float(cue['start_sec']))},"
+            f"{_ass_time(float(cue['end_sec']))},"
+            f"Emphasis,,0,0,0,,{text.replace(chr(10), chr(92) + 'N')}\n"
+        )
     return header + events
 
 
@@ -359,14 +480,24 @@ def render_srt(cues: list[dict[str, Any]], max_chars_per_line: int = 36) -> str:
 def write_ass_sidecar(db: Session, project: Project) -> dict[str, Any]:
     settings = settings_for_project(project)
     cues = build_subtitle_cues(db, project.id, settings.max_chars_per_line)
+    # The cards ride in the same file, on their own style. The burned-in track
+    # is the only place they appear: a soft subtitle file is a transcript, and
+    # a transcript carrying both a sentence and the three words punched out of
+    # it has the same line twice.
+    emphasis = build_emphasis_cues(db, project.id)
     width, height = _resolution(project.target_resolution)
-    content = render_ass(cues, settings, width, height)
+    content = render_ass(cues, settings, width, height, emphasis_cues=emphasis)
     out_dir = paths.exports_dir(project.id)
     _ensure_export_dir(out_dir)
     path = os.path.join(out_dir, "subtitles.ass")
     encoded = content.encode("utf-8")
     _atomic_write(path, encoded)
-    return {"path": path, "sha256": hashlib.sha256(encoded).hexdigest(), "cue_count": len(cues)}
+    return {
+        "path": path,
+        "sha256": hashlib.sha256(encoded).hexdigest(),
+        "cue_count": len(cues),
+        "emphasis_count": len(emphasis),
+    }
 
 
 def write_srt_sidecar(db: Session, project: Project) -> dict[str, Any]:
