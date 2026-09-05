@@ -212,6 +212,50 @@ class ReferenceGenerateRequest(BaseModel):
     confirm_paid_generation: bool = False
 
 
+class PremiseCreate(BaseModel):
+    """A candidate episode and its scorecard."""
+
+    model_config = {"extra": "forbid"}
+
+    title: str
+    logline: str = ""
+    one_strange_thing: str = ""
+    pillar: str = ""
+    hook_type: str = ""
+    scores: dict[str, float] = Field(default_factory=dict)
+
+
+class PremiseRejectRequest(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    reason: str = ""
+
+
+class PremiseResponse(BaseModel):
+    model_config = {"from_attributes": True}
+
+    id: str
+    channel_id: str
+    title: str
+    logline: str = ""
+    one_strange_thing: str = ""
+    pillar: str = ""
+    hook_type: str = ""
+    scores: dict[str, float] = Field(default_factory=dict)
+    total: float = 0.0
+    status: str = "candidate"
+    rejection_reason: str = ""
+    project_id: Optional[str] = None
+    created_at: datetime
+
+
+class PremiseRubricEntry(BaseModel):
+    key: str
+    label: str
+    weight: float
+    question: str
+
+
 class SoundCueUpload(BaseModel):
     """Where an uploaded sound landed. The path is the server's, not the
     client's: a path from a request must never become one the server reads."""

@@ -76,6 +76,35 @@ class Channel(Base):
     updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
 
 
+class Premise(Base):
+    """A candidate episode, scored before anything is rendered.
+
+    Rejections are kept rather than deleted: the record of what was
+    considered is the only thing that stops the same idea being re-proposed
+    every month.
+    """
+
+    __tablename__ = "premises"
+
+    id = Column(String, primary_key=True, default=_uuid)
+    channel_id = Column(String, nullable=False, index=True)
+    title = Column(String, nullable=False)
+    logline = Column(Text, default="")
+    #: The blueprint's story rule, enforced before scoring: a premise that
+    #: cannot name this in one sentence has not found its idea.
+    one_strange_thing = Column(Text, default="")
+    pillar = Column(String, default="")
+    hook_type = Column(String, default="")
+    scores = Column(JSON, default=dict)
+    total = Column(Float, default=0.0)
+    #: candidate / in_production / rejected
+    status = Column(String, default="candidate")
+    rejection_reason = Column(Text, default="")
+    #: The episode this became, once it was chosen.
+    project_id = Column(String, nullable=True)
+    created_at = Column(DateTime, default=_utcnow)
+
+
 class SoundCue(Base):
     """A sound, a place in the cut, and a level.
 
