@@ -396,3 +396,78 @@ def test_a_rect_and_the_text_over_it_are_one_recipe(
 
     pixels = list(Image.open(result.file_path).convert("L").getdata())
     assert min(pixels) < 60, "the dark text is not there"
+
+
+# ---------------------------------------------------------------------------
+# Rotation
+# ---------------------------------------------------------------------------
+
+def test_a_rotated_patch_covers_a_tilted_object(db_session, sample_shot, tmp_path):
+    """Nothing a model generates is axis-aligned. A newspaper held in two
+    hands sits at six or eight degrees, and a straight patch over a tilted
+    headline covers the middle while leaving both ends showing - which reads
+    as a sticker rather than as print."""
+    base = _take(
+        db_session, sample_shot.id,
+        _write_image(str(tmp_path / "a.png"), size=(600, 600), colour=(240, 240, 240)),
+    )
+
+    result = compositing.composite_take(db_session, base, layers=[{
+        "type": "rect", "colour": "#101014", "rotation": 30.0,
+        "x": 0.5, "y": 0.5, "width": 0.6, "height": 0.12,
+    }])
+
+    image = Image.open(result.file_path).convert("L")
+    w, h = image.size
+    assert image.getpixel((int(w * 0.68), int(h * 0.40))) < 60, "not rotated"
+    assert image.getpixel((int(w * 0.08), int(h * 0.50))) > 200, "over-covered"
+
+
+def test_no_rotation_leaves_a_recipe_exactly_as_it_was(
+    db_session, sample_shot, tmp_path,
+):
+    base = _take(
+        db_session, sample_shot.id,
+        _write_image(str(tmp_path / "a.png"), size=(400, 400), colour=(240, 240, 240)),
+    )
+
+    straight = compositing.composite_take(db_session, base, layers=[{
+        "type": "rect", "colour": "#101014",
+        "x": 0.5, "y": 0.5, "width": 0.5, "height": 0.2,
+    }])
+
+    image = Image.open(straight.file_path).convert("L")
+    w, h = image.size
+    assert image.getpixel((int(w * 0.5), int(h * 0.42))) < 60
+    assert image.getpixel((int(w * 0.5), int(h * 0.28))) > 200
+
+
+def test_text_turns_with_the_patch_it_sits_on(db_session, sample_shot, tmp_path):
+    """A patch that follows the paper while the words stay straight is worse
+    than neither."""
+    base = _take(
+        db_session, sample_shot.id,
+        _write_image(str(tmp_path / "a.png"), size=(600, 600), colour=(20, 20, 20)),
+    )
+
+    result = compositing.composite_take(db_session, base, layers=[{
+        "type": "text", "text": "TOMORROW", "colour": "#ffffff",
+        "rotation": 45.0, "x": 0.5, "y": 0.5, "size": 0.1,
+    }])
+
+    pixels = list(Image.open(result.file_path).convert("L").getdata())
+    assert max(pixels) > 200, "nothing was drawn"
+
+
+def test_a_rotation_beyond_a_full_turn_is_refused(
+    db_session, sample_shot, tmp_path,
+):
+    """A number outside a turn is a units mistake - radians, or a typo - and
+    taking it modulo would place the layer somewhere nobody meant."""
+    base = _take(db_session, sample_shot.id, _write_image(str(tmp_path / "a.png")))
+
+    with pytest.raises(compositing.CompositeError):
+        compositing.composite_take(db_session, base, layers=[{
+            "type": "rect", "rotation": 400.0,
+            "x": 0.5, "y": 0.5, "width": 0.3, "height": 0.1,
+        }])

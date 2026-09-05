@@ -442,6 +442,10 @@ class CompositeLayer(BaseModel):
     size: float = 0.05
     colour: str = "#ffffff"
     anchor: str = "mm"
+    #: Degrees, to match what the layer sits on. Nothing a model generates is
+    #: axis-aligned, and a straight patch over a tilted headline reads as a
+    #: sticker.
+    rotation: float = 0.0
     #: Image layers. One source or the other: a take of a shot, or a
     #: reference image - a character's canonical view lives in the reference
     #: bible, not as a take.

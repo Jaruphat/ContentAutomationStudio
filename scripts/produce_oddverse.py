@@ -104,11 +104,14 @@ def wait_for_jobs(pid: str, job_ids: list[str], budget: float) -> list[dict]:
     raise ProductionError(f"jobs did not settle within {budget}s")
 
 
-def canonical_view(pid: str, set_id: str) -> str:
-    """The approved canonical view of a character, as a reference image id.
+def canonical_view(pid: str, set_id: str, slot: str = "") -> str:
+    """One approved canonical view of a character, as a reference image id.
 
-    A face composited onto a newspaper has to be *that* face, and the only
-    place the canonical one lives is the character set's approved version.
+    The slot matters. A face composited onto a newspaper has to be a face, and
+    the canonical view a character set happens to list first can be a back
+    shot - which is exactly what this episode's observer is, by design. Naming
+    the slot fails loudly when the sheet does not carry it, rather than
+    pasting a back view onto a front page.
     """
     cset = call("GET", f"/api/projects/{pid}/character-sets/{set_id}")
     approved = next(
@@ -117,9 +120,17 @@ def canonical_view(pid: str, set_id: str) -> str:
     )
     if approved is None:
         raise ProductionError(f"Character set {set_id} has no approved version.")
-    for view in approved["views"]:
-        if view.get("reference_image_id"):
-            return view["reference_image_id"]
+    views = [v for v in approved["views"] if v.get("reference_image_id")]
+    if slot:
+        for view in views:
+            if view["slot"] == slot:
+                return view["reference_image_id"]
+        raise ProductionError(
+            f"Character set {set_id} has no generated '{slot}' view. It has: "
+            f"{', '.join(v['slot'] for v in views) or 'none'}."
+        )
+    if views:
+        return views[0]["reference_image_id"]
     raise ProductionError(f"Character set {set_id} has no generated view.")
 
 
@@ -345,9 +356,9 @@ def main() -> int:
                     resolved["text"] = resolved["text"].format(tomorrow=tomorrow)
                 marker = str(resolved.get("reference_image_id") or "")
                 if marker.startswith("{") and marker.endswith("}"):
-                    name = marker.strip("{}")
+                    name, _, slot = marker.strip("{}").partition(":")
                     resolved["reference_image_id"] = canonical_view(
-                        pid, cast_ids[name]
+                        pid, cast_ids[name], slot
                     )
                 layers.append(resolved)
             composited = call(

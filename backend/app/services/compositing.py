@@ -99,25 +99,72 @@ def _fraction(layer: dict[str, Any], key: str, *, default: float | None = None) 
     return number
 
 
+#: A layer may be turned to match what it sits on. Nothing a model generates
+#: is axis-aligned - a newspaper held in two hands sits at six or eight
+#: degrees - and a straight patch over a tilted headline covers the middle
+#: while leaving both ends showing, which reads as a sticker rather than print.
+MAX_ROTATION_DEGREES = 360.0
+
+
+def _rotation(layer: dict[str, Any]) -> float:
+    value = layer.get("rotation", 0.0) or 0.0
+    try:
+        degrees = float(value)
+    except (TypeError, ValueError) as exc:
+        raise CompositeError(
+            f"'rotation' must be a number, got {value!r}."
+        ) from exc
+    if abs(degrees) > MAX_ROTATION_DEGREES:
+        # More than a turn is a units mistake - radians, or a typo - and
+        # taking it modulo would place the layer somewhere nobody meant.
+        raise CompositeError(
+            f"'rotation' is {degrees:g} degrees, more than a full turn. "
+            f"Rotation is in degrees."
+        )
+    return degrees
+
+
+def _place(
+    canvas: Image.Image, patch: Image.Image, x: float, y: float, degrees: float
+) -> None:
+    """Centre ``patch`` on the frame at (x, y), turned by ``degrees``.
+
+    Rotating with expand and then re-centring is what keeps the layer where it
+    was placed; rotating in place moves it by half the growth.
+    """
+    if degrees:
+        patch = patch.rotate(degrees, resample=Image.BICUBIC, expand=True)
+    width, height = canvas.size
+    left = int(x * width - patch.width / 2)
+    top = int(y * height - patch.height / 2)
+    canvas.alpha_composite(patch, dest=(max(0, left), max(0, top)))
+
+
 def _draw_text(canvas: Image.Image, layer: dict[str, Any]) -> None:
     text = str(layer.get("text") or "")
     if not text.strip():
         raise CompositeError("A text layer needs text.")
-    width, height = canvas.size
+    _width, height = canvas.size
     x = _fraction(layer, "x")
     y = _fraction(layer, "y")
     size = _fraction(layer, "size", default=0.05)
     font = _load_font(int(size * height))
-    draw = ImageDraw.Draw(canvas)
-    anchor = str(layer.get("anchor") or "mm")
     fill = str(layer.get("colour") or layer.get("color") or "#ffffff")
-    try:
-        draw.text(
-            (x * width, y * height), text, font=font, fill=fill, anchor=anchor,
-        )
-    except ValueError as exc:  # an anchor the bitmap fallback cannot honour
-        draw.text((x * width, y * height), text, font=font, fill=fill)
-        del exc
+
+    # Drawn onto its own transparent layer so it can be turned with whatever
+    # it sits on. A patch that follows the paper while the words stay straight
+    # is worse than neither.
+    measure = ImageDraw.Draw(Image.new("RGBA", (1, 1)))
+    box = measure.textbbox((0, 0), text, font=font)
+    scratch = Image.new(
+        "RGBA",
+        (max(1, box[2] - box[0] + 8), max(1, box[3] - box[1] + 8)),
+        (0, 0, 0, 0),
+    )
+    ImageDraw.Draw(scratch).text(
+        (4 - box[0], 4 - box[1]), text, font=font, fill=fill,
+    )
+    _place(canvas, scratch, x, y, _rotation(layer))
 
 
 def _draw_rect(canvas: Image.Image, layer: dict[str, Any]) -> None:
@@ -128,11 +175,7 @@ def _draw_rect(canvas: Image.Image, layer: dict[str, Any]) -> None:
     box_w = max(1, int(_fraction(layer, "width", default=0.4) * width))
     box_h = max(1, int(_fraction(layer, "height", default=0.1) * height))
     fill = str(layer.get("colour") or layer.get("color") or "#000000")
-    left = int(x * width - box_w / 2)
-    top = int(y * height - box_h / 2)
-    ImageDraw.Draw(canvas).rectangle(
-        [left, top, left + box_w, top + box_h], fill=fill,
-    )
+    _place(canvas, Image.new("RGBA", (box_w, box_h), fill), x, y, _rotation(layer))
 
 
 def _layer_source(db: Session, layer: dict[str, Any]) -> str:
@@ -207,8 +250,7 @@ def _draw_image(
         alpha = patch.getchannel("A").point(lambda v: int(v * opacity))
         patch.putalpha(alpha)
 
-    top_left = (int(x * width - box_w / 2), int(y * height - box_h / 2))
-    canvas.alpha_composite(patch, dest=(max(0, top_left[0]), max(0, top_left[1])))
+    _place(canvas, patch, x, y, _rotation(layer))
 
 
 def composite_take(

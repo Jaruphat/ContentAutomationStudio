@@ -121,12 +121,10 @@ SF01: dict[str, Any] = {
                 "different face, long hair, bright clothing, smiling, text, "
                 "watermark"
             ),
-            # One view, not three. A key image is conditioned on the world
-            # plate *and* the character, and a two-input edit has room for
-            # exactly one of each. One full-body view is what holds an
-            # identity anyway; three of the same person in two slots is how a
-            # shot ends up with two of them.
-            "slots": ["full_body"],
+            # Two views: the film shows him from behind, and the newspaper
+            # front page needs his face. A canonical sheet has to carry the
+            # view a composite will ask for, not only the view a shot will.
+            "slots": ["full_body", "front"],
         },
     },
     #: (seconds, name, image prompt, motion direction, narration, emphasis, cast)
@@ -246,17 +244,22 @@ SF01: dict[str, Any] = {
     #: a fake one is two headlines.
     "composites": {
         8: [
-            {"type": "rect", "colour": "#e8e2d4",
-             "x": 0.46, "y": 0.585, "width": 0.72, "height": 0.075},
+            {"type": "rect", "colour": "#e8e2d4", "rotation": 7.0,
+             "x": 0.50, "y": 0.666, "width": 0.78, "height": 0.086},
             {"type": "text", "text": "TOMORROW'S EDITION", "colour": "#141414",
-             "x": 0.46, "y": 0.575, "size": 0.026},
+             "rotation": 7.0, "x": 0.50, "y": 0.650, "size": 0.030},
             {"type": "text", "text": "{tomorrow}", "colour": "#141414",
-             "x": 0.46, "y": 0.607, "size": 0.017},
+             "rotation": 7.0, "x": 0.50, "y": 0.688, "size": 0.019},
         ],
         9: [
-            {"type": "image", "reference_image_id": "{CHAR02}",
+            # The face on the front page has to be the observer's, and a
+            # front view is what a press photograph is. The full-body
+            # canonical view of this character is a back shot by design, so
+            # the recipe names the slot it needs rather than taking whichever
+            # view happens to be first.
+            {"type": "image", "reference_image_id": "{CHAR02:front}",
              "grayscale": True,
-             "x": 0.505, "y": 0.505, "width": 0.30, "height": 0.20},
+             "x": 0.50, "y": 0.72, "width": 0.34, "height": 0.24},
         ],
     },
     #: Section 6 of the blueprint, as an instruction a hosted voice can take.
