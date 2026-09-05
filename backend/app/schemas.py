@@ -191,6 +191,46 @@ class CharacterResponse(BaseModel):
 # Location
 # ============================================================================
 
+class PublishFieldsRequest(BaseModel):
+    """What an upload form asks for, kept apart from the working title."""
+
+    model_config = {"extra": "forbid"}
+
+    publish_title: Optional[str] = None
+    series_label: Optional[str] = None
+    publish_description: Optional[str] = None
+    publish_hashtags: Optional[str] = None
+
+
+class PublishPackage(BaseModel):
+    """Everything needed to upload, with the gate in front of it.
+
+    ``ready`` is false by default and every blocker is named. A package that
+    reports ready when it is not is worse than no package, because it is
+    believed.
+    """
+
+    project_id: str
+    ready: bool = False
+    blockers: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+    publish_title: str = ""
+    series_label: str = ""
+    publish_description: str = ""
+    publish_hashtags: str = ""
+    pillar: str = ""
+    hook_type: str = ""
+    ending_type: str = ""
+    premise: str = ""
+    video_url: str = ""
+    video_path: str = ""
+    duration_sec: float = 0.0
+    width: int = 0
+    height: int = 0
+    subtitle_path: str = ""
+    quality_passed: bool = False
+
+
 class AnalyticsCaptureRequest(BaseModel):
     """One capture of a platform's numbers. Every field optional: a capture
     taken at 24 hours has different fields filled than one taken at 7 days."""

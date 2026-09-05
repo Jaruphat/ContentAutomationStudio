@@ -185,6 +185,13 @@ class Project(Base):
     hook_type = Column(String, default="")
     ending_type = Column(String, default="")
     premise = Column(Text, default="")
+    #: What an upload form asks for. Kept apart from `title`, which is a
+    #: working name: promoting a working name into the world silently is how
+    #: an episode goes out called "Untitled 3".
+    publish_title = Column(String, default="")
+    series_label = Column(String, default="")
+    publish_description = Column(Text, default="")
+    publish_hashtags = Column(String, default="")
     brief_text = Column(Text, default="")
     plot_text = Column(Text, default="")
     created_at = Column(DateTime, default=_utcnow)
