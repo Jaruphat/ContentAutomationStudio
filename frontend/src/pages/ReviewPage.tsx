@@ -137,6 +137,10 @@ function TakeCard({
   const navigate = useNavigate();
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [checkingEstimate, setCheckingEstimate] = useState(false);
+  // What this regeneration is *for*. Blank is the plain re-roll regenerate
+  // already was, so an existing habit keeps doing what it did.
+  const [intent, setIntent] = useState("");
+  const [intentNote, setIntentNote] = useState("");
 
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ["takes", projectId] });
@@ -153,9 +157,18 @@ function TakeCard({
     onSuccess: invalidate,
   });
 
+  // Fetched from the server rather than hard-coded here, so the seed policy
+  // shown beside each choice is the one the endpoint will actually apply.
+  const intentsQ = useQuery({
+    queryKey: ["regeneration-intents"],
+    queryFn: () => api.review.listIntents(),
+    staleTime: Infinity,
+  });
+  const chosenIntent = intentsQ.data?.find((i) => i.key === intent);
+
   const regenMut = useMutation({
     mutationFn: (confirmPaid: boolean) =>
-      api.review.regenerate(take.shot_id, confirmPaid),
+      api.review.regenerate(take.shot_id, confirmPaid, intent, intentNote),
     onSuccess: (job) => {
       setConfirmOpen(false);
       invalidate();
@@ -327,6 +340,26 @@ function TakeCard({
               </button>
             </>
           )}
+          {intentsQ.data && intentsQ.data.length > 0 && (
+            <select
+              value={intent}
+              onClick={(e) => e.stopPropagation()}
+              onChange={(e) => setIntent(e.target.value)}
+              title={
+                chosenIntent
+                  ? chosenIntent.explanation
+                  : "Regenerate with a new seed, as before"
+              }
+              className="h-8 rounded-md border border-zinc-700 bg-zinc-900 px-2 text-xs text-zinc-300"
+            >
+              <option value="">Just try again</option>
+              {intentsQ.data.map((option) => (
+                <option key={option.key} value={option.key}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          )}
           <button
             onClick={(e) => {
               e.stopPropagation();
@@ -348,6 +381,23 @@ function TakeCard({
             Regenerate
           </button>
         </div>
+
+        {/* The explanation is the point of the picker: the seed policy is the
+            half a user cannot work out, and a row of verbs without it would
+            be a worse prompt box. */}
+        {chosenIntent && (
+          <div className="mt-2 space-y-1.5" onClick={(e) => e.stopPropagation()}>
+            <p className="text-[11px] leading-snug text-zinc-500">
+              {chosenIntent.explanation}
+            </p>
+            <input
+              value={intentNote}
+              onChange={(e) => setIntentNote(e.target.value)}
+              placeholder="In your own words (optional) - e.g. late afternoon, low sun"
+              className="w-full rounded border border-zinc-700 bg-zinc-900 px-2 py-1 text-xs text-zinc-300"
+            />
+          </div>
+        )}
       </div>
 
       {/* The dialog is a fixed overlay drawn over the whole page; clicks inside

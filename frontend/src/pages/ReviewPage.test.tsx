@@ -263,3 +263,54 @@ describe("Reviewing a run in one decision", () => {
     expect(html).toContain("Approve all 2 pending");
   });
 });
+
+describe("Regenerating for a reason", () => {
+  const INTENTS_KEY = ["regeneration-intents"];
+
+  const intents = [
+    {
+      key: "reframe",
+      label: "Different framing",
+      directive: "recompose this shot with different framing",
+      keep_seed: false,
+      explanation: "Re-rolls the seed, because the seed is most of what fixes a composition.",
+    },
+    {
+      key: "relight",
+      label: "Same framing, different light",
+      directive: "the same composition under different lighting",
+      keep_seed: true,
+      explanation: "Holds the seed of the take you are improving, which keeps the framing.",
+    },
+  ];
+
+  it("offers the server's vocabulary rather than a second prompt box", () => {
+    const qc = queryClient();
+    qc.setQueryData(["takes", "project-1", null], [take()]);
+    qc.setQueryData(INTENTS_KEY, intents);
+
+    const html = renderPage(qc);
+
+    expect(html).toContain("Different framing");
+    expect(html).toContain("Same framing, different light");
+  });
+
+  it("defaults to the plain re-roll that regenerate already was", () => {
+    // Anything else would change what an existing habit does.
+    const qc = queryClient();
+    qc.setQueryData(["takes", "project-1", null], [take()]);
+    qc.setQueryData(INTENTS_KEY, intents);
+
+    const html = renderPage(qc);
+
+    expect(html).toMatch(/<option value=""[^>]*selected[^>]*>Just try again/);
+  });
+
+  it("still shows a regenerate control when the vocabulary cannot be loaded", () => {
+    // The picker is an addition; losing it must not cost the button.
+    const qc = queryClient();
+    qc.setQueryData(["takes", "project-1", null], [take()]);
+
+    expect(renderPage(qc)).toContain("Regenerate");
+  });
+});

@@ -202,6 +202,17 @@ export const characterSets = {
     http.put<CharacterSet>(`/projects/${projectId}/character-sets/${setId}`, data).then((r) => r.data),
   delete: (projectId: string, setId: string, force = false) =>
     http.delete(`/projects/${projectId}/character-sets/${setId}`, { params: { force } }).then((r) => r.data),
+  /** Attach the picture the canonical views are derived from. Replacing it
+   *  moves the identity spec, so an approved sheet reads as out of date. */
+  uploadSourceImage: (projectId: string, setId: string, file: File) => {
+    const body = new FormData();
+    body.append("file", file);
+    return http.post<ReferenceImage>(
+      `/projects/${projectId}/character-sets/${setId}/source-image`,
+      body,
+      { headers: { "Content-Type": "multipart/form-data" } },
+    ).then((r) => r.data);
+  },
   createVersion: (projectId: string, setId: string, data: CharacterSetVersionCreate) =>
     http.post<CharacterSetVersion>(`/projects/${projectId}/character-sets/${setId}/versions`, data).then((r) => r.data),
   getVersion: (projectId: string, setId: string, versionId: string) =>

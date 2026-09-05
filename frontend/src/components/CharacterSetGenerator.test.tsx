@@ -8,7 +8,8 @@ const set: CharacterSet = {
   id: "set-1", project_id: "project-1", character_id: null, reference_sheet_id: "sheet-1",
   name: "Ari", appearance: "freckled face", proportions: "tall", wardrobe: "blue coat",
   palette: "navy, amber", identity_tokens: "left cheek scar", negative_tokens: "green coat",
-  notes: "", approved_version_id: "version-1", approved_version_is_current: false,
+  notes: "", approved_version_id: "version-1", source_image_id: null,
+  approved_version_is_current: false,
   created_at: "2026-09-04T00:00:00Z", updated_at: "2026-09-04T00:00:00Z",
   versions: [{
     id: "version-1", character_set_id: "set-1", project_id: "project-1", version: 1,
@@ -60,9 +61,9 @@ const workflowList: Workflow[] = [
     parameter_mapping: { positivePrompt: {}, seed: {} } }),
 ];
 
-function renderGenerator() {
+function renderGenerator(override: Partial<CharacterSet> = {}) {
   const client = new QueryClient({ defaultOptions: { queries: { enabled: false } } });
-  client.setQueryData(["character-sets", "project-1"], [set]);
+  client.setQueryData(["character-sets", "project-1"], [{ ...set, ...override }]);
   client.setQueryData(["media-providers"], catalogue);
   client.setQueryData(["workflows"], workflowList);
   return renderToStaticMarkup(<QueryClientProvider client={client}><CharacterSetGenerator projectId="project-1" /></QueryClientProvider>);
@@ -99,5 +100,27 @@ describe("CharacterSetGenerator", () => {
     expect(html).not.toContain("Boogu Image Edit");
     expect(html).not.toContain("H3 Video T2V");
     expect(html).not.toContain("Z-Image Turbo (UI export)");
+  });
+
+  it("offers to derive the identity from a picture instead of a paragraph", () => {
+    // Describing a face precisely enough for a model to reproduce it twice is
+    // a skill, and the wrong tool when the face is already in a file.
+    const html = renderGenerator();
+    expect(html).toContain("Source image");
+  });
+
+  it("inverts the workflow list once a picture is attached", () => {
+    // This is the whole reason the control cannot be a plain upload button:
+    // with a source image the sheet becomes an *edit* of it, so the workflows
+    // that were the only valid ones become the only invalid ones. Leaving the
+    // old list up would make the backend's refusal the way the user finds out.
+    const html = renderGenerator({ source_image_id: "image-9" });
+    expect(html).toContain("Boogu Image Edit");
+    expect(html).not.toContain("Z-Image Turbo T2I");
+  });
+
+  it("shows the attached picture so it can be checked before it is used", () => {
+    const html = renderGenerator({ source_image_id: "image-9" });
+    expect(html).toContain("/api/media/references/image-9/file");
   });
 });

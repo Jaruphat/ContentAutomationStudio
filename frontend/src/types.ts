@@ -138,6 +138,10 @@ export interface CharacterSet {
   reference_sheet_id: string | null; name: string; appearance: string;
   proportions: string; wardrobe: string; palette: string; identity_tokens: string;
   negative_tokens: string; notes: string; approved_version_id: string | null;
+  /** The picture this identity was derived from, when one was supplied rather
+   *  than described. With one attached the sheet becomes an edit of it, which
+   *  inverts which workflows can generate it. */
+  source_image_id: string | null;
   approved_version_is_current: boolean; versions: CharacterSetVersion[];
   created_at: string; updated_at: string;
 }

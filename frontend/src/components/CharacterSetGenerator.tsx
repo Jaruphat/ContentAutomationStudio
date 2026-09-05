@@ -13,20 +13,30 @@ const SLOTS: { id: CharacterViewSlot; label: string }[] = [
   { id: "full_body", label: "Full body" }, { id: "expression", label: "Expression" },
 ];
 
-/** The workflows that can establish an identity rather than edit one.
+/** The workflows that can actually generate this sheet.
  *
- * A character sheet supplies a prompt, seed and size and nothing else, so a
- * graph that expects a reference image would keep whichever picture was baked
- * into its export and condition every canonical view on a stranger. The
- * backend refuses those runs; this keeps them out of the picker so the refusal
+ * Which ones those are inverts on whether the identity was described or shown,
+ * and getting it wrong is silent either way:
+ *
+ * - Described in words, the sheet supplies a prompt, seed and size and nothing
+ *   else. A graph expecting a reference image would keep whichever picture its
+ *   export baked in and condition every canonical view on a stranger.
+ * - Derived from a picture, the sheet is an *edit* of that picture. A
+ *   text-to-image graph has nowhere to put it, so the views would come from the
+ *   description alone and look nothing like the subject.
+ *
+ * The backend refuses both. This keeps them out of the picker so the refusal
  * is never how the user finds out.
  */
-function sheetWorkflows(all: Workflow[] | undefined): Workflow[] {
+export function sheetWorkflows(
+  all: Workflow[] | undefined,
+  { hasSourceImage = false }: { hasSourceImage?: boolean } = {},
+): Workflow[] {
   return (all ?? []).filter((wf) =>
     wf.purpose === "image"
     && wf.source_format === "api"
     && Object.keys(wf.parameter_mapping ?? {}).length > 0
-    && !("referenceImage" in (wf.parameter_mapping ?? {})));
+    && ("referenceImage" in (wf.parameter_mapping ?? {})) === hasSourceImage);
 }
 
 function SetEditor({ projectId, value }: { projectId: string; value: CharacterSet }) {
@@ -39,9 +49,15 @@ function SetEditor({ projectId, value }: { projectId: string; value: CharacterSe
   const [workflowId, setWorkflowId] = useState("");
   const providersQ = useQuery({ queryKey: ["media-providers"], queryFn: api.media.providers });
   const workflowsQ = useQuery({ queryKey: ["workflows"], queryFn: api.workflows.list });
-  const eligible = sheetWorkflows(workflowsQ.data);
+  const hasSourceImage = Boolean(value.source_image_id);
+  const eligible = sheetWorkflows(workflowsQ.data, { hasSourceImage });
   const chosenWorkflow = eligible.find((wf) => wf.id === workflowId) ?? eligible[0];
   const refresh = () => qc.invalidateQueries({ queryKey: ["character-sets", projectId] });
+  const sourceMut = useMutation({
+    mutationFn: (file: File) =>
+      api.characterSets.uploadSourceImage(projectId, value.id, file),
+    onSuccess: refresh,
+  });
   const save = useMutation({ mutationFn: () => api.characterSets.update(projectId, value.id, form), onSuccess: refresh });
   const version = useMutation({
     mutationFn: async () => {
@@ -74,10 +90,41 @@ function SetEditor({ projectId, value }: { projectId: string; value: CharacterSe
     {value.approved_version_id && !value.approved_version_is_current && <p role="alert" className="rounded border border-amber-800 bg-amber-950/40 p-2 text-xs text-amber-300">Canonical version is stale because the identity specification changed. Generate and approve a new version before binding it to new shots.</p>}
     <div className="grid gap-2 md:grid-cols-2">{field("name", "Name")}{field("appearance", "Appearance / identity", 2)}{field("proportions", "Proportions")}{field("wardrobe", "Wardrobe", 2)}{field("palette", "Palette")}{field("identity_tokens", "Identity tokens", 2)}{field("negative_tokens", "Negative specification", 2)}{field("notes", "Continuity notes", 2)}</div>
     <button type="button" onClick={() => save.mutate()} disabled={save.isPending || !form.name?.trim()} className="flex items-center gap-1 rounded bg-zinc-700 px-3 py-1.5 text-xs text-white disabled:opacity-50"><Save size={12} />Save identity specification</button>
+    <section className="space-y-2 border-t border-zinc-800 pt-3">
+      <h4 className="text-xs font-semibold uppercase text-zinc-300">Source image</h4>
+      <p className="text-[10px] text-zinc-500">
+        Optional. Attach a photograph, a drawing or a frame and every canonical
+        view is generated as an edit of it - six angles of one subject rather
+        than six people who match the same paragraph. Replacing it marks an
+        approved sheet out of date, because it changes who the character is.
+      </p>
+      <div className="flex flex-wrap items-center gap-3">
+        {value.source_image_id && (
+          <ImagePreview
+            src={`/api/media/references/${value.source_image_id}/file`}
+            alt={`${value.name} source image`}
+            className="h-24 w-24"
+            caption={`${value.name} · source image`}
+          />
+        )}
+        <input
+          type="file"
+          accept="image/*"
+          aria-label="Source image"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) sourceMut.mutate(file);
+          }}
+          className="text-xs text-zinc-400"
+        />
+        {sourceMut.isPending && <Loader2 size={12} className="animate-spin" />}
+      </div>
+      <ActionError label="Attach source image" error={sourceMut.error} />
+    </section>
     <section className="space-y-2 border-t border-zinc-800 pt-3"><h4 className="text-xs font-semibold uppercase text-zinc-300">New version views</h4><div className="flex flex-wrap gap-2">{SLOTS.map((slot) => <label key={slot.id} className="flex items-center gap-1 rounded bg-zinc-800 px-2 py-1 text-xs"><input type="checkbox" checked={slots.includes(slot.id)} onChange={() => setSlots(slots.includes(slot.id) ? slots.filter((id) => id !== slot.id) : [...slots, slot.id])} />{slot.label}</label>)}</div>
       <div className="grid gap-2 sm:grid-cols-2"><label className="text-xs text-zinc-400">Image provider<select value={provider} onChange={(e) => { const id = e.target.value as MediaProviderId; setProvider(id); setModel(providersQ.data?.providers.find((p) => p.id === id)?.default_model ?? "workflow"); setConfirmPaid(false); }} className="mt-1 w-full rounded px-2 py-1">{providersQ.data?.providers.filter((p) => p.media_types.includes("image")).map((p) => <option key={p.id} value={p.id} disabled={!p.configured}>{p.label}{p.requires_confirmation ? " (metered)" : ""}{!p.configured ? " — not configured" : ""}</option>)}</select></label><label className="text-xs text-zinc-400">Model<input value={model} onChange={(e) => setModel(e.target.value)} className="mt-1 w-full rounded px-2 py-1" /></label></div>
-      {provider === "comfyui" && <label className="block text-xs text-zinc-400">Character sheet workflow<select aria-label="Character sheet workflow" value={chosenWorkflow?.id ?? ""} onChange={(e) => setWorkflowId(e.target.value)} className="mt-1 w-full rounded px-2 py-1">{eligible.map((wf) => <option key={wf.id} value={wf.id}>{wf.name}</option>)}</select><span className="mt-1 block text-[10px] text-zinc-500">Only API-format text-to-image workflows are listed. A reference-conditioned workflow edits an existing picture, so it cannot establish an identity.</span></label>}
-      {provider === "comfyui" && !workflowsQ.isLoading && eligible.length === 0 && <p role="alert" className="rounded border border-amber-800 bg-amber-950/40 p-2 text-xs text-amber-300">No text-to-image workflow is registered. Import and map one under Workflows, or generate this sheet with a different provider.</p>}
+      {provider === "comfyui" && <label className="block text-xs text-zinc-400">Character sheet workflow<select aria-label="Character sheet workflow" value={chosenWorkflow?.id ?? ""} onChange={(e) => setWorkflowId(e.target.value)} className="mt-1 w-full rounded px-2 py-1">{eligible.map((wf) => <option key={wf.id} value={wf.id}>{wf.name}</option>)}</select><span className="mt-1 block text-[10px] text-zinc-500">{hasSourceImage ? "Only API-format image-edit workflows are listed. With a source image attached the sheet is an edit of it, and a text-to-image workflow has nowhere to put the picture." : "Only API-format text-to-image workflows are listed. A reference-conditioned workflow edits an existing picture, so it cannot establish an identity."}</span></label>}
+      {provider === "comfyui" && !workflowsQ.isLoading && eligible.length === 0 && <p role="alert" className="rounded border border-amber-800 bg-amber-950/40 p-2 text-xs text-amber-300">{hasSourceImage ? "No image-edit workflow is registered. Import and map one under Workflows, or remove the source image to generate this sheet from its description." : "No text-to-image workflow is registered. Import and map one under Workflows, or generate this sheet with a different provider."}</p>}
       {providersQ.data?.providers.some((p) => p.requires_confirmation) && <label className="flex items-start gap-2 text-xs text-amber-300"><input type="checkbox" checked={confirmPaid} onChange={(e) => setConfirmPaid(e.target.checked)} />Confirm metered generation when the selected provider requires payment. The backend will refuse unconfirmed paid work.</label>}
       {chosenProvider && !chosenProvider.configured && <p role="alert" className="text-xs text-red-300">Provider blocker: set {chosenProvider.api_key_env || "the required credentials"} and restart the backend.</p>}
       <button type="button" disabled={!slots.length || version.isPending || !chosenProvider?.configured || (!!chosenProvider?.requires_confirmation && !confirmPaid) || (provider === "comfyui" && !chosenWorkflow)} onClick={() => version.mutate()} className="flex items-center gap-1 rounded bg-indigo-600 px-3 py-1.5 text-xs text-white disabled:opacity-50">{version.isPending ? <Loader2 size={12} className="animate-spin" /> : <Plus size={12} />}Generate selected views</button>
