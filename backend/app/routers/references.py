@@ -19,12 +19,18 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import Project
 from app.schemas import (
+    ReferenceGenerateRequest,
     ReferenceImageResponse,
     ReferenceSheetCreate,
     ReferenceSheetResponse,
     ReferenceSheetUpdate,
 )
-from app.services import reference_bible, revisions
+from app.services import (
+    media_providers,
+    reference_bible,
+    reference_generation,
+    revisions,
+)
 
 logger = logging.getLogger("cas.references")
 
@@ -146,6 +152,70 @@ def delete_reference_sheet(
 # ---------------------------------------------------------------------------
 # Images
 # ---------------------------------------------------------------------------
+
+@router.post(
+    "/{sheet_id}/generate", response_model=ReferenceImageResponse, status_code=201
+)
+async def generate_reference_image(
+    project_id: str,
+    sheet_id: str,
+    payload: ReferenceGenerateRequest,
+    db: Session = Depends(get_db),
+):
+    """Generate a plate into this sheet.
+
+    A place described nine times is nine places. Establishing it once and
+    referencing the result is what keeps a set of shots in one building - the
+    same thing a character sheet does for a face. What comes back is an
+    ordinary reference image, so binding it to shots and sending it to a
+    provider already work unchanged.
+    """
+    project = _get_project_or_404(db, project_id)
+    sheet = _get_sheet_or_404(db, project_id, sheet_id)
+
+    provider_id = (payload.provider_id or media_providers.COMFYUI).strip().lower()
+    if media_providers.is_paid(provider_id) and not payload.confirm_paid_generation:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "This provider is metered. Re-send with "
+                "confirm_paid_generation set to true to authorise it."
+            ),
+        )
+    if not media_providers.is_configured(provider_id):
+        env_name = media_providers.API_KEY_ENV.get(
+            provider_id, "provider credentials"
+        )
+        raise HTTPException(
+            status_code=409,
+            detail=f"This provider is not configured. Set {env_name} and restart.",
+        )
+
+    workflow_id = payload.workflow_id
+    if provider_id == media_providers.COMFYUI and not workflow_id:
+        workflow_id = project.default_image_workflow_id
+
+    try:
+        image = await reference_generation.generate_image(
+            db, sheet,
+            prompt=payload.prompt,
+            negative_prompt=payload.negative_prompt,
+            provider=media_providers.get_provider(provider_id),
+            provider_id=provider_id,
+            model=payload.model or media_providers.resolve_model(
+                provider_id, payload.model
+            ),
+            workflow_id=workflow_id,
+            seed=payload.seed,
+            width=payload.width,
+            height=payload.height,
+            caption=payload.caption,
+        )
+    except reference_generation.ReferenceGenerationError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    revisions.refresh_project(db, project_id)
+    return image
+
 
 @router.post(
     "/{sheet_id}/images", response_model=ReferenceImageResponse, status_code=201

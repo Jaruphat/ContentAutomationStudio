@@ -191,6 +191,27 @@ class CharacterResponse(BaseModel):
 # Location
 # ============================================================================
 
+class ReferenceGenerateRequest(BaseModel):
+    """Generate a plate into a reference sheet.
+
+    Establishing a place once and referencing it is what keeps nine shots in
+    the same building; nine paragraphs describing it do not.
+    """
+
+    model_config = {"extra": "forbid"}
+
+    prompt: str
+    negative_prompt: str = ""
+    provider_id: str = "comfyui"
+    model: str = ""
+    workflow_id: Optional[str] = None
+    seed: Optional[int] = None
+    width: int = 1024
+    height: int = 1024
+    caption: str = ""
+    confirm_paid_generation: bool = False
+
+
 class PublishFieldsRequest(BaseModel):
     """What an upload form asks for, kept apart from the working title."""
 
