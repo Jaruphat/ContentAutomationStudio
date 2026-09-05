@@ -23,6 +23,7 @@ import {
 import api, { toAIError } from "../api/client";
 import ActionError from "../components/ActionError";
 import AspectOverrideBanner from "../components/AspectOverrideBanner";
+import SoundCueList from "../components/SoundCueList";
 import { useAppState } from "../store/useProjectStore";
 import type {
   RenderedFilm,
@@ -680,6 +681,19 @@ export default function TimelinePage() {
           </div>
         </>
       )}
+
+      {/* Sound design belongs beside the cut it is timed to: a cue is placed
+          inside a shot, and the shot's position is what the offset is measured
+          from. */}
+      <SoundCueList
+        projectId={currentProjectId}
+        shots={items
+          .filter((item) => item.shot_id)
+          .map((item) => ({
+            id: item.shot_id as string,
+            label: `${item.order + 1}. ${item.shot_name || "shot"}`,
+          }))}
+      />
 
       {/* Render output */}
       {filmQ.data && <FinishedFilmPanel film={filmQ.data} />}

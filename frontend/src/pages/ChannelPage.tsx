@@ -17,6 +17,8 @@ import { Link } from "react-router-dom";
 import { Loader2, Plus, Radio, Save } from "lucide-react";
 import api, { toAIError } from "../api/client";
 import ActionError from "../components/ActionError";
+import ChannelAnalytics from "../components/ChannelAnalytics";
+import PremiseBoard from "../components/PremiseBoard";
 import { useAppDispatch } from "../store/useProjectStore";
 import type { Channel, ChannelVocabularyEntry } from "../types";
 
@@ -239,6 +241,8 @@ function ChannelEditor({ channel }: { channel: Channel }) {
       </button>
       <ActionError label="Save channel" error={save.error} />
 
+      <PremiseBoard channel={channel} />
+
       {/* -- Episodes ------------------------------------------------------ */}
       <section className="space-y-2 border-t border-zinc-800 pt-3">
         <h4 className="text-xs font-semibold uppercase text-zinc-300">
@@ -343,6 +347,8 @@ function ChannelEditor({ channel }: { channel: Channel }) {
           )}
         </ul>
       </section>
+
+      <ChannelAnalytics channelId={channel.id} />
     </article>
   );
 }

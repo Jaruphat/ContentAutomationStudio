@@ -6,6 +6,11 @@
 import axios from "axios";
 import type {
   BatchReviewResult,
+  ChannelAnalytics,
+  Premise,
+  PremiseRubricEntry,
+  SoundCue,
+  SoundCueUpload,
   Channel,
   ChannelCreate,
   EpisodeCreate,
@@ -750,6 +755,64 @@ export const publishing = {
       .then((r) => r.data),
 };
 
+/** Sound cues: a sound, a place in the cut, and a level. */
+export const sound = {
+  list: (projectId: string) =>
+    http.get<SoundCue[]>(`/projects/${projectId}/sound-cues`).then((r) => r.data),
+  upload: (projectId: string, file: File) => {
+    const body = new FormData();
+    body.append("file", file);
+    return http
+      .post<SoundCueUpload>(`/projects/${projectId}/sound-cues/upload`, body, {
+        headers: { "Content-Type": "multipart/form-data" },
+      })
+      .then((r) => r.data);
+  },
+  create: (
+    projectId: string,
+    body: { shot_id: string; file_path: string; offset_sec: number; gain_db: number; label: string },
+  ) => http.post(`/projects/${projectId}/sound-cues`, body).then((r) => r.data),
+  remove: (projectId: string, cueId: string) =>
+    http.delete(`/projects/${projectId}/sound-cues/${cueId}`).then((r) => r.data),
+};
+
+/** Premises: what to make next, screened before it costs an hour of GPU. */
+export const premises = {
+  rubric: () =>
+    http.get<PremiseRubricEntry[]>("/premise-rubric").then((r) => r.data),
+  list: (channelId: string) =>
+    http.get<Premise[]>(`/channels/${channelId}/premises`).then((r) => r.data),
+  create: (
+    channelId: string,
+    body: {
+      title: string;
+      logline?: string;
+      one_strange_thing: string;
+      pillar?: string;
+      hook_type?: string;
+      scores: Record<string, number>;
+    },
+  ) =>
+    http.post<Premise>(`/channels/${channelId}/premises`, body).then((r) => r.data),
+  start: (channelId: string, premiseId: string) =>
+    http
+      .post<Project>(`/channels/${channelId}/premises/${premiseId}/start`)
+      .then((r) => r.data),
+  reject: (channelId: string, premiseId: string, reason: string) =>
+    http
+      .post<Premise>(`/channels/${channelId}/premises/${premiseId}/reject`, { reason })
+      .then((r) => r.data),
+};
+
+export const analytics = {
+  record: (projectId: string, body: Record<string, number | string>) =>
+    http.post(`/projects/${projectId}/analytics`, body).then((r) => r.data),
+  channel: (channelId: string) =>
+    http
+      .get<ChannelAnalytics>(`/channels/${channelId}/analytics`)
+      .then((r) => r.data),
+};
+
 const api = {
   ai,
   health,
@@ -773,6 +836,9 @@ const api = {
   channels,
   quality,
   publishing,
+  sound,
+  premises,
+  analytics,
 };
 
 export default api;

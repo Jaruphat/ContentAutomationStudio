@@ -1168,3 +1168,66 @@ export interface PublishPackage {
   subtitle_path: string;
   quality_passed: boolean;
 }
+
+/** A sound, a place in the cut, and a level. The place is stored relative to
+ *  a shot, so re-editing the film moves the sound with it. */
+export interface SoundCue {
+  cue_id: string;
+  label: string;
+  file_path: string;
+  gain_db: number;
+  start_sec: number | null;
+  placed: boolean;
+  runs_past_the_end: boolean;
+  problem: string;
+}
+
+export interface SoundCueUpload {
+  file_path: string;
+  original_filename: string;
+  size_bytes: number;
+}
+
+/** One weighted criterion on the premise screen. */
+export interface PremiseRubricEntry {
+  key: string;
+  label: string;
+  weight: number;
+  question: string;
+}
+
+export interface Premise {
+  id: string;
+  channel_id: string;
+  title: string;
+  logline: string;
+  one_strange_thing: string;
+  pillar: string;
+  hook_type: string;
+  scores: Record<string, number>;
+  total: number;
+  status: string;
+  rejection_reason: string;
+  project_id: string | null;
+  created_at: string;
+}
+
+/** Measured episodes grouped by the choices that varied. `winner` carries a
+ *  null value and a reason whenever the sample cannot support naming one. */
+export interface ChannelAnalytics {
+  ranked_on: string;
+  minimum_group_size: number;
+  episode_count: number;
+  unmeasured_count: number;
+  episodes: Record<string, unknown>[];
+  groups: Record<string, {
+    dimension: string;
+    value: string;
+    sample_size: number;
+    avg_percent_viewed: number | null;
+    views_24h: number | null;
+    episode_ids: string[];
+  }[]>;
+  winner: Record<string, unknown>;
+  winner_by_hook: Record<string, unknown>;
+}
