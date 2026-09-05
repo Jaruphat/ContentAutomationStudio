@@ -675,6 +675,13 @@ class Shot(Base):
     scene_role = Column(String, default="")
     image_prompt = Column(Text, default="")
     video_prompt = Column(Text, default="")
+    #: What happens inside the frame - what moves, what changes. Held apart
+    #: from the camera because a video model does not weigh the two clauses
+    #: evenly: given a sentence about the camera and a sentence about the
+    #: world, it takes the camera one as the whole brief and animates nothing.
+    subject_motion = Column(Text, default="")
+    #: How the camera behaves. A qualifier on the above, never the brief.
+    camera_motion = Column(Text, default="")
     negative_prompt = Column(Text, default="")
     reference_asset_ids = Column(JSON, default=list)
     #: Character sets whose *approved canonical* views condition this shot's

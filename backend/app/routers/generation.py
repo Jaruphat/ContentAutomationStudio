@@ -35,6 +35,7 @@ from app.services import (
     generation_runs,
     job_payload,
     media_providers,
+    motion_direction,
     revisions,
     scene_routing,
     shot_conditioning,
@@ -365,6 +366,15 @@ async def preflight_validation(project_id: str, db: Session = Depends(get_db)):
     for shot in shots:
         for line in scene_routing.plan(db, project_id, shot).warnings:
             advice_shots.setdefault(line, []).append(shot.order or 0)
+        # Four hundred seconds a shot is far too long to learn at the end that
+        # the direction described only the camera. Advisory: a held frame is a
+        # legitimate choice, it just should not be an accident.
+        if (shot.generation_mode or "").lower() in ("video", "image-to-video"):
+            for line in motion_direction.review(
+                subject_motion=shot.subject_motion or "",
+                camera_motion=shot.camera_motion or "",
+            ):
+                advice_shots.setdefault(line, []).append(shot.order or 0)
     for line, orders in advice_shots.items():
         listed = ", ".join(str(order) for order in sorted(set(orders)))
         warnings.append(f"Shot {listed}: {line}")

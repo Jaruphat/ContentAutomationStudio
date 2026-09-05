@@ -1113,6 +1113,8 @@ class ShotCreate(BaseModel):
     emphasis_text: str = ""
     image_prompt: str = ""
     video_prompt: str = ""
+    subject_motion: str = ""
+    camera_motion: str = ""
     negative_prompt: str = ""
     reference_asset_ids: list[str] = Field(default_factory=list)
     #: Character sets whose approved canonical views condition this shot.
@@ -1146,6 +1148,8 @@ class ShotUpdate(BaseModel):
     emphasis_text: Optional[str] = None
     image_prompt: Optional[str] = None
     video_prompt: Optional[str] = None
+    subject_motion: Optional[str] = None
+    camera_motion: Optional[str] = None
     negative_prompt: Optional[str] = None
     reference_asset_ids: Optional[list[str]] = None
     character_set_ids: Optional[list[str]] = None
@@ -1218,6 +1222,10 @@ class ShotResponse(BaseModel):
     scene_role: str = ""
     image_prompt: str
     video_prompt: str
+    #: What happens in the frame, and how the camera behaves - apart, because
+    #: a video model reads a camera sentence as the whole brief.
+    subject_motion: str = ""
+    camera_motion: str = ""
     negative_prompt: str
     reference_asset_ids: list[str]
     workflow_preset_id: Optional[str]

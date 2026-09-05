@@ -1,7 +1,8 @@
 """
 Prompt Compiler Service.
 
-Compiles layered prompts from Story Bible (characters, locations, styles)
+Compiles layered prompts
+from Story Bible (characters, locations, styles)
 combined with scene context and shot-level data, following PRD section 9.1.
 
 Prompt layers:
@@ -17,6 +18,8 @@ Prompt layers:
 
 from dataclasses import dataclass, field
 from typing import Any
+
+from app.services import motion_direction
 
 
 @dataclass
@@ -168,7 +171,15 @@ def compile_prompt(
     if gen_mode == "image":
         tech_prompt = shot.get("image_prompt", "")
     else:
-        tech_prompt = shot.get("video_prompt", "")
+        # What happens leads; how the camera behaves follows. Falls back to
+        # the single video prompt so every shot written before these fields
+        # existed compiles exactly as it did - an old project must not
+        # regenerate into a different film.
+        composed = motion_direction.compose(
+            subject_motion=shot.get("subject_motion", "") or "",
+            camera_motion=shot.get("camera_motion", "") or "",
+        )
+        tech_prompt = composed or shot.get("video_prompt", "")
     layers["technical_tokens"] = tech_prompt
 
     # -----------------------------------------------------------------------

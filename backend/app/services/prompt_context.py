@@ -92,6 +92,10 @@ def shot_input(shot: Shot) -> dict[str, Any]:
         "generation_mode": shot.generation_mode,
         "image_prompt": shot.image_prompt,
         "video_prompt": shot.video_prompt,
+        # What happens, and how the camera behaves, kept apart on the way to
+        # the compiler for the same reason they are apart on the shot.
+        "subject_motion": shot.subject_motion or "",
+        "camera_motion": shot.camera_motion or "",
         "negative_prompt": shot.negative_prompt,
     }
 
