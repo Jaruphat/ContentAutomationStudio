@@ -97,7 +97,12 @@ SF01: dict[str, Any] = {
                 "different face, blonde hair, young woman, glamour, makeup, "
                 "smiling, horror expression, text, watermark"
             ),
-            "slots": ["full_body", "front", "three_quarter"],
+            # One view, not three. A key image is conditioned on the world
+            # plate *and* the character, and a two-input edit has room for
+            # exactly one of each. One full-body view is what holds an
+            # identity anyway; three of the same person in two slots is how a
+            # shot ends up with two of them.
+            "slots": ["full_body"],
         },
         "CHAR02": {
             "name": "CHAR02 - The Observer",
@@ -116,7 +121,12 @@ SF01: dict[str, Any] = {
                 "different face, long hair, bright clothing, smiling, text, "
                 "watermark"
             ),
-            "slots": ["full_body", "front", "three_quarter"],
+            # One view, not three. A key image is conditioned on the world
+            # plate *and* the character, and a two-input edit has room for
+            # exactly one of each. One full-body view is what holds an
+            # identity anyway; three of the same person in two slots is how a
+            # shot ends up with two of them.
+            "slots": ["full_body"],
         },
     },
     #: (seconds, name, image prompt, motion direction, narration, emphasis, cast)
