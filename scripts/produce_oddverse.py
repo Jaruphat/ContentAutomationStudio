@@ -170,9 +170,16 @@ def main() -> int:
     # -- the house look, in the Story Bible rather than in 9 prompts -------
     if "style_id" not in state:
         style = call("POST", f"/api/projects/{pid}/styles", expect=201, json={
-            "name": "ODDVERSE house look",
-            "description": ep["style"],
-            "negative_prompt": ep["negative"],
+            "medium": "live-action documentary photography",
+            "genre": "mystery",
+            "visual_keywords": ep["style"],
+            "camera_language": (
+                "Establishing, medium, detail, reaction, reveal. Locked-off or "
+                "restrained observational camera."
+            ),
+            "palette": "muted neutral tones, cold damp night, weak tungsten",
+            "lighting_rules": "natural practical lighting only, realistic exposure",
+            "negative_constraints": ep["negative"],
         })
         state["style_id"] = style["id"]
         location = call("POST", f"/api/projects/{pid}/locations", expect=201, json={

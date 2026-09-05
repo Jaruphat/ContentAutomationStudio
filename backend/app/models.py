@@ -36,6 +36,46 @@ def _utcnow() -> datetime:
 # Project
 # ---------------------------------------------------------------------------
 
+class Channel(Base):
+    """What recurs across episodes: the brand, the look, the voice, the cast
+    of formats. A project is one film; this is the thing that outlives one.
+
+    Pillars and hooks are the channel's own vocabulary rather than an enum in
+    the code - they differ per channel, and they are what the analytics loop
+    groups by later.
+    """
+
+    __tablename__ = "channels"
+
+    id = Column(String, primary_key=True, default=_uuid)
+    name = Column(String, nullable=False)
+    handle = Column(String, default="")
+    tagline = Column(String, default="")
+    description = Column(Text, default="")
+    audience = Column(Text, default="")
+    brand_notes = Column(Text, default="")
+
+    # -- the bibles an episode inherits -------------------------------------
+    visual_style = Column(Text, default="")
+    negative_prompt = Column(Text, default="")
+    camera_language = Column(Text, default="")
+    voice_direction = Column(Text, default="")
+    sound_direction = Column(Text, default="")
+
+    # -- the delivery format every episode is cut to ------------------------
+    aspect_ratio = Column(String, default="9:16")
+    target_resolution = Column(String, default="1080x1920")
+    frame_rate = Column(Float, default=30.0)
+    target_duration_sec = Column(Float, default=32.0)
+
+    #: [{key, name, share, purpose}] and [{key, name, example}].
+    pillars = Column(JSON, default=list)
+    hooks = Column(JSON, default=list)
+
+    created_at = Column(DateTime, default=_utcnow)
+    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
+
+
 class Project(Base):
     __tablename__ = "projects"
 
@@ -63,6 +103,17 @@ class Project(Base):
     # Persisted safety gate: a backend restart must not silently resume queued work.
     queue_paused = Column(Boolean, default=False, server_default="0", nullable=False)
     status = Column(String, default="Draft")  # Draft / Active / Completed / Archived
+    #: The channel this episode belongs to, if any. Nullable, and cleared
+    #: rather than cascaded when a channel is deleted: a delivered episode is
+    #: a thing that exists in the world.
+    channel_id = Column(String, nullable=True)
+    #: The vocabulary the analytics loop groups by, recorded when the episode
+    #: is made. Recording it afterwards is not possible - nobody remembers
+    #: which of nine hooks a video used once it has been live for a month.
+    pillar = Column(String, default="")
+    hook_type = Column(String, default="")
+    ending_type = Column(String, default="")
+    premise = Column(Text, default="")
     brief_text = Column(Text, default="")
     plot_text = Column(Text, default="")
     created_at = Column(DateTime, default=_utcnow)

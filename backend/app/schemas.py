@@ -113,6 +113,15 @@ class ProjectResponse(BaseModel):
     default_image_workflow_id: Optional[str]
     default_video_workflow_id: Optional[str]
     status: str
+    #: Null for a project made before channels existed, or one whose channel
+    #: was deleted - the episode outlives the channel deliberately.
+    channel_id: Optional[str] = None
+    #: What the analytics loop groups by. Blank on anything not made under a
+    #: channel.
+    pillar: str = ""
+    hook_type: str = ""
+    ending_type: str = ""
+    premise: str = ""
     brief_text: str
     plot_text: str
     created_at: datetime
@@ -182,7 +191,108 @@ class CharacterResponse(BaseModel):
 # Location
 # ============================================================================
 
+class ChannelVocabularyEntry(BaseModel):
+    """One pillar or one hook. The channel's own words, not an enum here."""
+
+    model_config = {"extra": "forbid"}
+
+    key: str
+    name: str = ""
+    share: Optional[int] = None
+    purpose: str = ""
+    example: str = ""
+
+
+class ChannelCreate(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    name: str
+    handle: str = ""
+    tagline: str = ""
+    description: str = ""
+    audience: str = ""
+    brand_notes: str = ""
+    visual_style: str = ""
+    negative_prompt: str = ""
+    camera_language: str = ""
+    voice_direction: str = ""
+    sound_direction: str = ""
+    aspect_ratio: str = "9:16"
+    target_resolution: str = "1080x1920"
+    frame_rate: float = 30.0
+    target_duration_sec: float = 32.0
+    pillars: list[ChannelVocabularyEntry] = Field(default_factory=list)
+    hooks: list[ChannelVocabularyEntry] = Field(default_factory=list)
+
+
+class ChannelUpdate(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    name: Optional[str] = None
+    handle: Optional[str] = None
+    tagline: Optional[str] = None
+    description: Optional[str] = None
+    audience: Optional[str] = None
+    brand_notes: Optional[str] = None
+    visual_style: Optional[str] = None
+    negative_prompt: Optional[str] = None
+    camera_language: Optional[str] = None
+    voice_direction: Optional[str] = None
+    sound_direction: Optional[str] = None
+    aspect_ratio: Optional[str] = None
+    target_resolution: Optional[str] = None
+    frame_rate: Optional[float] = None
+    target_duration_sec: Optional[float] = None
+    pillars: Optional[list[ChannelVocabularyEntry]] = None
+    hooks: Optional[list[ChannelVocabularyEntry]] = None
+
+
+class ChannelResponse(BaseModel):
+    model_config = {"from_attributes": True}
+
+    id: str
+    name: str
+    handle: str = ""
+    tagline: str = ""
+    description: str = ""
+    audience: str = ""
+    brand_notes: str = ""
+    visual_style: str = ""
+    negative_prompt: str = ""
+    camera_language: str = ""
+    voice_direction: str = ""
+    sound_direction: str = ""
+    aspect_ratio: str = "9:16"
+    target_resolution: str = "1080x1920"
+    frame_rate: float = 30.0
+    target_duration_sec: float = 32.0
+    pillars: list[dict[str, Any]] = Field(default_factory=list)
+    hooks: list[dict[str, Any]] = Field(default_factory=list)
+    created_at: datetime
+    updated_at: datetime
+
+
+class EpisodeCreate(BaseModel):
+    """Starting an episode under a channel. The bibles are copied in."""
+
+    model_config = {"extra": "forbid"}
+
+    title: str
+    objective: str = ""
+    premise: str = ""
+    pillar: str = ""
+    hook_type: str = ""
+    ending_type: str = ""
+    target_duration_sec: Optional[float] = None
+
+
 class LocationCreate(BaseModel):
+    # A write that drops half its body must not answer 201. A production
+    # script posted a style with plausible but invented field names and got a
+    # created-and-empty record back; the house look never reached a prompt and
+    # nothing warned. Forbidding extras turns that into a 422 naming the field.
+    model_config = {"extra": "forbid"}
+
     name: str
     description: str = ""
     geography: str = ""
@@ -193,6 +303,12 @@ class LocationCreate(BaseModel):
 
 
 class LocationUpdate(BaseModel):
+    # A write that drops half its body must not answer 201. A production
+    # script posted a style with plausible but invented field names and got a
+    # created-and-empty record back; the house look never reached a prompt and
+    # nothing warned. Forbidding extras turns that into a 422 naming the field.
+    model_config = {"extra": "forbid"}
+
     name: Optional[str] = None
     description: Optional[str] = None
     geography: Optional[str] = None
@@ -223,6 +339,12 @@ class LocationResponse(BaseModel):
 # ============================================================================
 
 class StyleCreate(BaseModel):
+    # A write that drops half its body must not answer 201. A production
+    # script posted a style with plausible but invented field names and got a
+    # created-and-empty record back; the house look never reached a prompt and
+    # nothing warned. Forbidding extras turns that into a 422 naming the field.
+    model_config = {"extra": "forbid"}
+
     medium: str = ""
     genre: str = ""
     visual_keywords: str = ""
@@ -233,6 +355,12 @@ class StyleCreate(BaseModel):
 
 
 class StyleUpdate(BaseModel):
+    # A write that drops half its body must not answer 201. A production
+    # script posted a style with plausible but invented field names and got a
+    # created-and-empty record back; the house look never reached a prompt and
+    # nothing warned. Forbidding extras turns that into a 422 naming the field.
+    model_config = {"extra": "forbid"}
+
     medium: Optional[str] = None
     genre: Optional[str] = None
     visual_keywords: Optional[str] = None

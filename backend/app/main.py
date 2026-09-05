@@ -19,6 +19,7 @@ from app.config import load_env_file
 from app.database import SessionLocal, init_db
 from app.models import Workflow
 from app.routers import (
+    channels,
     ai,
     character_sets,
     continuity_frames,
@@ -158,6 +159,7 @@ app.add_middleware(
 # ---------------------------------------------------------------------------
 # Register routers
 # ---------------------------------------------------------------------------
+app.include_router(channels.router)
 app.include_router(projects.router)
 app.include_router(story.router)
 app.include_router(references.router)
