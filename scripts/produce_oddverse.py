@@ -367,8 +367,19 @@ def main() -> int:
     log(f"timeline: {manifest['item_count']} items, "
         f"{manifest['total_duration_sec']:.1f}s")
 
+    render_body = {"narrate": True}
+    if os.environ.get("CAS_ODD_VOICE", "system") == "openai":
+        # Metered, so it is opt-in through the environment rather than the
+        # default: a resumed run must not start spending because it was
+        # resumed. The reading direction comes from the Voice Bible.
+        render_body.update({
+            "voice_provider": "openai",
+            "voice": os.environ.get("CAS_ODD_VOICE_NAME", "onyx"),
+            "voice_instructions": ep.get("voice_direction", ""),
+            "confirm_paid_generation": True,
+        })
     result = call("POST", f"/api/projects/{pid}/render",
-                  json={"narrate": True}, timeout=3600)
+                  json=render_body, timeout=3600)
     (out / "render.json").write_text(
         json.dumps(result, indent=2, default=str), encoding="utf-8")
     if not result["rendered"]:

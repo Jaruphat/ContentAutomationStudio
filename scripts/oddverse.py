@@ -226,6 +226,17 @@ SF01: dict[str, Any] = {
             "IT WAS HIM.", ["CHAR02"],
         ),
     ],
+    #: Section 6 of the blueprint, as an instruction a hosted voice can take.
+    #: A platform voice has a name and a rate slider and no opinion about how
+    #: a sentence should land; this is the reason to pay for one.
+    "voice_direction": (
+        "Read as a calm male documentary narrator, aged 30 to 40. Natural "
+        "conversational English, neutral international accent, quiet "
+        "confidence, controlled curiosity, slightly unsettling without "
+        "sounding frightening. Around 150 words per minute. Pause before "
+        "'Until last night', before 'But that wasn't the strange part', and "
+        "before 'was him'. Let the final phrase fall quieter, not louder."
+    ),
     "publishing": {
         "title": "A Train Arrives Here Every Night at 3:17 AM",
         "description": (
@@ -250,9 +261,6 @@ KNOWN_GAPS: list[str] = [
     "The audio timeline (clock tick at 0:04, pneumatic door at 0:14, "
     "footsteps at 0:17) needs timed SFX cues. Per-shot mute/gain and a music "
     "bed exist; timed cues do not.",
-    "The voice bible asks for a calm documentary narrator at ~150 WPM with "
-    "pauses before named phrases. Narration uses the local Windows voice, "
-    "which cannot be directed and is not broadcast quality.",
     "The blueprint's assembly spec has a 4-6 frame dissolve between shots 8 "
     "and 9 and a 3-5 frame black tail before the loop. The renderer only cuts.",
     "The video model runs at 576x1024 on this card, so the 1080x1920 delivery "

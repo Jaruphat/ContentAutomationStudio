@@ -1626,7 +1626,17 @@ class TimelineUpdateRequest(BaseModel):
 class RenderRequest(BaseModel):
     """Body for a render. Narration is opt-in: it takes time and is a choice."""
 
+    model_config = {"extra": "forbid"}
+
     narrate: bool = False
+    #: "system" is the local voice and costs nothing; "openai" is metered and
+    #: must be confirmed, because an overnight render should not quietly spend.
+    voice_provider: Literal["system", "openai"] = "system"
+    voice: str = ""
+    #: How the narrator should read. Left blank, the channel's own voice
+    #: direction is used - which is the reason a channel carries one.
+    voice_instructions: str = ""
+    confirm_paid_generation: bool = False
 
 
 class RenderedFilm(BaseModel):

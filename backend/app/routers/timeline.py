@@ -21,6 +21,7 @@ from app.schemas import (
 )
 from app import paths
 from app.services import (
+    channels,
     media_probe,
     range_response,
     render_service,
@@ -199,10 +200,47 @@ def render_review(
     empty, or any referenced media file is absent, no video is produced and
     the response explains why - nothing is fabricated.
     """
-    _get_project_or_404(db, project_id)
+    project = _get_project_or_404(db, project_id)
+    voice = None
+    if payload and payload.narrate and payload.voice_provider == "openai":
+        # Metered, so it needs saying out loud. The same gate the image
+        # providers have, for the same reason.
+        if not payload.confirm_paid_generation:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "The OpenAI voice is metered. Re-send with "
+                    "confirm_paid_generation set to true to authorise it, or "
+                    "narrate with the local system voice, which costs nothing."
+                ),
+            )
+        from app.services.openai_voice import DEFAULT_VOICE, OpenAIVoice
+
+        # Blank instructions fall back to the channel's voice direction. That
+        # is the whole reason a channel carries one: the narrator sounds the
+        # same in episode nine as in episode one without anybody retyping it.
+        instructions = payload.voice_instructions.strip()
+        if not instructions and project.channel_id:
+            channel = channels.get_channel(db, project.channel_id)
+            instructions = (channel.voice_direction or "").strip() if channel else ""
+        voice = OpenAIVoice(
+            voice=payload.voice or DEFAULT_VOICE,
+            instructions=instructions,
+        )
+        if not voice.configured:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "OPENAI_API_KEY is not set on this machine, so the hosted "
+                    "voice cannot be used. Add it to the local .env and "
+                    "restart the backend."
+                ),
+            )
     try:
         result = render_service.render_review_video(
-            db, project_id, narrate=bool(payload and payload.narrate),
+            db, project_id,
+            narrate=bool(payload and payload.narrate),
+            voice=voice,
         )
     except timeline_service.StaleTimelineError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc

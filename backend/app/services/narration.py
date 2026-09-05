@@ -73,6 +73,15 @@ class NarrationTrack:
     failures: list[str] = field(default_factory=list)
 
 
+class NarrationError(RuntimeError):
+    """A line that could not be spoken, with the reason.
+
+    Named here rather than in a provider so the track builder catches one
+    thing whichever voice is in use, and so a caller can tell a voice that
+    refused from a voice that was never configured.
+    """
+
+
 class Voice(Protocol):
     """Anything that can write ``text`` to a mono WAV and say how long it is."""
 
