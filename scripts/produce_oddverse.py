@@ -39,7 +39,7 @@ WF_T2I = os.environ.get("CAS_ODD_WF_T2I", "359c2852-f880-430f-a096-07e6ef5625a3"
 WF_EDIT = os.environ.get("CAS_ODD_WF_EDIT", "75a73b44-5c6f-4661-87f6-26e66a639efd")
 #: Reference-conditioned edit with two inputs, for a key image that has both a
 #: character and the world plate to match.
-WF_EDIT2 = os.environ.get("CAS_ODD_WF_EDIT2", "9da5f99b-0ba4-4a5c-a7c2-fd1b2eb4e1c9")
+WF_EDIT2 = os.environ.get("CAS_ODD_WF_EDIT2", "9da5f99b-724a-4f63-b097-a8bf39b2e7af")
 #: Image to video: animates the approved key image.
 WF_I2V = os.environ.get("CAS_ODD_WF_I2V", "711d55b8-fc50-41b3-92eb-d706653fde4f")
 
