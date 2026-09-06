@@ -72,6 +72,18 @@ SF01: dict[str, Any] = {
     "style": GLOBAL_STYLE,
     "negative": GLOBAL_NEGATIVE,
     "world": WORLD,
+    # SF01 happens in one place, so it carries no scenes list and the producer
+    # builds a single scene from these two. The plate prompt is kept verbatim
+    # so re-running the episode rebuilds the station it was made with.
+    "location_name": "The abandoned station",
+    "plate_prompt": (
+        "Wide establishing photograph of the whole station at night, no people."
+    ),
+    "pillar": "strange_files",
+    "hook_type": "H01",
+    "one_strange_thing": (
+        "A train arrives at an abandoned station every night at 3:17."
+    ),
     # 576 wide at delivery scale: the line has to wrap early to stay readable.
     "subtitles": {"max_chars_per_line": 24, "vertical_margin": 180},
     "cast": {
@@ -269,12 +281,20 @@ SF01: dict[str, Any] = {
     #: a fake one is two headlines.
     "composites": {
         8: [
-            {"type": "rect", "colour": "#e8e2d4", "rotation": 7.0,
-             "x": 0.50, "y": 0.666, "width": 0.78, "height": 0.086},
+            # Four corners, not a centre and an angle: the page is a plane
+            # seen at an angle, so it is a trapezoid on screen and a rotated
+            # rectangle over it still reads as a sticker.
+            {"type": "rect", "colour": "#e8e2d4",
+             "corners": [[0.10, 0.676], [0.88, 0.634],
+                         [0.88, 0.694], [0.10, 0.738]]},
             {"type": "text", "text": "TOMORROW'S EDITION", "colour": "#141414",
-             "rotation": 7.0, "x": 0.50, "y": 0.650, "size": 0.030},
+             "size": 0.030,
+             "corners": [[0.12, 0.680], [0.86, 0.638],
+                         [0.86, 0.664], [0.12, 0.706]]},
             {"type": "text", "text": "{tomorrow}", "colour": "#141414",
-             "rotation": 7.0, "x": 0.50, "y": 0.688, "size": 0.019},
+             "size": 0.020,
+             "corners": [[0.30, 0.706], [0.70, 0.684],
+                         [0.70, 0.706], [0.30, 0.728]]},
         ],
         9: [
             # The face on the front page has to be the observer's, and a
@@ -308,24 +328,331 @@ SF01: dict[str, Any] = {
 }
 
 
-#: What the blueprint asks for that this application cannot do yet. Written
-#: down beside the episode rather than approximated in it, so a trial run
-#: proves what the pipeline does and does not cover.
+# ---------------------------------------------------------------------------
+# SF02 - "The Extra Room". Hook H04, Discovery.
+# ---------------------------------------------------------------------------
+# SF01 happens in one place, so one approved plate of that place held all nine
+# shots together. This episode moves: a street, a kitchen table, an upstairs
+# hall, and the room at the end of it. Four places is four plates, and a plate
+# belongs to a scene rather than to an episode - which is what a Scene is for
+# and what SF01 never made the producer prove.
+
+SF02_WORLD = (
+    "An ordinary 1970s British semi-detached house on a quiet suburban street, "
+    "red-brown brick, white uPVC windows, a low garden wall, worn interiors "
+    "with woodchip wallpaper and patterned carpet, warm domestic lamps, cold "
+    "damp night outside. Nothing decorative, nothing expensive, nothing new."
+)
+
+SF02: dict[str, Any] = {
+    "key": "sf02",
+    "title": "The Extra Room",
+    "series": "STRANGE FILE #002 | ODDVERSE",
+    "objective": (
+        "A 32-second vertical mystery short: a house with one more room than "
+        "its floor plan, and a delivery label dated next year."
+    ),
+    "pillar": "strange_files",
+    "hook_type": "H04",
+    "one_strange_thing": (
+        "There is a room in this house that does not appear on any floor plan."
+    ),
+    "aspect_ratio": "9:16",
+    "resolution": "1080x1920",
+    "source_resolution": "576x1024",
+    "frame_rate": 30.0,
+    "style": GLOBAL_STYLE,
+    "negative": GLOBAL_NEGATIVE,
+    "world": SF02_WORLD,
+    "subtitles": {"max_chars_per_line": 24, "vertical_margin": 180},
+    "cast": {
+        "CHAR01": {
+            "name": "CHAR01 - The Homeowner",
+            "appearance": (
+                "man, approximately 42, average build, short greying dark "
+                "hair, plain unremarkable face, tired ordinary expression, "
+                "seen mostly from behind"
+            ),
+            "proportions": "average height, average build, slightly stooped",
+            "wardrobe": (
+                "faded navy crew-neck jumper over a grey t-shirt, dark jeans, "
+                "grey socks, no shoes indoors, no jewellery"
+            ),
+            "palette": "faded navy, grey, dark denim",
+            "identity_tokens": (
+                "same man, consistent short greying dark hair, faded navy "
+                "jumper, seen from behind"
+            ),
+            "negative_tokens": (
+                "different face, long hair, bright clothing, uniform, smiling, "
+                "heroic posture, text, watermark"
+            ),
+            # One view, for the same reason SF01's woman has one: the key
+            # image is a two-input edit, and the second input is the plate.
+            "slots": ["full_body"],
+        },
+    },
+    #: Four scenes, in the order the film plays them. Each carries the place
+    #: it happens in and the plate every key image in it is edited from, so
+    #: three shots of the same hallway are three shots of one hallway.
+    "scenes": [
+        {
+            "key": "street",
+            "title": "The house",
+            "purpose": "Establish an ordinary house and state the anomaly.",
+            "location": "The street outside",
+            "time_of_day": "night",
+            "world": (
+                "An ordinary 1970s British semi-detached brick house seen from "
+                "the pavement across a quiet suburban street at night, low "
+                "garden wall, wheelie bin, a parked hatchback, one sodium "
+                "streetlamp, wet tarmac, bare autumn hedge, no people."
+            ),
+            "plate_prompt": (
+                "Wide establishing photograph of the whole house from across "
+                "the street at night, one upstairs window lit, no people."
+            ),
+        },
+        {
+            "key": "table",
+            "title": "The kitchen table",
+            "purpose": "The paperwork disagrees with the house.",
+            "location": "The kitchen table",
+            "time_of_day": "night",
+            "world": (
+                "An ordinary British kitchen table at night under a single "
+                "warm pendant lamp, architectural drawings spread flat, a "
+                "yellowed folded land survey, a chipped blue-striped mug, a "
+                "pencil, a steel tape measure, dark kitchen out of focus "
+                "behind, no people."
+            ),
+            "plate_prompt": (
+                "Overhead photograph of the whole table under the pendant "
+                "lamp, papers spread flat, no people."
+            ),
+        },
+        {
+            "key": "hall",
+            "title": "The upstairs hall",
+            "purpose": "The door that is not on the plan.",
+            "location": "The upstairs landing",
+            "time_of_day": "night",
+            "world": (
+                "A narrow upstairs landing and hallway in an ordinary British "
+                "house at night, patterned worn carpet, woodchip wallpaper "
+                "painted magnolia, a radiator, two white panel doors along one "
+                "side and a single closed white panel door at the far end, one "
+                "weak warm landing light, no window."
+            ),
+            "plate_prompt": (
+                "Photograph looking down the whole length of the upstairs "
+                "hallway toward the closed door at the far end, no people."
+            ),
+        },
+        {
+            "key": "room",
+            "title": "The room",
+            "purpose": "The payoff: the room is furnished, and not yet paid for.",
+            "location": "The room at the end of the hall",
+            "time_of_day": "night",
+            "world": (
+                "A small plain furnished sitting room inside a British house, "
+                "a two-seat grey fabric sofa, a low wooden coffee table, a "
+                "standing floor lamp, a patterned rug, plain curtains drawn "
+                "across a wall with no window behind them, everything clean "
+                "and completely unused, no dust on the furniture, no "
+                "decoration, no television, no people."
+            ),
+            "plate_prompt": (
+                "Photograph of the whole small room from the doorway, floor "
+                "lamp on, everything new and unused, no people."
+            ),
+        },
+    ],
+    #: (seconds, name, image prompt, (what happens, camera), narration,
+    #:  emphasis, cast, scene key)
+    #:
+    #: Durations are the edit's, not the model's: 4, 3, 3, 4, 3, 4, 3, 3, 5.
+    #: Each narration line is short enough to be spoken inside its own shot -
+    #: the dialogue-fit check reads these at 150 words per minute and refuses
+    #: a line that runs past the cut it belongs to.
+    "shots": [
+        (
+            4.0, "The House",
+            "An ordinary 1970s British semi-detached brick house at night seen "
+            "from the pavement across a quiet suburban street, one upstairs "
+            "window lit warm behind thin curtains, every other window dark, a "
+            "sodium streetlamp, wet tarmac, a parked hatchback, a wheelie bin "
+            "by the low garden wall, no people. Wide establishing shot, eye "
+            "level, 35mm lens.",
+            ("Fine rain drifts down through the cone of streetlamp light. The "
+             "curtain in the lit upstairs window shifts and falls back. The "
+             "bare hedge moves in the wind and water runs off the wall.",
+             "Locked-off camera from across the street, eye level.",
+             "fine rain falling on wet tarmac, wind moving through a bare hedge, a distant car passing on a wet road"),
+            "This house has seven rooms. The plan shows six.",
+            "SEVEN ROOMS. / SIX ON THE PLAN.", [], "street",
+        ),
+        (
+            3.0, "The Floor Plan",
+            "Close overhead view of a printed architectural floor plan lying "
+            "flat on a kitchen table under a warm pendant lamp, thin black "
+            "line work, a rectangular printed title block in the lower area of "
+            "the sheet left blank and unreadable, a pencil and a steel tape "
+            "measure resting across one corner, a man's hands at the edge of "
+            "frame, dark kitchen out of focus behind, 50mm lens.",
+            ("A hand slides the pencil across the plan and taps it twice "
+             "against the paper. The corner of the sheet lifts in the draught "
+             "and settles back flat.",
+             "Overhead, camera steady.",
+             "the small tap of a pencil on paper, a sheet of paper shifting on a table, a fridge humming in a quiet kitchen"),
+            "We measured every wall twice.", "", [], "table",
+        ),
+        (
+            3.0, "The Survey",
+            "Close-up of a yellowed folded land survey document being drawn "
+            "out from beneath an architectural floor plan on a kitchen table, "
+            "brittle aged paper, faint printed line work, a blank unreadable "
+            "rectangular stamp area in one corner, warm pendant lamp light, "
+            "shallow depth of field, 85mm lens.",
+            ("A hand draws the old survey out from under the plan and presses "
+             "it flat. The brittle paper flexes, springs back at the fold, and "
+             "settles.",
+             "85mm lens, shallow focus, camera steady.",
+             "brittle old paper unfolding and creasing, a clock ticking somewhere else in the house"),
+            "It isn't on the survey from 1974.", "NOT ON THE SURVEY.",
+            [], "table",
+        ),
+        (
+            4.0, "The Hall",
+            "A narrow upstairs hallway in an ordinary British house at night "
+            "seen from the top of the stairs, patterned worn carpet, magnolia "
+            "woodchip wallpaper, a radiator, two white panel doors along one "
+            "side, a single closed white panel door at the far end, one weak "
+            "warm landing light, a man in a faded navy jumper standing halfway "
+            "along the hall with his back to camera. Wide shot, eye level, "
+            "35mm lens.",
+            ("The man walks three unhurried steps down the hall toward the "
+             "closed door and stops. His shadow stretches away across the "
+             "carpet as he moves. The landing light dims briefly and steadies.",
+             "Locked-off camera at the top of the stairs.",
+             "slow socked footsteps on worn carpet, the faint hum of a landing light, an old house settling at night"),
+            "There's a door at the end of the upstairs hall.",
+            "A DOOR AT THE END.", ["CHAR01"], "hall",
+        ),
+        (
+            3.0, "Nobody Opened It",
+            "Close-up of a plain white panel door at the end of a dark "
+            "upstairs hallway, chipped brass handle, painted-over hinges, a "
+            "thin line of dim light along the floor at the threshold, worn "
+            "carpet, weak warm landing light from behind camera, 50mm lens.",
+            ("A thin line of light under the door brightens, wavers, and "
+             "fades. Dust turns slowly through the landing light. The brass "
+             "handle shifts a few millimetres and stops.",
+             "Very slow push in.",
+             "near silence, the faint electrical hum of a light fitting, one small metallic click from a door handle"),
+            "For three weeks, nobody opened it.", "THREE WEEKS.", [], "hall",
+        ),
+        (
+            4.0, "Last Sunday",
+            "A man in a faded navy jumper seen from behind at close range, one "
+            "hand on the chipped brass handle of a plain white panel door at "
+            "the end of a dark upstairs hallway, the door beginning to swing "
+            "inward, warm light spilling out through the widening gap onto his "
+            "shoulder and the carpet, 35mm lens.",
+            ("The man turns the handle and pushes the door inward. The door "
+             "swings open and warm light spreads across his shoulders, up the "
+             "wallpaper and along the carpet. He takes one step forward.",
+             "Locked-off camera behind him at shoulder height.",
+             "a brass handle turning, a door easing open on dry hinges, one step forward onto carpet"),
+            "Last Sunday, I opened it.", "LAST SUNDAY.", ["CHAR01"], "hall",
+        ),
+        (
+            3.0, "Already Furnished",
+            "The interior of a small plain sitting room seen from the doorway, "
+            "a two-seat grey fabric sofa, a low wooden coffee table, a "
+            "standing floor lamp lit, a patterned rug, plain curtains drawn "
+            "across a wall, everything clean and completely unused, no "
+            "television, no decoration, no people, 35mm lens.",
+            ("Light from the floor lamp spreads further across the rug as the "
+             "door opens wider behind camera. Dust turns slowly through the "
+             "lamplight. The drawn curtain moves once and hangs still.",
+             "Slow push forward through the doorway.",
+             "a door swinging wider, then the flat dead quiet of a small carpeted room with no echo"),
+            "The room was already furnished.", "ALREADY FURNISHED.",
+            [], "room",
+        ),
+        (
+            3.0, "Our Furniture",
+            "Medium close-up across a low wooden coffee table in a small plain "
+            "sitting room, a chipped blue-striped mug standing on the bare "
+            "wood, a folded newspaper beside it, the grey fabric sofa behind, "
+            "warm floor lamp light from one side, shallow depth of field, "
+            "50mm lens.",
+            ("Steam rises from the mug and drifts sideways through the "
+             "lamplight. The lamp flickers once and the shadows shift across "
+             "the sofa cushions.",
+             "Slow lateral drift.",
+             "very quiet room tone, the faint tick of a cooling lamp"),
+            "With our furniture.", "OUR FURNITURE.", [], "room",
+        ),
+        (
+            5.0, "Not Yet",
+            "Extreme close-up of the arm of a grey fabric sofa with a printed "
+            "furniture delivery label still taped to it, plain white "
+            "self-adhesive label with a blank unreadable printed area, clean "
+            "unused upholstery, warm floor lamp light, the room heavily out of "
+            "focus behind, 85mm lens.",
+            ("The taped corner of the label lifts and falls in the draught "
+             "from the open door and comes to rest. The lamplight steadies "
+             "across the fabric.",
+             "Slow push in that comes to rest for the final half second.",
+             "almost complete silence, one paper corner lifting in a draught, a single low room tone"),
+            "We haven't bought it yet.", "WE HAVEN'T / BOUGHT IT YET.",
+            [], "room",
+        ),
+    ],
+    #: The one thing in this episode that has to be *read*. The plan and the
+    #: survey were composited too at first, and both came back as white
+    #: stickers laid over the props rather than printing on them - the corners
+    #: were written before the frame existed, so they described a plane the
+    #: paper was not on. Both were dropped rather than fixed: the narration
+    #: already says "the plan shows six" and "the survey from 1974", so
+    #: neither needed to be legible. The delivery date does. It is the payoff,
+    #: nobody says it aloud, and no model spells it.
+    #:
+    #: Its corners were measured off the generated key image, which is the
+    #: only order that works: generate, look, place, then animate.
+    "composites": {},
+    "voice_direction": (
+        "Read as a calm male documentary narrator, aged 30 to 40, describing "
+        "something that happened to him and that he has not finished thinking "
+        "about. Natural conversational English, neutral international accent, "
+        "quiet confidence, controlled curiosity, slightly unsettling without "
+        "sounding frightening. Around 150 words per minute. Pause before 'Last "
+        "Sunday, I opened it', and before 'We haven't bought it yet'. Let the "
+        "final line fall quieter and flatter, not louder."
+    ),
+    "publishing": {
+        "title": "Our House Has One More Room Than the Floor Plan",
+        "description": (
+            "Seven rooms. Six on the plan. And a delivery label dated next "
+            "year. A short fiction from the ODDVERSE."
+        ),
+        "hashtags": "#shorts #mystery #strangefiles",
+    },
+}
+
+
+#: What the blueprint asks for that this application still cannot do. Written
+#: down beside the episodes rather than approximated in them, so a production
+#: run proves what the pipeline does and does not cover.
 KNOWN_GAPS: list[str] = [
-    "Emphasis text is a second, separately styled caption track (1-2 lines, "
-    "3-6 words). The app has one subtitle track, so the emphasis strings here "
-    "are carried as data and not yet rendered.",
-    "Shots 8 and 9 are meant to be composited in post: the date is "
-    "publish_date + 1 and the front-page photograph is a separate portrait of "
-    "CHAR02 converted to halftone. There is no compositing stage, so both are "
-    "generated whole and the newspaper text will be unreadable.",
-    "The audio timeline (clock tick at 0:04, pneumatic door at 0:14, "
-    "footsteps at 0:17) needs timed SFX cues. Per-shot mute/gain and a music "
-    "bed exist; timed cues do not.",
-    "The blueprint's assembly spec has a 4-6 frame dissolve between shots 8 "
-    "and 9 and a 3-5 frame black tail before the loop. The renderer only cuts.",
-    "The video model runs at 576x1024 on this card, so the 1080x1920 delivery "
-    "is an upscale rather than a native render.",
+    "The video model runs at 576x1024 on this card, so the blueprint's "
+    "1080x1920 delivery is an upscale rather than a native render.",
+    "Sound cues are placed against a shot and an offset, so the blueprint's "
+    "audio timeline has to be re-entered per episode; there is no library of "
+    "reusable ambience beds shared across a channel.",
 ]
 
-EPISODES: dict[str, dict[str, Any]] = {"sf01": SF01}
+EPISODES: dict[str, dict[str, Any]] = {"sf01": SF01, "sf02": SF02}

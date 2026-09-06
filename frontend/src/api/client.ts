@@ -447,6 +447,11 @@ export const generation = {
 // ── Review (Takes) ───────────────────────────────────────────────────────
 
 export const review = {
+  experiment: (shotId: string) =>
+    http.post<Project>(`/shots/${shotId}/experiment`).then((r) => r.data),
+  analyze: (takeId: string) =>
+    http.post<Take>(`/takes/${takeId}/analyze`).then((r) => r.data),
+
   listTakes: (projectId: string, runId?: string | null) =>
     http
       .get<Take[]>(`/projects/${projectId}/takes`, {

@@ -227,7 +227,7 @@ function ShotRow({
       <td className="px-2 py-2 text-center">
         <div className="flex items-center justify-center gap-1">
           <GripVertical size={12} className="text-zinc-500" />
-          <span className="text-xs text-zinc-500">{shot.order + 1}</span>
+          <span className="text-xs text-zinc-500">{shot.order}</span>
         </div>
       </td>
       <td className="px-2 py-2 text-xs text-zinc-300">{shot.shot_type || "--"}</td>
@@ -333,7 +333,7 @@ function SceneCard({
           className="flex-1 text-left"
         >
           <span className="text-xs font-bold text-indigo-400 uppercase tracking-wider">
-            Scene {scene.order + 1}
+            Scene {scene.order}
           </span>
           <span className="ml-2 text-sm text-zinc-200">
             {scene.title || "Untitled"}

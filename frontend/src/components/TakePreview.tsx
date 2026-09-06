@@ -1,5 +1,5 @@
 /* ──────────────────────────────────────────────────────────────────────────
-   TakePreview -- the real generated media for one take, in a fixed 16:9 box.
+   TakePreview -- the real generated media for one take.
 
    A take's file lives at an absolute path on disk that a browser cannot open,
    so the media is streamed from the backend at /api/media/takes/{id}/file.
@@ -81,9 +81,11 @@ type LoadState = "loading" | "ready" | "error";
 export default function TakePreview({
   take,
   className = "",
+  nativeAspect = false,
 }: {
   take: Take;
   className?: string;
+  nativeAspect?: boolean;
 }) {
   const [state, setState] = useState<LoadState>("loading");
 
@@ -97,11 +99,14 @@ export default function TakePreview({
     "relative flex aspect-video w-full items-center justify-center " +
     "overflow-hidden rounded-md border border-zinc-800 bg-zinc-800/60 " +
     className;
+  const frameStyle = nativeAspect && take.width > 0 && take.height > 0
+    ? { aspectRatio: `${take.width} / ${take.height}`, maxHeight: "34rem" }
+    : undefined;
 
   // Nothing was ever written for this take: not an error, just no media.
   if (!take.file_path.trim()) {
     return (
-      <div className={frame}>
+      <div className={frame} style={frameStyle}>
         <div className="flex flex-col items-center gap-1.5 px-4 text-center">
           <FileQuestion size={24} className="text-zinc-500" />
           <p className="text-xs font-medium text-zinc-400">No media recorded</p>
@@ -118,7 +123,7 @@ export default function TakePreview({
   const mock = isMockTake(take);
 
   return (
-    <div className={frame}>
+    <div className={frame} style={frameStyle}>
       {state !== "error" &&
         (kind === "video" ? (
           <video

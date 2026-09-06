@@ -10,7 +10,7 @@
    * < 768px    top bar + centre + bottom stage bar, inspector still a drawer.
    ────────────────────────────────────────────────────────────────────────── */
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { Outlet } from "react-router-dom";
 import { PanelRight } from "lucide-react";
 import StageRail, { ThemeControl } from "./StageRail";
@@ -90,7 +90,7 @@ export default function AppLayout() {
           <ProjectRunProgress />
           <main className="min-h-0 flex-1 overflow-y-auto">
             <StageErrorBoundary>
-              <Outlet />
+              <Suspense fallback={<p role="status" className="p-6 text-sm text-zinc-400">Loading workspace…</p>}><Outlet /></Suspense>
             </StageErrorBoundary>
           </main>
         </div>
@@ -112,7 +112,7 @@ export default function AppLayout() {
           <ProjectRunProgress />
         <main className="min-h-0 flex-1 overflow-y-auto">
           <StageErrorBoundary>
-            <Outlet />
+            <Suspense fallback={<p role="status" className="p-6 text-sm text-zinc-400">Loading workspace…</p>}><Outlet /></Suspense>
           </StageErrorBoundary>
         </main>
       </div>

@@ -178,6 +178,8 @@ class QualityReview(Base):
 
     __tablename__ = "quality_reviews"
 
+    render_sha256 = Column(String, default="")
+
     id = Column(String, primary_key=True, default=_uuid)
     project_id = Column(
         String, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False,
@@ -682,6 +684,12 @@ class Shot(Base):
     subject_motion = Column(Text, default="")
     #: How the camera behaves. A qualifier on the above, never the brief.
     camera_motion = Column(Text, default="")
+    #: What this shot sounds like. The H3 video models generate sound with the
+    #: picture and take the direction for it from the same prompt, so a
+    #: channel's Sound Bible only reaches a render if it is written here.
+    #: Last of the three, because a model given the sound first describes the
+    #: scene from the ear and animates less of it.
+    audio_direction = Column(Text, default="")
     negative_prompt = Column(Text, default="")
     reference_asset_ids = Column(JSON, default=list)
     #: Character sets whose *approved canonical* views condition this shot's
@@ -727,6 +735,7 @@ class Shot(Base):
     #: level decision and not an on/off one.
     audio_gain_db = Column(Float, default=0.0)
     seed_policy = Column(String, default="random")
+    seed = Column(Integer, nullable=True)
     status = Column(String, default="Draft")  # Draft / Ready / Generating / NeedsReview / Approved / Failed
 
     # -- Content revision tracking -------------------------------------------

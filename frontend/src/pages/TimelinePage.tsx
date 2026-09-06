@@ -498,8 +498,8 @@ export default function TimelinePage() {
   return (
     <div className="mx-auto max-w-5xl px-6 py-6 space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <Film size={20} className="text-indigo-400" />
           <h1 className="text-lg font-semibold text-zinc-100">Timeline</h1>
           {items.length > 0 && (
@@ -510,7 +510,7 @@ export default function TimelinePage() {
           )}
         </div>
 
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <button
             onClick={() => buildMut.mutate(currentProjectId)}
             disabled={buildMut.isPending}

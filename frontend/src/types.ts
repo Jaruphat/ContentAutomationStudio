@@ -332,6 +332,12 @@ export interface Shot {
   scene_role: SceneRole;
   image_prompt: string;
   video_prompt: string;
+  /** What happens in the frame. Leads the direction sent to a video model. */
+  subject_motion?: string;
+  /** How the camera behaves. A qualifier on the above, never the brief. */
+  camera_motion?: string;
+  /** What the clip sounds like. The H3 models generate sound from this. */
+  audio_direction?: string;
   negative_prompt: string;
   reference_asset_ids: string[];
   character_set_ids: string[];
@@ -345,6 +351,9 @@ export interface Shot {
   /** Model for a hosted image provider; "workflow" for local ComfyUI. */
   image_model: string;
   seed_policy: string;
+  seed?: number | null;
+  audio_mode?: "native" | "mute";
+  audio_gain_db?: number;
   status: ShotStatus;
   prompt_revision: number;
   prompt_sha256: string;
@@ -475,6 +484,7 @@ export interface GenerationJob {
 export interface Take {
   id: string;
   shot_id: string;
+  shot_label?: string;
   job_id: string | null;
   run_id: string | null;
   file_path: string;

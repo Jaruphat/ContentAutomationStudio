@@ -178,6 +178,7 @@ def compile_prompt(
         composed = motion_direction.compose(
             subject_motion=shot.get("subject_motion", "") or "",
             camera_motion=shot.get("camera_motion", "") or "",
+            audio_direction=shot.get("audio_direction", "") or "",
         )
         tech_prompt = composed or shot.get("video_prompt", "")
     layers["technical_tokens"] = tech_prompt

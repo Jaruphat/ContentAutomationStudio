@@ -3,17 +3,19 @@
    ────────────────────────────────────────────────────────────────────────── */
 
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { lazy } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ProjectStoreProvider } from "./store/useProjectStore";
 import AppLayout from "./components/AppLayout";
-import ChannelPage from "./pages/ChannelPage";
-import StoryPage from "./pages/StoryPage";
-import StoryboardPage from "./pages/StoryboardPage";
-import GeneratePage from "./pages/GeneratePage";
-import ReviewPage from "./pages/ReviewPage";
-import TimelinePage from "./pages/TimelinePage";
-import ExportPage from "./pages/ExportPage";
 import { ThemeProvider } from "./theme";
+
+const ChannelPage = lazy(() => import("./pages/ChannelPage"));
+const StoryPage = lazy(() => import("./pages/StoryPage"));
+const StoryboardPage = lazy(() => import("./pages/StoryboardPage"));
+const GeneratePage = lazy(() => import("./pages/GeneratePage"));
+const ReviewPage = lazy(() => import("./pages/ReviewPage"));
+const TimelinePage = lazy(() => import("./pages/TimelinePage"));
+const ExportPage = lazy(() => import("./pages/ExportPage"));
 
 const queryClient = new QueryClient({
   defaultOptions: {

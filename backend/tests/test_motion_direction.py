@@ -17,7 +17,6 @@ camera behaves is warned about *before* the render rather than measured after
 it - four hundred seconds a shot is too long to find this out at the end.
 """
 
-import pytest
 
 from app.services import motion_direction
 

@@ -34,7 +34,7 @@ from dataclasses import dataclass, field
 from sqlalchemy.orm import Session
 
 from app.models import Scene, Shot, Take
-from app.services import job_payload, shot_route
+from app.services import shot_route
 
 #: Unset. The role is then read off the shot's position in its scene.
 ROLE_AUTO = ""
@@ -105,8 +105,11 @@ def infer_role(db: Session, shot: Shot) -> str:
 
 def _bound_start_frame(shot: Shot) -> bool:
     return bool(
-        shot.continuity_source_take_id
-        and (shot.continuity_source_mode or "none") != "none"
+        (shot.continuity_source_take_id
+         and (shot.continuity_source_mode or "none") != "none")
+        # A manually attached scene image is also the first I2V frame.
+        # Canonical character sets alone are not (preflight enforces that).
+        or (shot.generation_mode == "image-to-video" and shot.reference_asset_ids)
     )
 
 

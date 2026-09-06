@@ -40,6 +40,9 @@ _STILLNESS_PHRASES = (
     "completely still", "perfectly still", "frozen", "motionless",
 )
 
+#: How the H3 models are told what a shot sounds like.
+AUDIO_LABEL = "Audio:"
+
 _WRITE_INSTEAD = (
     "Write what happens in the frame - what moves, what changes, what a "
     "viewer would see occur - and put how the camera behaves in the camera "
@@ -47,15 +50,30 @@ _WRITE_INSTEAD = (
 )
 
 
-def compose(*, subject_motion: str, camera_motion: str) -> str:
-    """One direction, with what happens leading.
+def compose(
+    *, subject_motion: str, camera_motion: str, audio_direction: str = "",
+) -> str:
+    """One direction, with what happens leading and the sound last.
 
     Order is the whole point. Leading with the camera tells the model the
     movement has already been decided, and it obliges by inventing none.
+    Leading with the sound is worse: asked first what a scene sounds like, the
+    model describes it from the ear and animates less of what is seen.
+
+    The sound is labelled because that is the form the H3 models read it in.
+    The label is this application's, so a writer who typed it themselves does
+    not get it twice in a render they paid for.
     """
     parts = [
         part.strip() for part in (subject_motion, camera_motion) if part.strip()
     ]
+    sound = (audio_direction or "").strip()
+    if sound:
+        if sound.lower().startswith(AUDIO_LABEL.lower()):
+            sound = sound[len(AUDIO_LABEL):].strip()
+        if not sound.endswith((".", "!", "?")):
+            sound += "."
+        parts.append(f"{AUDIO_LABEL} {sound}")
     return " ".join(parts)
 
 

@@ -1,0 +1,4 @@
+# These are source artifacts with recorded byte-level SHA-256 provenance.
+# Git must not rewrite their line endings when checking out on Windows.
+/workflows/**/*.json -text
+/image_boogu_image_0_1_edit_int8.json -text

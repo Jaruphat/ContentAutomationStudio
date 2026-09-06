@@ -1,7 +1,7 @@
 /* ──────────────────────────────────────────────────────────────────────────
    ReviewPage -- the takes, at a size a reviewer can actually judge.
 
-   Every card reserves the same 16:9 media area and shows what produced the
+   Every card follows the media's aspect ratio and shows what produced the
    take, because "approve" is a decision about an image and its provenance, not
    about a row of identifiers. Regenerating on a metered provider goes through
    an explicit priced confirmation: a reject-and-retry loop is the easiest way
@@ -20,11 +20,13 @@ import {
   Filter,
   Image,
   AlertCircle,
+  FlaskConical,
 } from "lucide-react";
 import api, { toAIError } from "../api/client";
 import { useAppState, useAppDispatch } from "../store/useProjectStore";
 import StatusBadge from "../components/StatusBadge";
 import TakePreview from "../components/TakePreview";
+import MotionReport from "../components/MotionReport";
 import CostConfirmDialog from "../components/CostConfirmDialog";
 import type { MediaProviderId, Take } from "../types";
 
@@ -141,6 +143,15 @@ function TakeCard({
   // already was, so an existing habit keeps doing what it did.
   const [intent, setIntent] = useState("");
   const [intentNote, setIntentNote] = useState("");
+  const dispatch = useAppDispatch();
+  const experimentMut = useMutation({
+    mutationFn: () => api.review.experiment(take.shot_id),
+    onSuccess: (project) => {
+      qc.invalidateQueries({ queryKey: ["projects"] });
+      dispatch({ type: "SET_PROJECT", id: project.id });
+      navigate("/storyboard");
+    },
+  });
 
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ["takes", projectId] });
@@ -254,13 +265,13 @@ function TakeCard({
           : "border-zinc-800 hover:border-zinc-700"
       }`}
     >
-      <TakePreview take={take} className="rounded-none border-0 border-b" />
+      <TakePreview take={take} nativeAspect className="rounded-none border-0 border-b" />
 
       <div className="space-y-2 p-3">
         {/* Identity and review state */}
         <div className="flex items-center justify-between gap-2">
           <span className="truncate font-mono text-[11px] text-zinc-500">
-            Shot {take.shot_id.slice(0, 8)}
+            {take.shot_label || `Shot ${take.shot_id.slice(0, 8)}`}
           </span>
           <StatusBadge status={take.review_status} />
         </div>
@@ -296,6 +307,15 @@ function TakeCard({
             <div className="truncate italic text-zinc-500">{take.notes}</div>
           )}
         </div>
+
+        <MotionReport take={take} projectId={projectId} />
+        <button type="button" onClick={(e) => { e.stopPropagation(); experimentMut.mutate(); }}
+          disabled={experimentMut.isPending}
+          title="Copy this shot's current prompt and reference images into a separate project. Generation starts only when you press Generate."
+          className="flex items-center gap-1.5 rounded border border-zinc-700 px-2 py-1.5 text-xs text-zinc-300 hover:bg-zinc-800 disabled:opacity-50">
+          <FlaskConical size={13} /> {experimentMut.isPending ? "Creating experiment…" : "Experiment in a new project"}
+        </button>
+        {experimentMut.isError && <p role="alert" className="text-xs text-red-300">{toAIError(experimentMut.error).detail}</p>}
 
         {cardError && (
           <div className="flex items-start gap-1.5 rounded-md border border-red-800 bg-red-900/30 px-2 py-1.5 text-[11px] text-red-300">
@@ -407,7 +427,7 @@ function TakeCard({
           open={confirmOpen}
           title="Regenerate this shot on a metered provider"
           lines={[
-            { label: "Shot", value: take.shot_id.slice(0, 8) },
+            { label: "Shot", value: take.shot_label || take.shot_id.slice(0, 8) },
             {
               label: "Provider",
               value: providerLabel(
@@ -554,8 +574,8 @@ export default function ReviewPage() {
           ? "This run is fully reviewed. Build the timeline to assemble your approved takes."
           : "Every take has been reviewed. Build the timeline to assemble your approved takes.";
         return (
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-emerald-800/50 bg-emerald-950/20 px-4 py-3">
-            <p className="text-sm text-emerald-200">
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-emerald-800/50 bg-emerald-900/20 px-4 py-3">
+            <p className="text-sm text-emerald-300">
               {done
                 ? doneMessage
                 : `${approvedCount} approved, ${pendingCount} still ${pendingCount === 1 ? "needs" : "need"} review.`}

@@ -54,6 +54,7 @@ def _validated_provider_id(value: str | None) -> str | None:
 # ============================================================================
 
 class ProjectCreate(BaseModel):
+    model_config = {"extra": "forbid"}
     title: str
     objective: str = ""
     audience: str = ""
@@ -76,6 +77,7 @@ class ProjectCreate(BaseModel):
 
 
 class ProjectUpdate(BaseModel):
+    model_config = {"extra": "forbid"}
     title: Optional[str] = None
     objective: Optional[str] = None
     audience: Optional[str] = None
@@ -1072,6 +1074,7 @@ class ShotContinuityStatus(BaseModel):
 # ============================================================================
 
 class SceneCreate(BaseModel):
+    model_config = {"extra": "forbid"}
     order: int = 0
     title: str = ""
     purpose: str = ""
@@ -1085,6 +1088,7 @@ class SceneCreate(BaseModel):
 
 
 class SceneUpdate(BaseModel):
+    model_config = {"extra": "forbid"}
     order: Optional[int] = None
     title: Optional[str] = None
     purpose: Optional[str] = None
@@ -1130,6 +1134,7 @@ class SceneReorderRequest(BaseModel):
 # ============================================================================
 
 class ShotCreate(BaseModel):
+    model_config = {"extra": "forbid"}
     order: int = 0
     shot_type: str = ""
     camera_angle: str = ""
@@ -1148,6 +1153,7 @@ class ShotCreate(BaseModel):
     video_prompt: str = ""
     subject_motion: str = ""
     camera_motion: str = ""
+    audio_direction: str = ""
     negative_prompt: str = ""
     reference_asset_ids: list[str] = Field(default_factory=list)
     #: Character sets whose approved canonical views condition this shot.
@@ -1156,6 +1162,9 @@ class ShotCreate(BaseModel):
     image_provider_id: str = "comfyui"
     image_model: str = "workflow"
     seed_policy: str = "random"
+    seed: Optional[int] = Field(default=None, ge=0, le=2147483647)
+    audio_mode: Literal["native", "mute"] = "native"
+    audio_gain_db: float = Field(default=0.0, ge=-60, le=12)
     status: str = "Draft"
 
     @field_validator("image_provider_id")
@@ -1165,6 +1174,7 @@ class ShotCreate(BaseModel):
 
 
 class ShotUpdate(BaseModel):
+    model_config = {"extra": "forbid"}
     order: Optional[int] = None
     shot_type: Optional[str] = None
     camera_angle: Optional[str] = None
@@ -1183,6 +1193,7 @@ class ShotUpdate(BaseModel):
     video_prompt: Optional[str] = None
     subject_motion: Optional[str] = None
     camera_motion: Optional[str] = None
+    audio_direction: Optional[str] = None
     negative_prompt: Optional[str] = None
     reference_asset_ids: Optional[list[str]] = None
     character_set_ids: Optional[list[str]] = None
@@ -1190,6 +1201,9 @@ class ShotUpdate(BaseModel):
     image_provider_id: Optional[str] = None
     image_model: Optional[str] = None
     seed_policy: Optional[str] = None
+    seed: Optional[int] = Field(default=None, ge=0, le=2147483647)
+    audio_mode: Optional[Literal["native", "mute"]] = None
+    audio_gain_db: Optional[float] = Field(default=None, ge=-60, le=12)
     status: Optional[str] = None
 
     @field_validator("image_provider_id")
@@ -1256,6 +1270,7 @@ class ShotResponse(BaseModel):
 
     _coerce_added_strings = field_validator(
         "scene_role", "emphasis_text", "subject_motion", "camera_motion",
+        "audio_direction",
         mode="before",
     )(_coerce_added_column(""))
     _coerce_added_flags = field_validator("include_in_cut", mode="before")(
@@ -1267,12 +1282,21 @@ class ShotResponse(BaseModel):
     #: a video model reads a camera sentence as the whole brief.
     subject_motion: str = ""
     camera_motion: str = ""
+    #: What it sounds like. Third field, because the models that render these
+    #: clips generate sound and read the direction for it from the prompt.
+    audio_direction: str = ""
     negative_prompt: str
     reference_asset_ids: list[str]
     workflow_preset_id: Optional[str]
     image_provider_id: Optional[str] = "comfyui"
     image_model: Optional[str] = "workflow"
     seed_policy: str
+    seed: Optional[int] = None
+    audio_mode: str = "native"
+    audio_gain_db: float = 0.0
+
+    _coerce_audio_mode = field_validator("audio_mode", mode="before")(_coerce_added_column("native"))
+    _coerce_audio_gain = field_validator("audio_gain_db", mode="before")(_coerce_added_column(0.0))
     status: str
 
     #: Canonical identity and hand-off continuity. Defaulted for the same
@@ -1512,6 +1536,7 @@ class TakeResponse(BaseModel):
 
     id: str
     shot_id: str
+    shot_label: str = ""
     job_id: Optional[str]
     #: Copied from the job, so Review can be scoped to one generation run.
     run_id: Optional[str] = None
@@ -1770,6 +1795,7 @@ class PreflightResult(BaseModel):
 
 
 class GenerateRequest(BaseModel):
+    model_config = {"extra": "forbid"}
     shot_ids: Optional[list[str]] = None  # None means all ready shots
     #: Must be set explicitly before any shot routed to a metered provider is
     #: queued. Defaulting it to true would make a paid run the accident.

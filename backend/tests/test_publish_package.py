@@ -17,10 +17,13 @@ Two rules make it worth having rather than a folder of conventions:
 """
 
 import os
+from pathlib import Path
+from functools import lru_cache
 
 import pytest
 
 from app import paths
+from app.services import media_probe
 
 
 PASSING = {
@@ -30,12 +33,28 @@ PASSING = {
 }
 
 
+@lru_cache(maxsize=1)
+def _video_bytes() -> bytes:
+    import tempfile
+    with tempfile.TemporaryDirectory() as folder:
+        target = str(Path(folder) / "fixture.mp4")
+        ffmpeg = media_probe.ffmpeg_path()
+        if not ffmpeg:
+            pytest.skip("ffmpeg is required for publish validation")
+        code, _, error = media_probe.run_captured([
+            ffmpeg, "-v", "error", "-f", "lavfi", "-i", "color=s=64x64:d=0.2",
+            "-c:v", "libx264", "-threads", "1", "-pix_fmt", "yuv420p", target,
+        ], timeout=30)
+        assert code == 0, error
+        return Path(target).read_bytes()
+
+
 def _write_render(project_id: str) -> str:
     directory = paths.exports_dir(project_id)
     os.makedirs(directory, exist_ok=True)
     path = os.path.join(directory, "review.mp4")
     with open(path, "wb") as handle:
-        handle.write(b"\x00" * 4096)
+        handle.write(_video_bytes())
     return path
 
 
@@ -94,6 +113,34 @@ def test_a_rendered_and_passed_episode_is_ready(client, sample_project):
 
     assert body["ready"] is True, body["blockers"]
     assert body["blockers"] == []
+
+
+def test_replacing_video_invalidates_review_even_if_timestamp_is_restored(client, sample_project):
+    filename = _write_render(sample_project.id)
+    _pass_the_gate(client, sample_project.id)
+    timestamp = os.path.getmtime(filename)
+    with open(filename, "ab") as stream:
+        stream.write(b"different render")
+    os.utime(filename, (timestamp, timestamp))
+    body = client.get(f"/api/projects/{sample_project.id}/publish-package").json()
+    assert not body["ready"] and not body["quality_passed"]
+    assert any("identify this video" in reason for reason in body["blockers"])
+
+
+def test_review_before_render_cannot_approve_future_video(client, sample_project):
+    _pass_the_gate(client, sample_project.id)
+    _write_render(sample_project.id)
+    body = client.get(f"/api/projects/{sample_project.id}/publish-package").json()
+    assert not body["ready"]
+
+
+def test_corrupt_video_cannot_pass_even_with_a_quality_score(client, sample_project):
+    filename = _write_render(sample_project.id)
+    Path(filename).write_bytes(b"broken media")
+    _pass_the_gate(client, sample_project.id)
+    body = client.get(f"/api/projects/{sample_project.id}/publish-package").json()
+    assert not body["ready"]
+    assert any("readable video" in reason for reason in body["blockers"])
 
 
 # ---------------------------------------------------------------------------
@@ -177,6 +224,30 @@ def test_publishing_fields_are_kept_on_the_project(client, sample_project):
 
     body = client.get(f"/api/projects/{sample_project.id}/publish-package").json()
     assert body["publish_title"].startswith("A Train Arrives")
+
+
+@pytest.mark.parametrize("change", [{"audio_gain_db": -6}, {"audio_mode": "mute"}])
+def test_clip_audio_change_requires_a_new_render_but_same_value_does_not(
+    client, db_session, sample_project, sample_shot, change,
+):
+    from app.models import GenerationJob, TimelineItem
+
+    item = TimelineItem(project_id=sample_project.id, shot_id=sample_shot.id)
+    db_session.add(item)
+    db_session.commit()
+    _write_render(sample_project.id)
+    _pass_the_gate(client, sample_project.id)
+    package_url = f"/api/projects/{sample_project.id}/publish-package"
+    shot_url = f"/api/projects/{sample_project.id}/scenes/{sample_shot.scene_id}/shots/{sample_shot.id}"
+    assert client.get(package_url).json()["ready"]
+    assert client.put(shot_url, json={"audio_mode": "native", "audio_gain_db": 0}).status_code == 200
+    assert client.get(package_url).json()["ready"]
+
+    assert client.put(shot_url, json=change).status_code == 200
+    package = client.get(package_url).json()
+    assert not package["ready"]
+    assert any("timeline changed" in reason for reason in package["blockers"])
+    assert db_session.query(GenerationJob).count() == 0
 
 
 def test_an_unknown_project_is_a_404(client):

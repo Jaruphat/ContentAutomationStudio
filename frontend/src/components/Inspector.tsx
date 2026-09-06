@@ -27,6 +27,9 @@ import {
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import StatusBadge from "./StatusBadge";
 import TakePreview from "./TakePreview";
+import ShotSeedControl from "./ShotSeedControl";
+import ShotAudioControl from "./ShotAudioControl";
+import ShotDirectionControl from "./ShotDirectionControl";
 import { useAppState, useAppDispatch } from "../store/useProjectStore";
 import api from "../api/client";
 import type { Shot, Scene, Take } from "../types";
@@ -95,7 +98,11 @@ function ShotPanel({ shot, projectId }: { shot: Shot; projectId?: string }) {
           ))}
         </div>
       )}
-      <Field label="Seed Policy">{shot.seed_policy}</Field>
+      {projectId ? <ShotSeedControl key={shot.id} shot={shot} projectId={projectId} /> : <Field label="Seed Policy">{shot.seed_policy}</Field>}
+      {projectId && shot.generation_mode !== "image" && (
+        <ShotDirectionControl key={`direction-${shot.id}`} shot={shot} projectId={projectId} />
+      )}
+      {projectId && <ShotAudioControl key={`audio-${shot.id}`} shot={shot} projectId={projectId} />}
 
       <div className="mt-4 border-t border-zinc-800 pt-3">
         <div className="mb-2 flex items-center gap-2">
@@ -105,7 +112,16 @@ function ShotPanel({ shot, projectId }: { shot: Shot; projectId?: string }) {
           </span>
         </div>
         <Field label="Image Prompt">{shot.image_prompt}</Field>
-        <Field label="Video Prompt">{shot.video_prompt}</Field>
+        {/* Once a shot carries a motion direction the compiler builds the
+            video prompt from it and ignores `video_prompt`, so showing that
+            field alone tells a directed shot it has no direction. */}
+        <Field label="Video Prompt">
+          {shot.subject_motion || shot.camera_motion || shot.audio_direction
+            ? [shot.subject_motion, shot.camera_motion,
+               shot.audio_direction ? `Audio: ${shot.audio_direction}` : ""]
+                .filter(Boolean).join(" ")
+            : shot.video_prompt}
+        </Field>
         <Field label="Negative Prompt">{shot.negative_prompt}</Field>
       </div>
     </dl>

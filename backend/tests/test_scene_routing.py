@@ -70,6 +70,14 @@ I2V_MAPPING = {
 }
 
 
+def test_manually_attached_i2v_plate_is_recognized_as_a_start_frame(db_session, sample_scene):
+    wf = _workflow(db_session, I2V_MAPPING, purpose="image-to-video")
+    shot = _shot(db_session, sample_scene, 1, generation_mode="image-to-video",
+                 workflow_preset_id=wf.id, reference_asset_ids=["selected-scene-plate"])
+    plan = scene_routing.plan(db_session, sample_scene.project_id, shot)
+    assert not any("no start frame" in message for message in plan.warnings)
+
+
 def _cast(db, project, shot):
     """Give the shot an approved canonical character set to be conditioned on."""
     character_set = CharacterSet(

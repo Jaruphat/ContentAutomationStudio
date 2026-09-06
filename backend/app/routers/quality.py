@@ -15,7 +15,7 @@ from app.schemas import (
     QualityReviewResponse,
     QualityRubricEntry,
 )
-from app.services import quality_gate
+from app.services import quality_gate, render_identity
 
 router = APIRouter(tags=["quality"])
 
@@ -90,6 +90,7 @@ def record_quality_review(
 
     review = QualityReview(
         project_id=project_id,
+        render_sha256=render_identity.render_sha256(project_id),
         scores=dict(payload.scores),
         ai_tell=payload.ai_tell,
         ai_tell_causes=payload.ai_tell_causes,

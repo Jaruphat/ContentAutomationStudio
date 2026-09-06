@@ -21,7 +21,7 @@ from sqlalchemy.orm import Session
 
 from app.database import SessionLocal
 from app.models import GenerationJob, Project, Scene, Shot, Take, Workflow
-from app.services import error_classifier, job_payload, media_providers, revisions
+from app.services import error_classifier, job_payload, media_analysis, media_providers, revisions
 from app.services.comfyui_adapter import ComfyUIProvider, JobStatusEnum, MediaProvider
 from app.services.job_payload import WorkflowValidationError, build_payload
 from app.services.mock_provider import MockComfyUIProvider
@@ -402,13 +402,15 @@ class QueueManager:
             }
             for o in outputs
         ]
-        db.commit()
-
         # Create Take records for each output. Each one carries the provider,
         # model, request parameters, usage, cost and seed that produced it, so
         # a take's origin stays auditable long after the job row's context is
         # forgotten.
         for o in outputs:
+            analysis = (
+                await asyncio.to_thread(media_analysis.analyze_video, o.file_path)
+                if o.file_type == "video" else None
+            )
             take = Take(
                 id=str(uuid.uuid4()),
                 shot_id=job.shot_id,
@@ -429,6 +431,7 @@ class QueueManager:
                 provenance={
                     **dict(provenance),
                     "references": dict(job.reference_provenance or {}),
+                    **({"media_analysis": analysis} if analysis else {}),
                 },
                 prompt_revision=job.prompt_revision,
                 prompt_sha256=job.prompt_sha256,

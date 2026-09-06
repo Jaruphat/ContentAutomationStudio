@@ -19,6 +19,7 @@ from app.models import (
     Scene,
     Shot,
     Style,
+    Take,
     Workflow,
 )
 from app.schemas import (
@@ -697,7 +698,7 @@ def start_generation(
 
         # Determine seed
         if shot.seed_policy == "fixed":
-            seed = 42
+            seed = shot.seed if shot.seed is not None else 42
         elif shot.seed_policy == "random":
             seed = random.randint(0, 2**31 - 1)
         else:
@@ -918,6 +919,26 @@ def cancel_job(job_id: str, db: Session = Depends(get_db)):
 
     job.status = "Cancelled"
     job.completed_at = datetime.now(timezone.utc)
+
+    # Give the shot back. "Generating" is not a state the queue accepts, so a
+    # shot left in it after its only job was cancelled can never be generated
+    # again through the API - not by Generate, not by Regenerate, not by
+    # editing it. Found on the second beat of a production run, where the only
+    # remedy was a database write.
+    if not generation_runs.shots_with_active_jobs(
+        db, [job.shot_id], exclude_job_id=job.id
+    ):
+        shot = db.query(Shot).filter(Shot.id == job.shot_id).first()
+        if shot is not None and shot.status == "Generating":
+            # A take nobody has judged yet is waiting on a person, not on the
+            # queue. Anything else goes back to being generatable.
+            pending = (
+                db.query(Take)
+                .filter(Take.shot_id == shot.id, Take.review_status == "Pending")
+                .count()
+            )
+            shot.status = "NeedsReview" if pending else "Ready"
+
     db.commit()
     db.refresh(job)
     return job

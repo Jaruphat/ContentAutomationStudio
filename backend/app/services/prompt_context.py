@@ -96,6 +96,9 @@ def shot_input(shot: Shot) -> dict[str, Any]:
         # the compiler for the same reason they are apart on the shot.
         "subject_motion": shot.subject_motion or "",
         "camera_motion": shot.camera_motion or "",
+        # Third and last: what it sounds like. The models that render these
+        # clips produce sound too, and read the direction for it from here.
+        "audio_direction": shot.audio_direction or "",
         "negative_prompt": shot.negative_prompt,
     }
 

@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from app import paths
 from app.models import GenerationJob, Project, Scene, Shot, Take, Workflow
 from app.schemas import (
     BatchReviewItemResult,
@@ -22,13 +23,16 @@ from app.schemas import (
     RegenerationIntentOption,
     TakeResponse,
     TakeReviewRequest,
+    ProjectResponse,
 )
 from app.services import (
     compositing,
+    experiments,
     generation_planning,
     generation_runs,
     job_payload,
     media_providers,
+    media_analysis,
     prompt_context,
     regeneration_intent,
     revisions,
@@ -37,6 +41,18 @@ from app.services import (
 )
 
 router = APIRouter(tags=["review"])
+
+
+@router.post("/api/shots/{shot_id}/experiment", response_model=ProjectResponse, status_code=201)
+def create_experiment(shot_id: str, db: Session = Depends(get_db)):
+    """Copy effective inputs into a new project; this never starts generation."""
+    shot = db.get(Shot, shot_id)
+    if shot is None:
+        raise HTTPException(status_code=404, detail="Shot not found")
+    try:
+        return experiments.create_from_shot(db, shot)
+    except (ValueError, OSError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 #: Why an approval is refused when the shot moved on after the take was made.
 #: Shared so the one-at-a-time and batch paths cannot drift into disagreeing
@@ -75,19 +91,18 @@ def list_project_takes(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    scenes = db.query(Scene).filter(Scene.project_id == project_id).all()
-    shot_ids: list[str] = []
-    for scene in scenes:
-        shots = db.query(Shot).filter(Shot.scene_id == scene.id).all()
-        shot_ids.extend(s.id for s in shots)
-
-    if not shot_ids:
-        return []
-
-    query = db.query(Take).filter(Take.shot_id.in_(shot_ids))
+    # One joined query, independent of scene count. Review polls this endpoint;
+    # per-scene lookups otherwise turn every poll into dozens of SQL queries.
+    query = (db.query(Take, Shot, Scene)
+             .join(Shot, Take.shot_id == Shot.id)
+             .join(Scene, Shot.scene_id == Scene.id)
+             .filter(Scene.project_id == project_id))
     if run:
         query = query.filter(Take.run_id == run)
-    return query.order_by(Take.created_at.desc()).all()
+    return [TakeResponse.model_validate(take).model_copy(update={
+        "shot_label": f"{scene.title or 'Scene ' + str(scene.order)} · Shot {shot.order}"
+            + (f" — {shot.shot_type}" if shot.shot_type else ""),
+    }) for take, shot, scene in query.order_by(Take.created_at.desc()).all()]
 
 
 @router.get(
@@ -113,6 +128,23 @@ def get_take(take_id: str, db: Session = Depends(get_db)):
     take = db.query(Take).filter(Take.id == take_id).first()
     if not take:
         raise HTTPException(status_code=404, detail="Take not found")
+    return take
+
+
+@router.post("/api/takes/{take_id}/analyze", response_model=TakeResponse)
+def analyze_take(take_id: str, db: Session = Depends(get_db)):
+    """Measure a stored video without changing its approval or shot revision."""
+    take = db.query(Take).filter(Take.id == take_id).first()
+    if take is None:
+        raise HTTPException(status_code=404, detail="Take not found")
+    if take.duration_sec <= 0:
+        raise HTTPException(status_code=422, detail="Motion analysis requires a video take")
+    if not paths.is_within_data_dir(take.file_path):
+        raise HTTPException(status_code=422, detail="The video must be stored inside the project data directory")
+    report = media_analysis.analyze_video(take.file_path)
+    take.provenance = {**dict(take.provenance or {}), "media_analysis": report}
+    db.commit()
+    db.refresh(take)
     return take
 
 

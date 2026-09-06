@@ -2,6 +2,9 @@
 
 A local-first application for AI-assisted storyboard creation, image/video generation via ComfyUI workflows, and automated video editing. Content Automation Studio turns a creative brief or plot into structured scenes, shots, compiled prompts, generation jobs, reviewed takes, a Timeline Manifest, and an automated review render.
 
+Current product scope: [PRD v0.4](docs/PRD_Content_Automation_Studio_v0.4.md).
+Implementation checks and the YouTube pilot: [production report](docs/PRODUCTION_RELIABILITY_2026-09-05.md).
+
 ---
 
 ## Architecture Overview

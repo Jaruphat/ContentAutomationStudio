@@ -22,7 +22,7 @@ import uuid
 import pytest
 from sqlalchemy import text
 
-from app.models import Project, Scene, Shot
+from app.models import Shot
 
 #: Columns added by ALTER TABLE after rows already existed. Each is NULL on
 #: every row older than it, and each is declared with a non-null type.

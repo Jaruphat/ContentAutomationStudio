@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import CharacterSet, Project, Scene, Shot
+from app.models import CharacterSet, Project, Scene, Shot, Take, TimelineItem
 from app.schemas import (
     ShotCreate,
     ShotReorderRequest,
@@ -174,9 +174,19 @@ def update_shot(
     if "character_set_ids" in changes:
         _check_character_sets(db, project_id, changes["character_set_ids"])
 
+    previous_audio = (shot.audio_mode or "native", shot.audio_gain_db or 0.0)
     for key, value in changes.items():
         setattr(shot, key, value)
     shot.updated_at = datetime.now(timezone.utc)
+    if previous_audio != (shot.audio_mode or "native", shot.audio_gain_db or 0.0):
+        # Audio changes require a new mix, but not a new generated take.
+        # Reuse the cut's freshness marker so Timeline and Publish agree.
+        take_ids = db.query(Take.id).filter(Take.shot_id == shot.id).subquery()
+        db.query(TimelineItem).filter(
+            TimelineItem.project_id == project_id,
+            (TimelineItem.shot_id == shot.id)
+            | TimelineItem.take_id.in_(db.query(take_ids.c.id)),
+        ).update({TimelineItem.updated_at: shot.updated_at}, synchronize_session=False)
     db.commit()
     revisions.refresh_project(db, project_id)
     db.refresh(shot)

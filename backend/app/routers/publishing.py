@@ -13,15 +13,16 @@ promoted into the world.
 """
 
 import os
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app import paths
 from app.database import get_db
-from app.models import Project, QualityReview
+from app.models import Project, QualityReview, TimelineItem
 from app.schemas import PublishFieldsRequest, PublishPackage
-from app.services import media_probe, quality_gate
+from app.services import media_probe, quality_gate, render_identity
 
 router = APIRouter(tags=["publishing"])
 
@@ -91,6 +92,21 @@ def build_package(db: Session, project: Project) -> PublishPackage:
         )
         blockers.extend(result.reasons)
 
+    reviewed_render = bool(review and review.render_sha256 and has_render
+        and review.render_sha256 == render_identity.render_sha256(project.id))
+    if review and review.passed and not reviewed_render:
+        blockers.append(
+            "The quality review does not identify this video. Render the current "
+            "cut, watch it, and record a new quality review."
+        )
+
+    if has_render:
+        modified = datetime.fromtimestamp(os.path.getmtime(video_path), tz=timezone.utc)
+        items = db.query(TimelineItem).filter(TimelineItem.project_id == project.id).all()
+        if any((item.updated_at or item.created_at).replace(tzinfo=timezone.utc) > modified
+               for item in items if item.updated_at or item.created_at):
+            blockers.append("The timeline changed after this video was rendered. Render and review the current cut.")
+
     if not (project.publish_title or "").strip():
         warnings.append(
             "No publish title. The project's working title is not used for "
@@ -103,6 +119,9 @@ def build_package(db: Session, project: Project) -> PublishPackage:
         )
 
     probe = media_probe.probe_media_file(video_path) if has_render else {}
+    if has_render and not (probe.get("duration_sec", 0) > 0
+                           and probe.get("width", 0) > 0 and probe.get("height", 0) > 0):
+        blockers.append("The rendered file is not a readable video. Render the timeline again.")
     subtitle_path = os.path.join(paths.exports_dir(project.id), "subtitles.srt")
 
     return PublishPackage(
@@ -126,5 +145,5 @@ def build_package(db: Session, project: Project) -> PublishPackage:
         width=int(probe.get("width") or 0),
         height=int(probe.get("height") or 0),
         subtitle_path=subtitle_path if os.path.isfile(subtitle_path) else "",
-        quality_passed=bool(review and review.passed),
+        quality_passed=bool(review and review.passed and reviewed_render),
     )

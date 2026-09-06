@@ -25,7 +25,8 @@ from app.services import prompt_context
 COMPILER_INPUTS = (
     "id", "shot_type", "camera_angle", "camera_movement", "lens_framing",
     "subject", "action", "environment", "generation_mode", "image_prompt",
-    "video_prompt", "subject_motion", "camera_motion", "negative_prompt",
+    "video_prompt", "subject_motion", "camera_motion", "audio_direction",
+    "negative_prompt",
 )
 
 
