@@ -10,21 +10,34 @@ Implementation checks and the YouTube pilot: [production report](docs/PRODUCTION
 ## Architecture Overview
 
 ```
-+------------------+         HTTP/REST         +------------------+
-|                  | <-----------------------> |                  |
-|  React + TS      |    localhost:8001/api      |  Python FastAPI  |
-|  (Vite, port     |                           |  (Uvicorn, 8001) |
-|   5173)          |                           |                  |
-+------------------+                           +--------+---------+
-                                                        |
-                                               +--------+---------+
-                                               |     SQLite        |
-                                               |   (cas.db)        |
-                                               +------------------+
+             Browser -- Vite dev server, port 5173
+  Channel -> Story -> Storyboard -> Generate -> Review -> Timeline -> Export
+                          Workflows  (register a graph, bind its inputs)
+                                   |
+                                   |  HTTP/REST, localhost:8001/api
+                                   v
+  +--------------------------------------------------------------------+
+  |  FastAPI (Uvicorn, port 8001)                                       |
+  |                                                                     |
+  |  prompt compiler -> workflow adapter -> job queue -> takes ->        |
+  |  review -> timeline manifest -> render                              |
+  +------+-------------------------+------------------+----------------+
+         |                         |                  |
+         | submits a graph with    | authors story,   | assembles the
+         | node ids taken only     | draws images,    | approved media
+         | from parameter_mapping  | speaks narration | into one file
+         v                         v                  v
+  ComfyUI 127.0.0.1:8000      OpenAI API         FFmpeg (local binary)
+  local models: H3 I2V,       GPT-4.1 authoring, cut, narration mix,
+  Boogu Edit, Z-Image         Images, TTS        captions, loudness
+
+  State: SQLite at backend/data/cas.db, media and exports under CAS_DATA_DIR.
+  ComfyUI, OpenAI and FFmpeg are each optional: mock providers stand in for
+  the first two, and a render plan is produced when FFmpeg is absent.
 ```
 
 - **Frontend**: React 19 + TypeScript, bundled with Vite, styled with Tailwind CSS v4. Uses React Router for page navigation, TanStack React Query for server state, and Axios for HTTP requests.
-- **Backend**: Python FastAPI with SQLAlchemy ORM over SQLite. Modular routers for projects, scenes, shots, story, workflows, generation, review, timeline, and exports. Services layer handles prompt compilation, workflow registry, queue management, ComfyUI adapter (mock and real providers), timeline assembly, and export generation.
+- **Backend**: Python FastAPI with SQLAlchemy ORM over SQLite. Modular routers for channels, projects, story, references, character sets, scenes, shots, continuity frames, workflows, generation, review, quality, analytics, publishing, premises, sound, timeline, exports, AI and media. Services layer handles prompt compilation, workflow registry, queue management, ComfyUI adapter (mock and real providers), timeline assembly, and export generation.
 - **Database**: SQLite file (`backend/data/cas.db`) for all MVP metadata. No external database server required. Schema changes that only add columns are applied automatically at startup.
 - **ComfyUI boundary**: business logic depends only on the `ComfyUIProvider` interface. Node IDs appear solely in a workflow record's `parameter_mapping`, so re-exporting H3 with different node numbering is a mapping fix, not a code change.
 
@@ -491,6 +504,28 @@ The frontend uses a production cockpit layout:
 - **Workflows**: Graph registration, field mapping, frame rate, fixed settings and validation. Nothing generates until one is registered and mapped.
 - **Status states**: Draft / Ready / Generating / Needs Review / Approved / Failed
 - **Approval gates**: Required before Generation and Final Render stages
+
+#### What still needs an HTTP client
+
+Checked on 2026-09-06 by looking for a caller of every method in the API
+client. The production pipeline - generate, review, assemble, export - is fully
+operable from the browser. Writing the material by hand is not:
+
+- A **scene** cannot be edited. It is created as `Scene 3`; its title, summary,
+  purpose, time of day, duration, location and cast are read-only, and two of
+  those reach the compiled prompt.
+- **Nothing can be reordered.** Shots append only, and the storyboard draws a
+  drag handle on each row that does not drag.
+- The **creative brief** (`brief_text`) has no field, though the AI author reads
+  it and the backend's error message names it.
+- **Publication title, description and hashtags** can be read in the publish
+  gate but not typed.
+- `lens_framing`, `environment` and `video_prompt` on a shot have no control;
+  nor do a project's frame rate and canvas unless it came from a channel; nor
+  can a project be deleted.
+
+Ranked as items 0a-0e in
+[PRD v0.4](docs/PRD_Content_Automation_Studio_v0.4.md#prioritized-follow-up-requirements).
 
 ---
 

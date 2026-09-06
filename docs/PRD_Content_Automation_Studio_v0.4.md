@@ -22,10 +22,10 @@ ComfyUI and FFmpeg. It is not a multi-user hosted publishing service.
 |---|---|---|
 | Channel | House style, voice and sound direction, pillars, hooks, premise bank | Starting an episode copies the selected channel context; later channel edits do not silently rewrite the episode. |
 | Story | Brief, plot, story bible, locations, characters, AI-assisted outlining | Show provider availability and failures; preserve creator edits. |
-| Storyboard | Scenes, shots, direction, dialogue, emphasis, references | Preview and real generation use the same prompt builder. Unknown request fields are refused. |
+| Storyboard | Scenes, shots, direction, dialogue, emphasis, references, the workflow a shot uses, whether it reaches the cut, its own negatives | Preview and real generation use the same prompt builder. Unknown request fields are refused. A scene's own fields are not yet editable here. |
 | Identity | Versioned character sets and explicitly approved canonical views | Bound views are actual provider image inputs with recorded hashes. |
 | Continuity | Explicit approved start and optional landing frames | Stale, missing, or incompatible source bindings block generation. |
-| Generate | Workflow registry, mapping, validation, preflight, queued runs, progress, retry, cancellation | Preserve the actual graph, prompt, seed, references and provider settings. Explain unmapped fields. |
+| Generate | Preflight, cost estimate, queued runs, progress, retry, cancellation. Registering a graph, binding its inputs, its frame rate and its fixed settings are a stage of their own | Preserve the actual graph, prompt, seed, references and provider settings. Explain unmapped fields. Registering and mapping a workflow must be possible without an HTTP client. |
 | Review | Playable takes, approval/rejection, regeneration, media provenance | Approval remains a review decision; staleness is enforced. |
 | Timeline | Approved takes, ordering, trims, shot audio, music and sound cues | Stale or missing media cannot silently enter a new render. |
 | Delivery | Narration, subtitles, emphasis, normalized audio, MP4, timeline exports, publish package | Inspect the exact final file and its caption/audio timing before recording quality approval. |
@@ -374,7 +374,7 @@ known to need attention before it replaces anything: the hosted canvas is 2:3
 or 1:1 where this channel delivers 9:16, and a local plate costs nothing per
 frame where this costs one image each.
 
-### 17. A shot's name is not a brief either
+### 18. A shot's name is not a brief either
 
 Seen printed on the picture, twice. A shot called "Tomorrow" produced a
 newspaper whose masthead read *Tomorrow*; the shot after it, called "The
@@ -386,6 +386,102 @@ Reveal" instead has nothing to frame with, so it drew the words.
 The second field in this application to conflate a name with a brief, after a
 style's name in `medium`. `Shot.label` holds the name, no prompt reads it, and
 naming a shot does not invalidate what it generated.
+
+### 19. The graph itself was not reachable from the cockpit
+
+Section 16 named three things that only a script could do. Checking the rest
+of the same surface found a fourth, and it was the one that decided whether
+the application could be used at all: a workflow could not be registered from
+the browser. A shot cannot be generated without a mapped workflow, so a person
+who installed the application and opened it had nothing to generate with and
+no page that would give them one. Both delivered episodes were produced by
+script partly for this reason.
+
+A Workflows stage now registers a graph from its API-format export, binds each
+logical field to a node id and input, records the frame rate the graph renders
+at, holds the settings it fixes rather than a shot deciding, and validates the
+mapping against the graph. It remains the only place in the application where a
+node id appears, which is the reason it is a page rather than a form buried in
+Generate.
+
+Three decisions on a shot went with it, grouped because they are the same kind
+of decision - how a shot is produced rather than what is in it - and each had
+already decided something in a delivered episode:
+
+* **Which workflow.** Both episodes were re-generated against a graph with a
+  higher guidance scale so the prompt could move the framing. Choosing that per
+  shot was a line in a Python file.
+* **Whether it reaches the cut.** A key image exists so a clip can be animated
+  from it. Left in the cut it plays as a still, and a 32-second film silently
+  became 48 with no error raised anywhere.
+* **What must not be in the frame.** Negatives existed only on a style, so "no
+  text on the newspaper" could not be said about the one shot holding a
+  newspaper.
+
+The client's workflow import was also wrong in a way no test caught: it posted
+JSON where the endpoint takes multipart, so the page could not have worked
+against it. The endpoint hashes the bytes it is given so a run traces back to
+the exact graph, and a re-encoded copy does not hash the same.
+
+## What the cockpit can and cannot do
+
+Checked on 2026-09-06 by taking each of the 137 methods in the API client and
+searching every page and component for a caller, then exercising the live
+server. A method with no caller is a decision a person cannot make in the
+browser, whatever the API supports.
+
+```
+                        +---------------------------------+
+  AI author  ---------> |  Scene                          |
+  (Story page)          |    title  summary  purpose      |
+                        |    time_of_day  duration  cast  |
+                        +---------------------------------+
+                                      ^
+  HTTP by hand ---------------------- +   no page writes any scene field,
+                                          and two of them reach the prompt
+
+                        +---------------------------------+
+  AI author  ---------> |  Shot                           | --> prompt compiler
+                        |    prompt  direction  captions  |          |
+  Cockpit    ---------> |    seed  references  continuity |          v
+  (Storyboard)          |    workflow  include_in_cut     |    ComfyUI / OpenAI
+                        |    negatives  audio             |          |
+                        +---------------------------------+          v
+                                      ^                        takes -> cut
+  HTTP by hand ---------------------- +   order, lens_framing,
+                                          environment, video_prompt
+
+  Also HTTP-only: brief_text (the AI author's other input) and the publish
+  title, description and hashtags at the far end of the same pipeline.
+```
+
+Reachable and exercised: channel house look and premises; project creation and
+editing; plot; characters, locations, styles; scene creation and deletion; shot
+creation, editing, deletion; references, character binding, continuity frames,
+motion direction, captions, seed and audio; workflow registration, mapping,
+frame rate, constants and validation; preflight, cost estimate, queue start,
+pause, resume, cancel and retry; approve, reject, regenerate, batch review and
+compositing; timeline build, render plan, render with narration and a chosen
+voice provider, subtitles and sound cues; all five exports; the quality rubric
+and publish gate; analytics.
+
+Not reachable from any page:
+
+| Gap | Evidence | Consequence |
+|---|---|---|
+| A scene cannot be edited | `scenes.update` has no caller | A scene is created as "Scene 3" and stays that way. Title, summary, purpose, time of day, emotional beat, duration, location and cast are read-only in the inspector, and time of day and summary reach the compiled prompt. |
+| Nothing can be reordered | `scenes.reorder` and `shots.reorder` have no caller | Shots append only. The storyboard also draws a drag handle on every shot row that does nothing, which is worse than omitting it. |
+| The creative brief has no field | The API client has no `story` namespace at all | `brief_text` cannot be written from the browser, while the backend's own error tells the creator to "write at least one on the Story page". |
+| Publication copy is read-only | `publishing.save` has no caller | Publish title, series label, description and hashtags - the text that is pasted into YouTube - can be inspected in the gate but not typed. Both episodes had theirs set by script. |
+| Three shot fields have no control | `lens_framing`, `environment`, `video_prompt` appear in no payload | Environment and lens framing reach the compiled prompt; the video prompt is what an image-to-video model is told, now largely covered by the motion direction beside it. |
+| A project's canvas is channel-only | `frame_rate` and `target_resolution` are written only by the channel form | A project created outside a channel keeps 24 fps and 1920x1080 with no way to change them, and a clip's frame count is computed from the frame rate. |
+| A project cannot be deleted | `projects.delete` has no caller | Abandoned projects accumulate in the switcher. |
+
+The shape of what is missing is consistent: the production pipeline is fully
+operable from the browser, and *writing the material by hand* is not. A creator
+who lets the AI author a storyboard and then generates, reviews, assembles and
+exports it can work entirely in the cockpit today. A creator who wants to type
+their own scenes cannot.
 
 ## Re-running the first episode on the pipeline the second one built
 
@@ -586,6 +682,27 @@ Two smaller findings from the same pass, both fixed:
 
 ## Prioritized follow-up requirements
 
+The first three come from the coverage check above and share one shape: the
+material can be generated but not written by hand. They rank ahead of the
+measurement work because each of them is currently a reason to open a terminal.
+
+0a. **A scene must be editable.** Title, summary, purpose, time of day,
+   emotional beat, planned duration, location and cast, written where the
+   scene is read. Two of those fields reach the compiled prompt, so this is
+   not only a naming convenience.
+0b. **Order must be changeable, or the drag handle must go.** Shots and scenes
+   need a reorder that saves, and until it exists the storyboard should not
+   draw a grip that cannot be dragged. Inserting a shot in the middle of a
+   scene is not currently possible at all.
+0c. **The creative brief needs a field.** `brief_text` is one of the two
+   inputs the AI author works from and the only one with no control, which is
+   why the backend's error message points at a field that does not exist.
+0d. Publication title, series label, description and hashtags typed in the
+   publish gate rather than set by script.
+0e. `lens_framing`, `environment` and `video_prompt` on the shot; project frame
+   rate and canvas for a project not started from a channel; deleting a
+   project.
+
 1. Complete render-input fingerprints across cut, narration, subtitles and
    sound, with freshness shown consistently in Timeline and Publish.
 2. Typed workflow controls for steps, LoRA switch, model canvas and frame
@@ -624,3 +741,11 @@ existing generation/continuity behavior. Frontend checks include tests,
 type/build, lint and actual browser navigation at desktop/mobile sizes.
 Record counts after the final code changes; counts in earlier PRDs are
 historical evidence and are not the current release result.
+
+At this revision: 1651 backend tests and 222 frontend tests passing,
+production build and both linters clean. The workflows endpoints and the three
+shot fields were additionally exercised against the running server rather than
+only under test - registration by multipart upload, mapping with a frame rate
+and fixed settings, validation against the graph, and a shot round-tripping its
+workflow, cut membership and negatives - with every temporary record removed
+afterwards.
