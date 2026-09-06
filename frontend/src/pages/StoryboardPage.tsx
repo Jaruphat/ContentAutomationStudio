@@ -13,7 +13,8 @@ import {
   ChevronDown,
   ChevronRight,
   Loader2,
-  GripVertical,
+  ChevronUp,
+  Pencil,
   Camera,
   Save,
   AlertCircle,
@@ -24,6 +25,7 @@ import StatusBadge from "../components/StatusBadge";
 import AIGenerationPanel from "../components/AIGenerationPanel";
 import MediaProviderFields from "../components/MediaProviderFields";
 import ShotProductionControls from "../components/ShotProductionControls";
+import SceneEditor from "../components/SceneEditor";
 import { ShotReferenceAssignment } from "../components/VisualReferenceBible";
 import { ShotCharacterBinding, ShotContinuityControls } from "../components/ShotContinuityControls";
 import type { MediaProviderId, Scene, SceneRole, Shot, ShotCreate } from "../types";
@@ -36,12 +38,18 @@ function ShotRow({
   sceneId,
   isSelected,
   onSelect,
+  onMove,
+  canMoveUp,
+  canMoveDown,
 }: {
   shot: Shot;
   projectId: string;
   sceneId: string;
   isSelected: boolean;
   onSelect: () => void;
+  onMove: (direction: -1 | 1) => void;
+  canMoveUp: boolean;
+  canMoveDown: boolean;
 }) {
   const qc = useQueryClient();
   const [editing, setEditing] = useState(false);
@@ -66,6 +74,9 @@ function ShotRow({
   const [workflowPresetId, setWorkflowPresetId] = useState(shot.workflow_preset_id ?? "");
   const [includeInCut, setIncludeInCut] = useState(shot.include_in_cut !== false);
   const [negativePrompt, setNegativePrompt] = useState(shot.negative_prompt ?? "");
+  const [lensFraming, setLensFraming] = useState(shot.lens_framing ?? "");
+  const [environment, setEnvironment] = useState(shot.environment ?? "");
+  const [videoPrompt, setVideoPrompt] = useState(shot.video_prompt ?? "");
 
   const referencesQ = useQuery({
     queryKey: ["references", projectId],
@@ -193,10 +204,52 @@ function ShotRow({
                 if (next.negativePrompt !== undefined) setNegativePrompt(next.negativePrompt);
               }}
             />
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <div>
+                {/* Both of these are sent with the prompt. The lens is the
+                    optical half of the framing term beside it; the environment
+                    is where the shot is, which a shot cannot inherit when its
+                    scene is somewhere else. */}
+                <label className="text-[10px] text-zinc-500 uppercase">Lens / Framing</label>
+                <input
+                  aria-label="Lens and framing"
+                  value={lensFraming}
+                  onChange={(e) => setLensFraming(e.target.value)}
+                  placeholder="35mm, shallow depth..."
+                  className="w-full rounded px-2 py-1 text-xs"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] text-zinc-500 uppercase">Environment</label>
+                <input
+                  aria-label="Shot environment"
+                  value={environment}
+                  onChange={(e) => setEnvironment(e.target.value)}
+                  placeholder="where this shot happens"
+                  className="w-full rounded px-2 py-1 text-xs"
+                />
+              </div>
+            </div>
             <div>
               <label className="text-[10px] text-zinc-500 uppercase">Image Prompt</label>
               <textarea aria-label="Image prompt" value={imagePrompt} onChange={(e) => setImagePrompt(e.target.value)} className="w-full rounded px-2 py-1 text-xs" rows={2} />
             </div>
+            {genMode !== "image" && (
+              <div>
+                {/* Only where a clip is made. On a still it would be a field
+                    that reaches nothing, which is how a prompt gets written
+                    and then quietly ignored. */}
+                <label className="text-[10px] text-zinc-500 uppercase">Video Prompt</label>
+                <textarea
+                  aria-label="Video prompt"
+                  value={videoPrompt}
+                  onChange={(e) => setVideoPrompt(e.target.value)}
+                  rows={2}
+                  placeholder="what the clip does, if the motion direction is not enough"
+                  className="w-full rounded px-2 py-1 text-xs"
+                />
+              </div>
+            )}
             <div className="flex justify-end gap-1">
               <button
                 onClick={() => setEditing(false)}
@@ -223,6 +276,9 @@ function ShotRow({
                     workflow_preset_id: workflowPresetId || null,
                     include_in_cut: includeInCut,
                     negative_prompt: negativePrompt,
+                    lens_framing: lensFraming,
+                    environment: environment,
+                    video_prompt: videoPrompt,
                   })
                 }
                 disabled={updateMut.isPending}
@@ -246,9 +302,30 @@ function ShotRow({
       }`}
     >
       <td className="px-2 py-2 text-center">
-        <div className="flex items-center justify-center gap-1">
-          <GripVertical size={12} className="text-zinc-500" />
+        {/* This used to be a drag handle that could not be dragged: the icon
+            was drawn, nothing listened, and a shot could only be appended.
+            Two buttons instead - they work, they are reachable by keyboard,
+            and they say what they do. */}
+        <div className="flex items-center justify-center gap-0.5">
           <span className="text-xs text-zinc-500">{shot.order}</span>
+          <div className="flex flex-col">
+            <button
+              aria-label={`Move shot ${shot.order} earlier`}
+              disabled={!canMoveUp}
+              onClick={(e) => { e.stopPropagation(); onMove(-1); }}
+              className="text-zinc-500 hover:text-zinc-200 disabled:opacity-25"
+            >
+              <ChevronUp size={11} />
+            </button>
+            <button
+              aria-label={`Move shot ${shot.order} later`}
+              disabled={!canMoveDown}
+              onClick={(e) => { e.stopPropagation(); onMove(1); }}
+              className="text-zinc-500 hover:text-zinc-200 disabled:opacity-25"
+            >
+              <ChevronDown size={11} />
+            </button>
+          </div>
         </div>
       </td>
       <td className="px-2 py-2 text-xs text-zinc-300">{shot.shot_type || "--"}</td>
@@ -277,6 +354,7 @@ function ShotRow({
       <td className="px-2 py-2">
         <div className="flex gap-1">
           <button
+            aria-label={`Edit shot ${shot.order}`}
             onClick={(e) => {
               e.stopPropagation();
               setEditing(true);
@@ -286,6 +364,7 @@ function ShotRow({
             <Camera size={13} />
           </button>
           <button
+            aria-label={`Delete shot ${shot.order}`}
             onClick={(e) => {
               e.stopPropagation();
               deleteMut.mutate();
@@ -305,11 +384,18 @@ function ShotRow({
 function SceneCard({
   scene,
   projectId,
+  onMove,
+  canMoveUp,
+  canMoveDown,
 }: {
   scene: Scene;
   projectId: string;
+  onMove: (direction: -1 | 1) => void;
+  canMoveUp: boolean;
+  canMoveDown: boolean;
 }) {
   const [expanded, setExpanded] = useState(true);
+  const [editingScene, setEditingScene] = useState(false);
   const { selectedShotId } = useAppState();
   const dispatch = useAppDispatch();
   const qc = useQueryClient();
@@ -325,6 +411,23 @@ function SceneCard({
     onSuccess: () =>
       qc.invalidateQueries({ queryKey: ["scenes", projectId] }),
   });
+
+  // Reordering sends the whole list in its new order rather than one shot's
+  // new index, because two shots swapping places is one decision and half of
+  // it applied is a storyboard with two shot 3s.
+  const reorderShotsMut = useMutation({
+    mutationFn: (ids: string[]) => api.shots.reorder(projectId, scene.id, ids),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["shots", projectId, scene.id] }),
+  });
+
+  const moveShot = (index: number, direction: -1 | 1) => {
+    const ids = (shotsQ.data ?? []).map((s) => s.id);
+    const target = index + direction;
+    if (target < 0 || target >= ids.length) return;
+    [ids[index], ids[target]] = [ids[target], ids[index]];
+    reorderShotsMut.mutate(ids);
+  };
 
   const addShotMut = useMutation({
     mutationFn: () =>
@@ -370,6 +473,30 @@ function SceneCard({
           {scene.planned_duration_sec}s
         </span>
         <button
+          aria-label={`Move scene ${scene.order} earlier`}
+          disabled={!canMoveUp}
+          onClick={() => onMove(-1)}
+          className="rounded p-1 text-zinc-500 hover:bg-zinc-700 hover:text-zinc-300 disabled:opacity-25"
+        >
+          <ChevronUp size={13} />
+        </button>
+        <button
+          aria-label={`Move scene ${scene.order} later`}
+          disabled={!canMoveDown}
+          onClick={() => onMove(1)}
+          className="rounded p-1 text-zinc-500 hover:bg-zinc-700 hover:text-zinc-300 disabled:opacity-25"
+        >
+          <ChevronDown size={13} />
+        </button>
+        <button
+          aria-label={`Edit scene ${scene.order}`}
+          onClick={() => setEditingScene(!editingScene)}
+          className="rounded p-1 text-zinc-500 hover:bg-zinc-700 hover:text-zinc-300"
+        >
+          <Pencil size={13} />
+        </button>
+        <button
+          aria-label={`Delete scene ${scene.order}`}
           onClick={() => deleteSceneMut.mutate()}
           className="rounded p-1 text-zinc-500 hover:bg-red-900/50 hover:text-red-400"
           title="Delete scene"
@@ -377,6 +504,14 @@ function SceneCard({
           <Trash2 size={13} />
         </button>
       </div>
+
+      {editingScene && (
+        <SceneEditor
+          projectId={projectId}
+          scene={scene}
+          onDone={() => setEditingScene(false)}
+        />
+      )}
 
       {/* Shots table */}
       {expanded && (
@@ -407,12 +542,15 @@ function SceneCard({
                 </tr>
               </thead>
               <tbody>
-                {shotsQ.data.map((shot) => (
+                {shotsQ.data.map((shot, index) => (
                   <ShotRow
                     key={shot.id}
                     shot={shot}
                     projectId={projectId}
                     sceneId={scene.id}
+                    onMove={(direction) => moveShot(index, direction)}
+                    canMoveUp={index > 0}
+                    canMoveDown={index < (shotsQ.data?.length ?? 0) - 1}
                     isSelected={selectedShotId === shot.id}
                     onSelect={() => {
                       dispatch({ type: "SELECT_SCENE", id: scene.id });
@@ -455,6 +593,24 @@ export default function StoryboardPage() {
     queryFn: () => api.scenes.list(currentProjectId!),
     enabled: !!currentProjectId,
   });
+
+  // `sort` mutates, so the query's own cached array was being reordered in
+  // place on every render before this. A copy sorts; the cache is left alone.
+  const ordered = [...(scenesQ.data ?? [])].sort((a, b) => a.order - b.order);
+
+  const reorderScenesMut = useMutation({
+    mutationFn: (ids: string[]) => api.scenes.reorder(currentProjectId!, ids),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["scenes", currentProjectId] }),
+  });
+
+  const moveScene = (index: number, direction: -1 | 1) => {
+    const ids = ordered.map((scene) => scene.id);
+    const target = index + direction;
+    if (target < 0 || target >= ids.length) return;
+    [ids[index], ids[target]] = [ids[target], ids[index]];
+    reorderScenesMut.mutate(ids);
+  };
 
   const addSceneMut = useMutation({
     mutationFn: () =>
@@ -550,15 +706,16 @@ export default function StoryboardPage() {
 
       {/* Scene list */}
       <div className="space-y-3">
-        {scenesQ.data
-          ?.sort((a, b) => a.order - b.order)
-          .map((scene) => (
-            <SceneCard
-              key={scene.id}
-              scene={scene}
-              projectId={currentProjectId}
-            />
-          ))}
+        {ordered.map((scene, index) => (
+          <SceneCard
+            key={scene.id}
+            scene={scene}
+            projectId={currentProjectId}
+            onMove={(direction) => moveScene(index, direction)}
+            canMoveUp={index > 0}
+            canMoveDown={index < ordered.length - 1}
+          />
+        ))}
       </div>
     </div>
   );

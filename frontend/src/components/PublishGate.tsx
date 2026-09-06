@@ -38,6 +38,22 @@ export default function PublishGate({ projectId }: { projectId: string }) {
     queryFn: () => api.publishing.get(projectId),
   });
 
+  // The text that is actually pasted into YouTube. It could be read here and
+  // written only by posting to the API, so both delivered episodes had theirs
+  // set from a script. Kept separate from the working title, which is what the
+  // project is called while it is being made and is nobody's business outside.
+  const [copy, setCopy] = useState<{
+    publish_title: string;
+    series_label: string;
+    publish_description: string;
+    publish_hashtags: string;
+  } | null>(null);
+
+  const saveCopy = useMutation({
+    mutationFn: () => api.publishing.save(projectId, copy ?? {}),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["publish-package", projectId] }),
+  });
+
   const record = useMutation({
     mutationFn: () =>
       api.quality.record(projectId, {
@@ -168,6 +184,86 @@ export default function PublishGate({ projectId }: { projectId: string }) {
             </li>
           ))}
         </ul>
+      )}
+
+      {/* -- What gets pasted into the upload form --------------------------- */}
+      {pkg && (
+        <div className="space-y-2 border-t border-zinc-800 pt-3">
+          <p className="text-xs font-medium text-zinc-200">Publication copy</p>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <label className="block text-[10px] uppercase text-zinc-500">
+              Published title
+              <input
+                aria-label="Published title"
+                value={copy?.publish_title ?? pkg.publish_title}
+                onChange={(e) => setCopy({
+                  publish_title: e.target.value,
+                  series_label: copy?.series_label ?? pkg.series_label,
+                  publish_description: copy?.publish_description ?? pkg.publish_description,
+                  publish_hashtags: copy?.publish_hashtags ?? pkg.publish_hashtags,
+                })}
+                className="w-full rounded border border-zinc-700 bg-zinc-900 px-2 py-1 text-xs text-zinc-100"
+              />
+            </label>
+            <label className="block text-[10px] uppercase text-zinc-500">
+              Series label
+              <input
+                aria-label="Series label"
+                value={copy?.series_label ?? pkg.series_label}
+                onChange={(e) => setCopy({
+                  publish_title: copy?.publish_title ?? pkg.publish_title,
+                  series_label: e.target.value,
+                  publish_description: copy?.publish_description ?? pkg.publish_description,
+                  publish_hashtags: copy?.publish_hashtags ?? pkg.publish_hashtags,
+                })}
+                className="w-full rounded border border-zinc-700 bg-zinc-900 px-2 py-1 text-xs text-zinc-100"
+              />
+            </label>
+          </div>
+          <label className="block text-[10px] uppercase text-zinc-500">
+            Description
+            <textarea
+              aria-label="Published description"
+              rows={3}
+              value={copy?.publish_description ?? pkg.publish_description}
+              onChange={(e) => setCopy({
+                publish_title: copy?.publish_title ?? pkg.publish_title,
+                series_label: copy?.series_label ?? pkg.series_label,
+                publish_description: e.target.value,
+                publish_hashtags: copy?.publish_hashtags ?? pkg.publish_hashtags,
+              })}
+              className="w-full rounded border border-zinc-700 bg-zinc-900 px-2 py-1 text-xs text-zinc-100"
+            />
+          </label>
+          <label className="block text-[10px] uppercase text-zinc-500">
+            Hashtags
+            <input
+              aria-label="Published hashtags"
+              value={copy?.publish_hashtags ?? pkg.publish_hashtags}
+              onChange={(e) => setCopy({
+                publish_title: copy?.publish_title ?? pkg.publish_title,
+                series_label: copy?.series_label ?? pkg.series_label,
+                publish_description: copy?.publish_description ?? pkg.publish_description,
+                publish_hashtags: e.target.value,
+              })}
+              placeholder="#shorts #horror"
+              className="w-full rounded border border-zinc-700 bg-zinc-900 px-2 py-1 text-xs text-zinc-100"
+            />
+          </label>
+          <button
+            type="button"
+            onClick={() => saveCopy.mutate()}
+            disabled={!copy || saveCopy.isPending}
+            className="rounded bg-zinc-800 px-3 py-1 text-xs text-zinc-200 hover:bg-zinc-700 disabled:opacity-50"
+          >
+            {saveCopy.isPending ? "Saving…" : "Save publication copy"}
+          </button>
+          {saveCopy.isError && (
+            <p role="alert" className="text-[11px] text-red-300">
+              {toAIError(saveCopy.error).detail}
+            </p>
+          )}
+        </div>
       )}
 
       {/* -- The package ---------------------------------------------------- */}

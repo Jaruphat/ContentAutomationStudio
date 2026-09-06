@@ -427,6 +427,15 @@ export default function StoryPage() {
   const [duration, setDuration] = useState("180");
   const [language, setLanguage] = useState("en");
   const [plot, setPlot] = useState("");
+  // The AI author works from the brief and the plot, either one alone being
+  // enough. Only the plot had a field, so the backend's own error - "write at
+  // least one on the Story page" - named something that was not there.
+  const [brief, setBrief] = useState("");
+  // The canvas a project delivers at. Inherited from a channel when an episode
+  // starts from one; a project made here kept 24 fps and 1920x1080 with no way
+  // to change either, and a clip's frame count is computed from the rate.
+  const [frameRate, setFrameRate] = useState("24");
+  const [resolution, setResolution] = useState("1920x1080");
 
   const applyNewProjectTemplate = (id: NewProjectTemplateId) => {
     const next = newProjectTemplate(id);
@@ -438,6 +447,9 @@ export default function StoryPage() {
     setDuration(next.duration);
     setLanguage(next.language);
     setPlot(next.plot);
+    setBrief("");
+    setFrameRate("24");
+    setResolution(next.aspectRatio === "9:16" ? "1080x1920" : "1920x1080");
   };
 
   // ── Story Bible inline form toggles ─────────────────────────────────────
@@ -486,6 +498,9 @@ export default function StoryPage() {
       setDuration(String(p.target_duration_sec));
       setLanguage(p.language);
       setPlot(p.plot_text);
+      setBrief(p.brief_text);
+      setFrameRate(String(p.frame_rate));
+      setResolution(p.target_resolution);
     }
   }, [projectQ.data, currentProjectId, creatingProject]);
 
@@ -515,6 +530,9 @@ export default function StoryPage() {
         target_duration_sec: parseFloat(duration) || 180,
         language,
         plot_text: plot,
+        brief_text: brief,
+        frame_rate: parseFloat(frameRate) || 24,
+        target_resolution: resolution,
       };
       return persistProject({ creatingProject, currentProjectId, payload });
     },
@@ -722,6 +740,24 @@ export default function StoryPage() {
               <TextInput value={language} onChange={setLanguage} placeholder="en" />
             </FormField>
           </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <FormField label="Frame Rate (fps)">
+              <TextInput value={frameRate} onChange={setFrameRate} placeholder="24" />
+            </FormField>
+            <FormField label="Delivery Resolution">
+              <TextInput value={resolution} onChange={setResolution} placeholder="1920x1080" />
+            </FormField>
+          </div>
+
+          <FormField label="Creative Brief">
+            <TextArea
+              value={brief}
+              onChange={setBrief}
+              placeholder="What this is for, who it is for, what it must and must not do. The AI author reads this and the plot below; either one alone is enough."
+              rows={5}
+            />
+          </FormField>
         </div>
       </Section>
 

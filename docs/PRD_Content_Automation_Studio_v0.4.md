@@ -21,8 +21,8 @@ ComfyUI and FFmpeg. It is not a multi-user hosted publishing service.
 | Stage | Current capability | Acceptance requirement |
 |---|---|---|
 | Channel | House style, voice and sound direction, pillars, hooks, premise bank | Starting an episode copies the selected channel context; later channel edits do not silently rewrite the episode. |
-| Story | Brief, plot, story bible, locations, characters, AI-assisted outlining | Show provider availability and failures; preserve creator edits. |
-| Storyboard | Scenes, shots, direction, dialogue, emphasis, references, the workflow a shot uses, whether it reaches the cut, its own negatives | Preview and real generation use the same prompt builder. Unknown request fields are refused. A scene's own fields are not yet editable here. |
+| Story | Brief, plot, story bible, locations, characters, delivery canvas and frame rate, AI-assisted outlining | Show provider availability and failures; preserve creator edits. |
+| Storyboard | Scenes and their own fields, shots, order, direction, dialogue, emphasis, references, the workflow a shot uses, whether it reaches the cut, its own negatives | Preview and real generation use the same prompt builder. Unknown request fields are refused. Every field the AI author writes, a person can also write. |
 | Identity | Versioned character sets and explicitly approved canonical views | Bound views are actual provider image inputs with recorded hashes. |
 | Continuity | Explicit approved start and optional landing frames | Stale, missing, or incompatible source bindings block generation. |
 | Generate | Preflight, cost estimate, queued runs, progress, retry, cancellation. Registering a graph, binding its inputs, its frame rate and its fixed settings are a stage of their own | Preserve the actual graph, prompt, seed, references and provider settings. Explain unmapped fields. Registering and mapping a workflow must be possible without an HTTP client. |
@@ -428,31 +428,29 @@ the exact graph, and a re-encoded copy does not hash the same.
 Checked on 2026-09-06 by taking each of the 137 methods in the API client and
 searching every page and component for a caller, then exercising the live
 server. A method with no caller is a decision a person cannot make in the
-browser, whatever the API supports.
+browser, whatever the API supports. Seven were found; all seven were then
+built, and this section is kept as the record of what they cost.
 
 ```
                         +---------------------------------+
   AI author  ---------> |  Scene                          |
   (Story page)          |    title  summary  purpose      |
                         |    time_of_day  duration  cast  |
-                        +---------------------------------+
-                                      ^
-  HTTP by hand ---------------------- +   no page writes any scene field,
-                                          and two of them reach the prompt
+  Cockpit    ---------> |    location  order              |
+  (Storyboard)          +---------------------------------+
 
                         +---------------------------------+
   AI author  ---------> |  Shot                           | --> prompt compiler
                         |    prompt  direction  captions  |          |
   Cockpit    ---------> |    seed  references  continuity |          v
   (Storyboard)          |    workflow  include_in_cut     |    ComfyUI / OpenAI
-                        |    negatives  audio             |          |
-                        +---------------------------------+          v
-                                      ^                        takes -> cut
-  HTTP by hand ---------------------- +   order, lens_framing,
-                                          environment, video_prompt
+                        |    negatives  audio  lens       |          |
+                        |    environment  order           |          v
+                        +---------------------------------+    takes -> cut
 
-  Also HTTP-only: brief_text (the AI author's other input) and the publish
-  title, description and hashtags at the far end of the same pipeline.
+  Every field either writer can reach, both writers can reach. That was not
+  true when this was drawn: no page wrote any scene field, shots could only be
+  appended, and the brief the AI author reads had no control at all.
 ```
 
 Reachable and exercised: channel house look and premises; project creation and
@@ -465,9 +463,11 @@ compositing; timeline build, render plan, render with narration and a chosen
 voice provider, subtitles and sound cues; all five exports; the quality rubric
 and publish gate; analytics.
 
-Not reachable from any page:
+All seven of these have since been built and are exercised by the browser
+walk-through described below. They are kept here with their evidence, because
+what each one cost is the argument for looking again:
 
-| Gap | Evidence | Consequence |
+| Gap, now closed | Evidence it was missing | What it cost |
 |---|---|---|
 | A scene cannot be edited | `scenes.update` has no caller | A scene is created as "Scene 3" and stays that way. Title, summary, purpose, time of day, emotional beat, duration, location and cast are read-only in the inspector, and time of day and summary reach the compiled prompt. |
 | Nothing can be reordered | `scenes.reorder` and `shots.reorder` have no caller | Shots append only. The storyboard also draws a drag handle on every shot row that does nothing, which is worse than omitting it. |
@@ -477,11 +477,41 @@ Not reachable from any page:
 | A project's canvas is channel-only | `frame_rate` and `target_resolution` are written only by the channel form | A project created outside a channel keeps 24 fps and 1920x1080 with no way to change them, and a clip's frame count is computed from the frame rate. |
 | A project cannot be deleted | `projects.delete` has no caller | Abandoned projects accumulate in the switcher. |
 
-The shape of what is missing is consistent: the production pipeline is fully
-operable from the browser, and *writing the material by hand* is not. A creator
-who lets the AI author a storyboard and then generates, reviews, assembles and
-exports it can work entirely in the cockpit today. A creator who wants to type
-their own scenes cannot.
+The shape of what was missing was consistent, and worth stating because it is
+the thing to watch for next time: the production pipeline was fully operable
+from the browser, and *writing the material by hand* was not. Everything that
+generates, judges, assembles and exports had a control, because that is the
+part that gets exercised while building a pipeline. The part a creator does
+alone at a keyboard - name the scene, reorder the shots, write the brief, title
+the film - had none, because it was always done from a script while the
+pipeline was being proved.
+
+Two of them were not merely absent but misleading, which is worse: the
+storyboard drew a drag handle on every shot row that could not be dragged, and
+the backend's own error told the creator to write a brief "on the Story page"
+where no such field existed.
+
+### Closing them
+
+Each of the seven is now a control on the page where the decision belongs, and
+each is exercised by the walk-through below rather than only by a unit test.
+Three needed a design decision rather than a form:
+
+* **Reordering is buttons, not dragging.** A drag handle was already there and
+  already a lie; replacing it with drag-and-drop would have meant a gesture
+  that cannot be performed by keyboard and is awkward to prove works. Two
+  buttons per row move a shot or a scene, and the whole list is sent in its
+  new order rather than one item's new index - two shots swapping places is
+  one decision, and half of it applied is a storyboard with two shot 3s.
+* **The video prompt appears only where a clip is made.** On a still it would
+  be a field that reaches nothing, which is how a prompt gets carefully
+  written and then quietly ignored.
+* **A scene's cast and location are chosen, not typed.** A scene naming a
+  character who does not exist is a scene whose prompt silently loses them.
+
+The publication copy is offered before the gate passes rather than after.
+Naming the film is part of finishing it, and waiting for a green scorecard
+would mean the last thing a creator does has to happen somewhere else.
 
 ### The walk-through, in a browser
 
@@ -512,10 +542,18 @@ have:
   eye from the card around them, indistinguishable to anything that navigates
   by name. Each now says which export it is.
 
-A second case covers the refusal rather than the success: a shot with no
-prompt is blocked at preflight, the reason is named on the page, and Generate
-stays disabled. A queue that accepts an empty shot spends a GPU minute drawing
-nothing, and the first place anyone would find out is Review.
+It grew with the seven controls. It now also names a scene and writes its time
+of day and summary, moves a shot earlier and back, marks a second shot as a
+key image kept out of the cut - and then asserts the cut is one item, not two,
+which is the exact failure that turned a 32-second film into 48. A second case
+covers refusal rather than success: a shot with no prompt is blocked at
+preflight, the reason is named on the page, and Generate stays disabled. A
+third types the publication copy, reloads the page to prove it was saved rather
+than only typed, and deletes a project whose title is not ASCII, because this
+runs on Windows and those are the paths that break.
+
+A queue that accepts an empty shot spends a GPU minute drawing nothing, and the
+first place anyone would find out is Review. That is what these cases are for.
 
 ## Re-running the first episode on the pipeline the second one built
 
@@ -720,22 +758,11 @@ The first three come from the coverage check above and share one shape: the
 material can be generated but not written by hand. They rank ahead of the
 measurement work because each of them is currently a reason to open a terminal.
 
-0a. **A scene must be editable.** Title, summary, purpose, time of day,
-   emotional beat, planned duration, location and cast, written where the
-   scene is read. Two of those fields reach the compiled prompt, so this is
-   not only a naming convenience.
-0b. **Order must be changeable, or the drag handle must go.** Shots and scenes
-   need a reorder that saves, and until it exists the storyboard should not
-   draw a grip that cannot be dragged. Inserting a shot in the middle of a
-   scene is not currently possible at all.
-0c. **The creative brief needs a field.** `brief_text` is one of the two
-   inputs the AI author works from and the only one with no control, which is
-   why the backend's error message points at a field that does not exist.
-0d. Publication title, series label, description and hashtags typed in the
-   publish gate rather than set by script.
-0e. `lens_framing`, `environment` and `video_prompt` on the shot; project frame
-   rate and canvas for a project not started from a channel; deleting a
-   project.
+~~0a-0e~~ Done. Scene editing, reordering, the creative brief, publication
+copy, the three remaining shot fields, a project's frame rate and canvas, and
+deleting a project are all controls on the page now, covered by unit tests and
+by the browser walk-through. What remains below is measurement and evidence
+work, not reachability.
 
 1. Complete render-input fingerprints across cut, narration, subtitles and
    sound, with freshness shown consistently in Timeline and Publish.
@@ -776,7 +803,8 @@ type/build, lint and actual browser navigation at desktop/mobile sizes.
 Record counts after the final code changes; counts in earlier PRDs are
 historical evidence and are not the current release result.
 
-At this revision: 1651 backend tests and 222 frontend tests passing,
+At this revision: 1651 backend tests, 233 frontend tests and 3 browser
+walk-through cases passing,
 production build and both linters clean. The workflows endpoints and the three
 shot fields were additionally exercised against the running server rather than
 only under test - registration by multipart upload, mapping with a frame rate

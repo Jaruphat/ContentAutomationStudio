@@ -81,19 +81,38 @@ test("a creator can take an episode from nothing to an export", async ({ page })
   await page.getByLabel("Objective").fill(
     "A short film about a stairwell that gains a floor overnight.",
   );
+  await page.getByLabel("Creative Brief").fill(
+    "A two-minute unease piece for a late-night channel. No gore, no jump "
+    + "scares, nothing explained.",
+  );
   await page.getByLabel("Plot / Narrative").fill(
     "A caretaker counts the landings on his round. Tonight there is one more.",
   );
+  await page.getByLabel("Frame Rate (fps)").fill("30");
   await page.getByRole("button", { name: "Create Project" }).click();
   await expect(page.getByText("Project saved successfully.")).toBeVisible();
 
   // ── 3. A scene and a shot ─────────────────────────────────────────────
   await stage(page, "Storyboard");
   await page.getByRole("button", { name: "Add Scene" }).click();
+
+  // A scene arrives called "Scene 1" and everything about it used to be
+  // read-only. Two of these fields reach the compiled prompt.
+  await page.getByRole("button", { name: /^Edit scene / }).click();
+  await page.getByLabel("Scene title").fill("The upstairs hall");
+  await page.getByLabel("Scene time of day").fill("night");
+  await page.getByLabel("Scene summary").fill(
+    "He counts the landings and finds one more.",
+  );
+  await page.getByLabel("Scene planned duration in seconds").fill("12");
+  await page.getByRole("button", { name: "Save scene" }).click();
+  await expect(page.getByText("The upstairs hall")).toBeVisible();
+
   await page.getByRole("button", { name: "Add Shot" }).click();
 
   // The camera icon opens the inline editor on the shot row.
-  await page.locator("tbody tr").first().locator("button").first().click();
+  await page.locator("tbody tr").first()
+    .getByRole("button", { name: /^Edit shot / }).click();
   await page.getByLabel("Shot workflow").selectOption({ label: WORKFLOW_NAME });
   await page.getByLabel("Shot negative prompt").fill("no text, no lettering");
   await page.getByLabel("Shot subject").fill("A caretaker on a concrete landing");
@@ -106,12 +125,39 @@ test("a creator can take an episode from nothing to an export", async ({ page })
   await page.getByRole("button", { name: "Save" }).click();
   await expect(page.getByText("A caretaker on a concrete landing")).toBeVisible();
 
+  // A second shot, so order is something that can be got wrong. The storyboard
+  // used to draw a drag handle that did not drag, and appending was the only
+  // way a shot could arrive.
+  await page.getByRole("button", { name: "Add Shot" }).click();
+  await expect(page.locator("tbody tr")).toHaveCount(2);
+  const second = page.locator("tbody tr").nth(1);
+  await second.getByRole("button", { name: /earlier$/ }).click();
+  await expect(
+    page.locator("tbody tr").first().getByText("A caretaker on a concrete landing"),
+  ).toHaveCount(0);
+  await page.locator("tbody tr").first().getByRole("button", { name: /later$/ }).click();
+  await expect(
+    page.locator("tbody tr").first().getByText("A caretaker on a concrete landing"),
+  ).toBeVisible();
+
+  // The second shot is a key image: generated like any other, and kept out of
+  // the cut because it exists only for a later clip to animate from. This is
+  // the control that stops a 32-second film quietly becoming 48.
+  await page.locator("tbody tr").nth(1)
+    .getByRole("button", { name: /^Edit shot / }).click();
+  await page.getByLabel("Shot workflow").selectOption({ label: WORKFLOW_NAME });
+  await page.getByLabel("Include this shot in the cut").uncheck();
+  await page.getByLabel("Image prompt").fill(
+    "The same landing, empty, lit only by the failing tube.",
+  );
+  await page.getByRole("button", { name: "Save" }).click();
+
   // ── 4. Generate ───────────────────────────────────────────────────────
   // The shot names its own workflow, so no project default is needed. What
   // the page must do is refuse until the shot is actually ready, and say why.
   await stage(page, "Generate");
   await page.getByRole("button", { name: "Run preflight" }).click();
-  await expect(page.getByText("All 1 shot(s) ready to generate")).toBeVisible();
+  await expect(page.getByText("All 2 shot(s) ready to generate")).toBeVisible();
   await expect(page.getByText("0 blocking issues")).toBeVisible();
 
   // Mock generation is gated behind an explicit acknowledgement that what
@@ -127,6 +173,8 @@ test("a creator can take an episode from nothing to an export", async ({ page })
   await stage(page, "Review");
   const approve = page.getByRole("button", { name: "Approve", exact: true });
   await expect(approve.first()).toBeVisible({ timeout: 60_000 });
+  await expect(approve).toHaveCount(2, { timeout: 60_000 });
+  await approve.first().click();
   await approve.first().click();
   // Approve is only offered on a Pending take, so its disappearance is the
   // decision having been recorded rather than a badge that says so.
@@ -135,7 +183,9 @@ test("a creator can take an episode from nothing to an export", async ({ page })
   // ── 6. The cut ────────────────────────────────────────────────────────
   await stage(page, "Timeline");
   await page.getByRole("button", { name: "Build Timeline" }).click();
-  // Six seconds because that is what was typed into the shot, not a default.
+  // One item, not two: both shots generated and both were approved, and the
+  // key image stayed out because its "include in the cut" was cleared. Six
+  // seconds because that is what was typed into the shot, not a default.
   await expect(page.getByText(/1 item .* 6\.0s/)).toBeVisible();
 
   // ── 7. Export ─────────────────────────────────────────────────────────
@@ -170,4 +220,37 @@ test("the queue refuses a shot that has nothing to draw, and says which", async 
   await expect(page.getByText("Missing image prompt")).toBeVisible();
   await expect(page.getByText("1 blocking issue")).toBeVisible();
   await expect(page.getByTestId("generate-button")).toBeDisabled();
+});
+
+test("an episode can be named for upload, and a project thrown away", async ({ page }) => {
+  // The last two things a creator does that used to need an HTTP client: type
+  // the text that goes in the upload form, and get rid of a project that went
+  // nowhere.
+  await page.goto("/story");
+  await page.getByRole("button", { name: "New" }).click();
+  await page.getByLabel("Project Title").fill("A试 project — ตั้งชื่อ");
+  await page.getByRole("button", { name: "Create Project" }).click();
+  await expect(page.getByText("Project saved successfully.")).toBeVisible();
+
+  await stage(page, "Export");
+  await page.getByLabel("Published title").fill("The Extra Room");
+  await page.getByLabel("Series label").fill("Strange Floors");
+  await page.getByLabel("Published description").fill(
+    "A caretaker counts the landings on his round.",
+  );
+  await page.getByLabel("Published hashtags").fill("#shorts #liminal");
+  await page.getByRole("button", { name: "Save publication copy" }).click();
+
+  // Saved, not just typed: the page is reloaded and the text is still there.
+  await page.reload();
+  await expect(page.getByLabel("Published title")).toHaveValue("The Extra Room");
+  await expect(page.getByLabel("Published hashtags")).toHaveValue("#shorts #liminal");
+
+  // A project with a non-ASCII title, because this runs on Windows and the
+  // paths under it are the ones that break.
+  await page.getByRole("button", { name: "Delete this project" }).click();
+  await page.getByRole("button", { name: "Delete", exact: true }).click();
+  await expect(
+    page.getByRole("combobox", { name: "Switch project" }),
+  ).not.toContainText("A试 project");
 });

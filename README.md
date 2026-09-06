@@ -531,27 +531,27 @@ The frontend uses a production cockpit layout:
 - **Status states**: Draft / Ready / Generating / Needs Review / Approved / Failed
 - **Approval gates**: Required before Generation and Final Render stages
 
-#### What still needs an HTTP client
+#### Everything is reachable from the browser
 
-Checked on 2026-09-06 by looking for a caller of every method in the API
-client. The production pipeline - generate, review, assemble, export - is fully
-operable from the browser. Writing the material by hand is not:
+An audit on 2026-09-06 looked for a caller of every method in the API client
+and found seven decisions that could only be made by posting to the API. All
+seven now have controls, and the browser walk-through exercises them:
 
-- A **scene** cannot be edited. It is created as `Scene 3`; its title, summary,
-  purpose, time of day, duration, location and cast are read-only, and two of
-  those reach the compiled prompt.
-- **Nothing can be reordered.** Shots append only, and the storyboard draws a
-  drag handle on each row that does not drag.
-- The **creative brief** (`brief_text`) has no field, though the AI author reads
-  it and the backend's error message names it.
-- **Publication title, description and hashtags** can be read in the publish
-  gate but not typed.
-- `lens_framing`, `environment` and `video_prompt` on a shot have no control;
-  nor do a project's frame rate and canvas unless it came from a channel; nor
-  can a project be deleted.
-
-Ranked as items 0a-0e in
-[PRD v0.4](docs/PRD_Content_Automation_Studio_v0.4.md#prioritized-follow-up-requirements).
+- A **scene** is editable - title, summary, purpose, time of day, emotional
+  beat, planned duration, location and cast. Time of day and summary reach the
+  compiled prompt, which is why the form says so beside them.
+- **Scenes and shots reorder.** The storyboard used to draw a drag handle that
+  did not drag; it is now two buttons per row that do, and are reachable by
+  keyboard.
+- The **creative brief** has a field on the Story page, beside the plot. The AI
+  author reads both and either one alone is enough.
+- **Publication title, series, description and hashtags** are typed in the
+  publish gate and saved with the package.
+- `lens_framing`, `environment` and `video_prompt` are on the shot; the video
+  prompt only where a clip is actually made.
+- A project's **frame rate and delivery resolution** are editable whether or
+  not it came from a channel. A clip's frame count is computed from the rate.
+- A **project can be deleted**, after confirming in place.
 
 ---
 
