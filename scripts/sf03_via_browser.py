@@ -47,9 +47,13 @@ PHASES = {
     "reject-first-pass": "rejects what the first pass",
     "remake": "re-makes the one key image",
     "generate": "generates the key images",
+    "run-ready": "runs the shots that are ready",
     "approve-and-run": "approves what is waiting",
     "stop-clips": "stops the clips",
+    "remake-clip": "remakes the clip whose first take",
+    "place-clip": "puts the remade clip",
     "bind-first": "binds the first clip",
+    "bind-all": "approves the key images and gives",
     "clips": "generates the clips",
     "assemble": "assembles",
 }

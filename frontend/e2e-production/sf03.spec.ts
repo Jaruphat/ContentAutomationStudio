@@ -690,3 +690,172 @@ test("binds the first clip to its own key image and makes it", async ({ page }) 
     page.getByText(/Bound to|Start frame:|capture/i).first(),
   ).toBeVisible({ timeout: 60_000 });
 });
+
+test("remakes the clip whose first take was thrown away", async ({ page }) => {
+  // The clip for beat one was generated from the scene's plate before its own
+  // key image existed, so it was rejected. On the server this project runs
+  // against, a shot whose takes are all rejected keeps the mark of what it
+  // produced and is refused as stale for ever - the fix for that is committed
+  // but not yet running here. The way out with the pages alone is to make the
+  // shot again: delete it, type it back, and move it to where it belongs.
+  const beat = SHOTS[0];
+  await selectEpisode(page);
+  await stage(page, "Storyboard");
+
+  const rows = page.locator("tbody").first().locator("tr");
+  await expect(rows).toHaveCount(6);
+  await rows.nth(1).getByRole("button", { name: /^Delete shot / }).click();
+  await expect(rows).toHaveCount(5);
+
+  await page.getByRole("button", { name: "Add Shot" }).first().click();
+  await expect(rows).toHaveCount(6);
+  const fresh = rows.nth(5);
+  await fresh.getByRole("button", { name: /^Edit shot / }).click();
+  await page.getByLabel("Generation mode").selectOption("image-to-video");
+  await page.getByLabel("Shot type").fill(beat.lens.split(",")[0]);
+  await page.getByLabel("Lens and framing").fill(beat.lens);
+  await page.getByLabel("Shot subject").fill(beat.subject);
+  await page.getByLabel("Shot action").fill(beat.action);
+  await page.getByLabel("Shot environment").fill(beat.environment);
+  await page.getByLabel("Planned duration in seconds").fill(beat.seconds);
+  await page.getByLabel("Image prompt").fill(beat.prompt);
+  await page.getByLabel("Shot negative prompt").fill(
+    "legible text, headline, masthead, readable words, lettering, watermark, "
+    + "faces in focus, modern smartphones",
+  );
+  await page.getByLabel("Shot workflow").selectOption({ label: CLIP_WORKFLOW });
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(page.getByText(beat.subject).first()).toBeVisible();
+
+  await selectShot(page, rows.nth(5));
+  await page.getByLabel("What happens in the frame").fill(beat.motion);
+  await page.getByLabel("How the camera behaves").fill(beat.camera);
+  await page.getByLabel("What it sounds like").fill(beat.audio);
+  await page.getByRole("button", { name: "Save direction" }).click();
+  await expect(page.getByText("Saved. Generate this shot again")).toBeVisible();
+  await page.getByLabel("Spoken line").fill(beat.narration);
+  await page.getByRole("button", { name: "Save captions" }).click();
+  await expect(page.getByText("Saved. Render again")).toBeVisible();
+
+  // Back to second place, where the cut needs it: a clip belongs beside the
+  // key image it was animated from.
+  for (let step = 0; step < 4; step += 1) {
+    await rows.last().getByRole("button", { name: /earlier$/ }).click();
+    await page.waitForTimeout(400);
+  }
+});
+
+test("puts the remade clip in its place and gives it a start frame", async ({ page }) => {
+  const beat = SHOTS[0];
+  await selectEpisode(page);
+  await stage(page, "Storyboard");
+  const rows = page.locator("tbody").first().locator("tr");
+
+  // The clip, not the key image: both carry the same subject, and only one of
+  // them says so.
+  const clip = () =>
+    rows.filter({ hasText: beat.subject }).filter({ hasNotText: "(key image)" });
+
+  // Second place, beside the key image it is animated from. Moving "the last
+  // row" four times moved four different rows; this moves this one.
+  for (let step = 0; step < 5; step += 1) {
+    const up = clip().getByRole("button", { name: /earlier$/ });
+    if (!(await up.count()) || !(await up.first().isEnabled())) break;
+    const before = await rows.allInnerTexts();
+    await up.first().click();
+    await expect.poll(async () => (await rows.allInnerTexts()).join("|"), {
+      timeout: 15_000,
+    }).not.toBe(before.join("|"));
+    if ((await rows.nth(1).innerText()).includes(beat.subject)) break;
+  }
+
+  // The start frame: this clip's own key image, approved a moment ago.
+  await clip().getByRole("button", { name: /^Edit shot / }).click();
+  const picker = page.getByRole("combobox", {
+    name: "Choose an approved scene image take",
+  });
+  await expect(page.getByText("Loading continuity candidates")).toHaveCount(0);
+  await expect
+    .poll(async () => picker.locator("option").count(), { timeout: 30_000 })
+    .toBeGreaterThan(1);
+  const options = await picker.locator("option").allTextContents();
+  const source = options.find((text) => text.includes("Shot"));
+  expect(source, "an approved key image should be offered").toBeTruthy();
+  await picker.selectOption({ label: source as string });
+  await page
+    .getByRole("button", { name: "Use approved scene image as start frame" })
+    .click();
+  await expect(
+    page.getByRole("button", { name: /Clear continuity/ }),
+  ).toBeVisible({ timeout: 60_000 });
+});
+
+test("runs the shots that are ready", async ({ page }) => {
+  // The button now says what the endpoint does: it queues the shots whose
+  // status makes them eligible and leaves the approved one alone.
+  await selectEpisode(page);
+  await stage(page, "Generate");
+  await page.getByRole("button", { name: "Run preflight" }).click();
+  await expect(page.getByText(/shot\(s\) ready/)).toBeVisible();
+  const generate = page.getByTestId("generate-button");
+  await expect(generate).toBeEnabled({ timeout: 30_000 });
+  await generate.click();
+  await expect(page.getByText(/Queued|Running/).first()).toBeVisible({
+    timeout: 60_000,
+  });
+});
+
+test("approves the key images and gives every clip its own start frame", async ({ page }) => {
+  await selectEpisode(page);
+
+  // Approve every still that is waiting. These are the frames the clips will
+  // be animated from, so this is the decision that has to be made first.
+  await stage(page, "Review");
+  const approve = page.getByRole("button", { name: "Approve", exact: true });
+  for (let count = await approve.count(); count > 0; count = await approve.count()) {
+    await approve.first().click();
+    await expect(approve).toHaveCount(count - 1, { timeout: 30_000 });
+  }
+
+  await stage(page, "Storyboard");
+  for (let sceneIndex = 0; sceneIndex < 3; sceneIndex += 1) {
+    const rows = page.locator("tbody").nth(sceneIndex).locator("tr");
+    const total = await rows.count();
+    for (let rowIndex = 0; rowIndex < total; rowIndex += 1) {
+      const row = rows.nth(rowIndex);
+      const order = (await row.locator("td").first().innerText()).trim().split("\n")[0];
+      await row.getByRole("button", { name: /^Edit shot / }).click();
+
+      const mode = page.getByLabel("Generation mode");
+      if ((await mode.inputValue()) === "image") {
+        await page.getByRole("button", { name: "Cancel" }).first().click();
+        continue;
+      }
+      if (await page.getByRole("button", { name: /Clear continuity/ }).count()) {
+        await page.getByRole("button", { name: "Cancel" }).first().click();
+        continue;
+      }
+
+      // The key image for this beat is the shot immediately before it.
+      const previous = String(Number(order) - 1);
+      const picker = page.getByRole("combobox", {
+        name: "Choose an approved scene image take",
+      });
+      await expect(page.getByText("Loading continuity candidates")).toHaveCount(0);
+      await expect
+        .poll(async () => picker.locator("option").count(), { timeout: 30_000 })
+        .toBeGreaterThan(1);
+      const options = await picker.locator("option").allTextContents();
+      const own = options.find((text) => text.includes(`Shot ${previous} `));
+      expect(own, `shot ${order} should be offered shot ${previous}`).toBeTruthy();
+      await picker.selectOption({ label: own as string });
+      await page
+        .getByRole("button", { name: "Use approved scene image as start frame" })
+        .click();
+      await expect(
+        page.getByRole("button", { name: /Clear continuity/ }),
+      ).toBeVisible({ timeout: 60_000 });
+      await page.getByRole("button", { name: "Cancel" }).first().click();
+    }
+  }
+});

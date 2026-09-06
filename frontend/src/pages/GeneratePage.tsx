@@ -30,6 +30,7 @@ import {
   Wrench,
 } from "lucide-react";
 import api, { toAIError } from "../api/client";
+import { canGenerate } from "./generateReadiness";
 import { useAppState, useAppDispatch } from "../store/useProjectStore";
 import StatusBadge from "../components/StatusBadge";
 import CostConfirmDialog from "../components/CostConfirmDialog";
@@ -1250,7 +1251,10 @@ export default function GeneratePage() {
   const onGenerate = () => {
     if (
       !estimate ||
-      preflightQ.data?.ready !== true ||
+      // The same rule the button is enabled by. It used to require every shot
+      // in the project to be ready here too, so with one shot approved the
+      // button was live and pressing it did nothing at all.
+      !canGenerate(preflightQ.data) ||
       comfyuiRuntimeUnavailable ||
       (simulationRequired && !simulationAcknowledged)
     )
@@ -1334,7 +1338,7 @@ export default function GeneratePage() {
           setSimulationAckProjectId(checked ? currentProjectId : null)
         }
         comfyuiRuntimeUnavailable={comfyuiRuntimeUnavailable}
-        preflightReady={preflightQ.data?.ready === true}
+        preflightReady={canGenerate(preflightQ.data)}
       />
 
       {/* Stats bar */}
