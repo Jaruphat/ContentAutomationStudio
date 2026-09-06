@@ -197,6 +197,22 @@ export const references = {
       headers: { "Content-Type": "multipart/form-data" },
     }).then((r) => r.data);
   },
+  /** Generate the sheet's canonical image instead of uploading one. */
+  generateImage: (
+    projectId: string,
+    sheetId: string,
+    body: {
+      prompt: string;
+      negative_prompt?: string;
+      workflow_id?: string;
+      seed?: number;
+      width?: number;
+      height?: number;
+    },
+  ) =>
+    http
+      .post<ReferenceImage>(`/projects/${projectId}/references/${sheetId}/generate`, body)
+      .then((r) => r.data),
   deleteImage: (projectId: string, sheetId: string, imageId: string, force = false) =>
     http.delete(`/projects/${projectId}/references/${sheetId}/images/${imageId}`, { params: { force } }).then((r) => r.data),
   imageUrl: (image: ReferenceImage) => image.url,
@@ -525,6 +541,12 @@ export const review = {
    * absolute path a browser cannot open, so previews go through the API.
    */
   mediaUrl: (takeId: string) => `/api/media/takes/${takeId}/file`,
+
+  /** Draw layers onto a take. Produces a new take of the same shot. */
+  composite: (
+    takeId: string,
+    layers: Array<Record<string, unknown>>,
+  ) => http.post<Take>(`/takes/${takeId}/composite`, { layers }).then((r) => r.data),
 };
 
 // ── Media generation providers ───────────────────────────────────────────

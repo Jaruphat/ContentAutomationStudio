@@ -30,6 +30,7 @@ import TakePreview from "./TakePreview";
 import ShotSeedControl from "./ShotSeedControl";
 import ShotAudioControl from "./ShotAudioControl";
 import ShotDirectionControl from "./ShotDirectionControl";
+import ShotCaptionControl from "./ShotCaptionControl";
 import { useAppState, useAppDispatch } from "../store/useProjectStore";
 import api from "../api/client";
 import type { Shot, Scene, Take } from "../types";
@@ -102,6 +103,7 @@ function ShotPanel({ shot, projectId }: { shot: Shot; projectId?: string }) {
       {projectId && shot.generation_mode !== "image" && (
         <ShotDirectionControl key={`direction-${shot.id}`} shot={shot} projectId={projectId} />
       )}
+      {projectId && <ShotCaptionControl key={`captions-${shot.id}`} shot={shot} projectId={projectId} />}
       {projectId && <ShotAudioControl key={`audio-${shot.id}`} shot={shot} projectId={projectId} />}
 
       <div className="mt-4 border-t border-zinc-800 pt-3">

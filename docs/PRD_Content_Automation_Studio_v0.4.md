@@ -324,6 +324,28 @@ back 3.042 seconds in 137.8 seconds of GPU, against 240 seconds for the
 124-frame version it replaced, with motion unchanged - 2.564 mean against
 2.505. H3 emits one frame more than asked; the cut trims it.
 
+### 16. Three things that only a script could do
+
+Producing two episodes through the API exposed a gap that no test could: the
+things that made them work were not in the cockpit. Emphasis cards, world
+plates and composites were all typed into a Python file, which is not
+something a person making a channel can do.
+
+* **Captions.** Both tracks are edited on the shot: the spoken line, captioned
+  in full for accessibility, and the emphasis card held over the picture.
+  Neither reaches a model, so saving them does not put a generated clip out of
+  date - which is why they sit apart from the clip direction beside them. A
+  card over six words is warned about while it is being typed.
+* **Plates.** A reference sheet can generate its canonical image rather than
+  only accept an upload, with a chosen workflow and a seed. A place
+  established once and referenced by every shot in its scene is what keeps
+  three shots of a hallway in one hallway.
+* **Composites.** Corners are set by clicking the frame. They were eight
+  numbers written before the frame existed, which is exactly how two
+  composites in a delivered episode ended up describing a plane the paper was
+  not on. Offered only on a still, because compositing draws onto one frame
+  and a clip has many.
+
 ## Delivered episode - SF02, "The Extra Room"
 
 Project `d7bd14bd-3078-4a49-8eaf-531c8e47806a`, started under the ODDVERSE

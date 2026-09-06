@@ -21,12 +21,14 @@ import {
   Image,
   AlertCircle,
   FlaskConical,
+  Type,
 } from "lucide-react";
 import api, { toAIError } from "../api/client";
 import { useAppState, useAppDispatch } from "../store/useProjectStore";
 import StatusBadge from "../components/StatusBadge";
-import TakePreview from "../components/TakePreview";
+import TakePreview, { mediaKind } from "../components/TakePreview";
 import MotionReport from "../components/MotionReport";
+import CompositeEditor from "../components/CompositeEditor";
 import CostConfirmDialog from "../components/CostConfirmDialog";
 import type { MediaProviderId, Take } from "../types";
 
@@ -141,6 +143,7 @@ function TakeCard({
   const [checkingEstimate, setCheckingEstimate] = useState(false);
   // What this regeneration is *for*. Blank is the plain re-roll regenerate
   // already was, so an existing habit keeps doing what it did.
+  const [composing, setComposing] = useState(false);
   const [intent, setIntent] = useState("");
   const [intentNote, setIntentNote] = useState("");
   const dispatch = useAppDispatch();
@@ -316,6 +319,24 @@ function TakeCard({
           <FlaskConical size={13} /> {experimentMut.isPending ? "Creating experiment…" : "Experiment in a new project"}
         </button>
         {experimentMut.isError && <p role="alert" className="text-xs text-red-300">{toAIError(experimentMut.error).detail}</p>}
+
+        {/* Only on a still. Compositing draws onto one frame, and a clip has
+            many - the text would sit on the first and drift off whatever the
+            camera did next. The still a clip animates is where it belongs. */}
+        {mediaKind(take) === "image" && (
+          <>
+            <button type="button" onClick={(e) => { e.stopPropagation(); setComposing((open) => !open); }}
+              title="Draw text onto this frame. No model spells, so anything a viewer has to read is composited afterwards."
+              className="flex items-center gap-1.5 rounded border border-zinc-700 px-2 py-1.5 text-xs text-zinc-300 hover:bg-zinc-800">
+              <Type size={13} /> {composing ? "Close compositor" : "Composite text onto this frame"}
+            </button>
+            {composing && (
+              <div onClick={(e) => e.stopPropagation()}>
+                <CompositeEditor take={take} onDone={() => setComposing(false)} />
+              </div>
+            )}
+          </>
+        )}
 
         {cardError && (
           <div className="flex items-start gap-1.5 rounded-md border border-red-800 bg-red-900/30 px-2 py-1.5 text-[11px] text-red-300">

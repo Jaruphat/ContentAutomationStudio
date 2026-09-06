@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowDown, ArrowUp, ImagePlus, Link2, Plus, Save, Trash2, Unlink } from "lucide-react";
 import api from "../api/client";
 import CharacterSetGenerator from "./CharacterSetGenerator";
+import ReferencePlateGenerator from "./ReferencePlateGenerator";
 import CollapsibleSection from "./CollapsibleSection";
 import ImagePreview from "./ImagePreview";
 import type {
@@ -10,6 +11,7 @@ import type {
   ReferenceSheet,
   ReferenceSheetCreate,
   ReferenceSheetKind,
+  Workflow,
 } from "../types";
 
 const KIND_LABELS: Record<ReferenceSheetKind, string> = {
@@ -41,7 +43,7 @@ export function moveReferenceId(ids: string[], index: number, delta: -1 | 1): st
   return next;
 }
 
-function SheetEditor({ projectId, sheet }: { projectId: string; sheet: ReferenceSheet }) {
+function SheetEditor({ projectId, sheet, workflows }: { projectId: string; sheet: ReferenceSheet; workflows: Workflow[] }) {
   const qc = useQueryClient();
   const [name, setName] = useState(sheet.name);
   const [description, setDescription] = useState(sheet.canonical_description);
@@ -89,7 +91,10 @@ function SheetEditor({ projectId, sheet }: { projectId: string; sheet: Reference
           </figure>
         ))}
       </div>
-      <label className="inline-flex cursor-pointer items-center gap-1 text-xs text-indigo-400"><ImagePlus size={13} />Upload canonical image<input className="sr-only" type="file" accept="image/png,image/jpeg,image/webp" onChange={(e) => { const file = e.target.files?.[0]; if (file) upload.mutate(file); }} /></label>
+      <div className="flex flex-wrap items-center gap-3">
+        <label className="inline-flex cursor-pointer items-center gap-1 text-xs text-indigo-400"><ImagePlus size={13} />Upload canonical image<input className="sr-only" type="file" accept="image/png,image/jpeg,image/webp" onChange={(e) => { const file = e.target.files?.[0]; if (file) upload.mutate(file); }} /></label>
+      </div>
+      <ReferencePlateGenerator projectId={projectId} sheet={sheet} workflows={workflows} />
       {(save.error || remove.error || upload.error || detach.error) && <p role="alert" className="text-xs text-red-400">{String((save.error || remove.error || upload.error || detach.error) instanceof Error ? (save.error || remove.error || upload.error || detach.error)?.message : "Reference operation failed")}</p>}
     </article>
   );
@@ -118,6 +123,10 @@ export default function VisualReferenceBible({ projectId }: { projectId: string 
   const [kind, setKind] = useState<ReferenceSheetKind>("character");
   const [name, setName] = useState("");
   const query = useQuery({ queryKey: ["references", projectId], queryFn: () => api.references.list(projectId) });
+  // Offered on every sheet so a plate can be made with a chosen graph rather
+  // than only the project default - the reason a place looks the same in
+  // three shots is that all three edit one approved image of it.
+  const workflowQuery = useQuery({ queryKey: ["workflows"], queryFn: () => api.workflows.list() });
   const create = useMutation({ mutationFn: (data: ReferenceSheetCreate) => api.references.create(projectId, data), onSuccess: () => { setName(""); qc.invalidateQueries({ queryKey: ["references", projectId] }); } });
-  return <div className="space-y-4"><CharacterSetGenerator projectId={projectId} /><CollapsibleSection id="reference-bible" title="Visual Reference Bible" summary={`${query.data?.length ?? 0} sheet(s)`}><section aria-label="Visual Reference Bible" className="space-y-3"><p className="text-xs text-zinc-400">Project-scoped canonical images and continuity identity. Shot assignments use image IDs in explicit order.</p><div className="flex gap-2"><select aria-label="Reference kind" value={kind} onChange={(e) => setKind(e.target.value as ReferenceSheetKind)} className="rounded px-2 py-1 text-sm">{Object.entries(KIND_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select><input aria-label="Reference name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Name" className="min-w-0 flex-1 rounded px-2 py-1 text-sm" /><button type="button" disabled={!name.trim()} onClick={() => create.mutate({ kind, name })} className="flex items-center gap-1 rounded bg-indigo-600 px-3 py-1 text-xs text-white disabled:opacity-50"><Plus size={12} />Add sheet</button></div>{query.isLoading && <p className="text-xs text-zinc-400">Loading references…</p>}{query.isError && <p role="alert" className="text-xs text-red-400">Failed to load references.</p>}<div className="grid gap-3 lg:grid-cols-2">{query.data?.map((sheet) => <SheetEditor key={sheet.id} projectId={projectId} sheet={sheet} />)}</div></section></CollapsibleSection></div>;
+  return <div className="space-y-4"><CharacterSetGenerator projectId={projectId} /><CollapsibleSection id="reference-bible" title="Visual Reference Bible" summary={`${query.data?.length ?? 0} sheet(s)`}><section aria-label="Visual Reference Bible" className="space-y-3"><p className="text-xs text-zinc-400">Project-scoped canonical images and continuity identity. Shot assignments use image IDs in explicit order.</p><div className="flex gap-2"><select aria-label="Reference kind" value={kind} onChange={(e) => setKind(e.target.value as ReferenceSheetKind)} className="rounded px-2 py-1 text-sm">{Object.entries(KIND_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select><input aria-label="Reference name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Name" className="min-w-0 flex-1 rounded px-2 py-1 text-sm" /><button type="button" disabled={!name.trim()} onClick={() => create.mutate({ kind, name })} className="flex items-center gap-1 rounded bg-indigo-600 px-3 py-1 text-xs text-white disabled:opacity-50"><Plus size={12} />Add sheet</button></div>{query.isLoading && <p className="text-xs text-zinc-400">Loading references…</p>}{query.isError && <p role="alert" className="text-xs text-red-400">Failed to load references.</p>}<div className="grid gap-3 lg:grid-cols-2">{query.data?.map((sheet) => <SheetEditor key={sheet.id} projectId={projectId} sheet={sheet} workflows={workflowQuery.data ?? []} />)}</div></section></CollapsibleSection></div>;
 }

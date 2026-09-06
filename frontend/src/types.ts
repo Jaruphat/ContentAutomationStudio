@@ -340,6 +340,8 @@ export interface Shot {
   camera_motion?: string;
   /** What the clip sounds like. The H3 models generate sound from this. */
   audio_direction?: string;
+  /** A short card held over the shot. Not the spoken line. */
+  emphasis_text?: string;
   negative_prompt: string;
   reference_asset_ids: string[];
   character_set_ids: string[];

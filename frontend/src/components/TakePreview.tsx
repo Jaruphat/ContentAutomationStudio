@@ -49,7 +49,7 @@ function fileExtension(path: string): string {
  * probed, so either one alone would eventually feed a PNG to a <video>.
  * Extension first, codec second, duration only as a last resort.
  */
-function mediaKind(take: Take): "video" | "image" {
+export function mediaKind(take: Take): "video" | "image" {
   const ext = fileExtension(take.file_path);
   if (ext) return VIDEO_EXTENSIONS.includes(ext) ? "video" : "image";
 
