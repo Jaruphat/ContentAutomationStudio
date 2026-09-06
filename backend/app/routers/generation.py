@@ -727,6 +727,14 @@ def start_generation(
                 project_frame_rate=project.frame_rate or 0.0,
             )
 
+        # Settings the workflow fixes rather than the shot: a guidance scale,
+        # a step count, a switch between two model paths. They fill in what
+        # this request did not say, and never overwrite what it did.
+        for field, value in generation_planning.workflow_constants(
+            db, plan.workflow_id
+        ).items():
+            parameter_map.setdefault(field, value)
+
         request_params = dict(plan.request_params)
         if plan.paid:
             # Recorded on the job, so an audit can show the run was authorised

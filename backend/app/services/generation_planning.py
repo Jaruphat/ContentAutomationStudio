@@ -30,6 +30,14 @@ def workflow_frame_rate(db: Session, workflow_id: str | None) -> float:
     return float(getattr(workflow, "frame_rate", 0.0) or 0.0)
 
 
+def workflow_constants(db: Session, workflow_id: str | None) -> dict[str, Any]:
+    """Settings this workflow fixes for every job it drives."""
+    if not workflow_id:
+        return {}
+    workflow = db.query(Workflow).filter(Workflow.id == workflow_id).first()
+    return dict(getattr(workflow, "constants", None) or {})
+
+
 def frames_for(
     *,
     planned_duration_sec: float,

@@ -1401,6 +1401,8 @@ class WorkflowResponse(BaseModel):
     required_custom_nodes: list[str]
     parameter_mapping: dict[str, Any]
     output_mapping: list[dict[str, Any]]
+    #: Settings fixed for this workflow rather than decided per shot.
+    constants: dict[str, Any] = Field(default_factory=dict)
     #: Frames per second the graph renders at; 0 when it has not said.
     frame_rate: float = 0.0
     tested_comfyui_version: str
@@ -1410,6 +1412,9 @@ class WorkflowResponse(BaseModel):
 
     _coerce_workflow_rate = field_validator("frame_rate", mode="before")(
         _coerce_added_column(0.0)
+    )
+    _coerce_workflow_constants = field_validator("constants", mode="before")(
+        _coerce_added_column({})
     )
 
 
@@ -1421,6 +1426,9 @@ class WorkflowMappingUpdate(BaseModel):
     #: given a project's 30 makes a clip a quarter longer than the shot asked
     #: for. Omit to leave whatever the workflow already records.
     frame_rate: Optional[float] = Field(default=None, ge=0.0, le=240.0)
+    #: Fixed values for logical fields this workflow maps. Omit to leave what
+    #: the workflow already records; send {} to clear them.
+    constants: Optional[dict[str, Any]] = None
 
 
 class MappingCandidateOut(BaseModel):

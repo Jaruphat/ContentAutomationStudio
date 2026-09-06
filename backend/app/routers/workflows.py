@@ -94,6 +94,27 @@ def update_mapping(
         workflow.output_mapping = payload.output_mapping
     if payload.frame_rate is not None:
         workflow.frame_rate = payload.frame_rate
+    if payload.constants is not None:
+        for field, value in payload.constants.items():
+            if field not in payload.parameter_mapping:
+                raise HTTPException(
+                    status_code=422,
+                    detail=(
+                        f"'{field}' is fixed as a constant but is not mapped "
+                        f"to a node, so it would reach nothing. Map it first, "
+                        f"or remove the constant."
+                    ),
+                )
+            if not isinstance(value, (str, int, float, bool)):
+                raise HTTPException(
+                    status_code=422,
+                    detail=(
+                        f"'{field}' must be a plain value: these are written "
+                        f"straight into a graph input, and a structure there "
+                        f"is only discovered when the run is submitted."
+                    ),
+                )
+        workflow.constants = dict(payload.constants)
     workflow.validation_status = "pending"
     workflow.updated_at = datetime.now(timezone.utc)
     db.commit()

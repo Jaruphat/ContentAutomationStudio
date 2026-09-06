@@ -299,6 +299,31 @@ in the brief.
 The name lives in `Style.label`, which no prompt reads, and the inspector
 labels that field "not sent to the model".
 
+### 14. Settings a graph bakes in, reachable
+
+A workflow carries `constants`: logical-field values fixed for that workflow
+and merged into every job it drives, for settings a shot does not decide - a
+sampler's guidance scale, a step count, a switch between two model paths.
+Two rules keep it from being a back door into the payload. A shot's own value
+always wins, so constants fill in what a request did not say and never
+overwrite a prompt, a seed or a frame count. And a constant for a field the
+workflow does not map is refused, because a value that reaches no node is a
+setting the user believes is applied.
+
+This is what made the composition question answerable rather than permanent.
+
+### 15. A clip is as long as the shot that asked for it
+
+Frame count is computed from the shot's planned duration at the rate the graph
+renders at, which a workflow now records. A graph tagged 24 fps handed a
+project's 30 makes a clip a quarter longer than the shot wanted. Where a
+workflow has not said, the project's rate is used as the estimate it is.
+
+Measured on the real graph: a three-second shot asked for 72 frames and came
+back 3.042 seconds in 137.8 seconds of GPU, against 240 seconds for the
+124-frame version it replaced, with motion unchanged - 2.564 mean against
+2.505. H3 emits one frame more than asked; the cut trims it.
+
 ## Delivered episode - SF02, "The Extra Room"
 
 Project `d7bd14bd-3078-4a49-8eaf-531c8e47806a`, started under the ODDVERSE
@@ -324,26 +349,33 @@ result rather than a failure of the run:
 The scorecard is agent-assisted and says so: it is one reading of the file, not
 a human's and not an audience's.
 
-### The composition limit this episode measured
+### The composition limit, and what it turned out to be
 
 Every key image is an edit conditioned on its scene's approved plate, which is
-what keeps three shots of a hallway in one hallway. It also decides the
-framing. Two shots were written as close views and came back as the plate's
-wide view with the subject somewhere inside it; a second, far more explicit
-prompt - naming the framing and the door twice - moved neither. **On this
-workflow the plate, not the prompt, decides the composition.**
+what keeps three shots of a hallway in one hallway. Two shots written as close
+views came back as the plate's wide view with the subject somewhere inside it,
+and a second, far more explicit prompt - naming the framing and the door twice
+- moved neither. The conclusion drawn at the time, and recorded here, was that
+on this workflow the plate rather than the prompt decides the composition.
 
-Generating a shot without the plate does free the framing, and costs the place:
-shot 9's key image, made from its prompt alone, produced a delivery label large
-enough to see and a room that does not match the two shots before it. Both
-halves of that trade are visible in the delivered file, and the scorecard is
-marked down for it.
+**That was wrong, and the workflow constants added afterwards showed why.** The
+sampler's guidance scale sits in the graph as a constant at 3.5, where nothing
+in the application could reach it. Raising it to 9.0 - same prompt, same two
+references, same seed, one number different - produced the shot that had been
+asked for twice and refused twice: a close view from behind the subject's
+shoulders, his hand on the brass handle, the door open with warm light through
+the gap, in the same hallway the plate establishes.
 
-The rule that follows is narrower than "condition everything on the plate": a
-shot that shows the place is conditioned on it, and a shot that shows a detail
-is not. The episode data carries that as `detail_beats`. What is still missing
-is a way to have both - a tight framing inside a known place - and that is a
-workflow question, not a prompt one.
+So the plate holds the place and the guidance scale decides how much of the
+prompt is allowed to survive it. At 3.5 the reference dominates; at 9.0 the
+prompt wins and the place is kept. This is one image, not a series - but it is
+the image two prompt rewrites could not produce.
+
+Two consequences follow. The camera language the blueprint asks for -
+establishing, medium, detail, reaction, reveal - is reachable on this
+workflow. And `detail_beats`, which drops the plate to free the framing, is
+solving a problem that has a better answer: SF02's closing shot gave up its
+room to show a delivery label, and did not have to.
 
 ### Composites: only text that must be read and is never spoken
 
@@ -368,11 +400,13 @@ narration carries is better left to the narration.
    comparisons; include a creator-visible side-by-side comparison view.
 4. Temporal text tracking for moving newspaper/prop composites and stronger
    character/motion evaluation across several scenes, not just one example.
-4b. A way to frame a shot tightly inside a known place. Conditioning a key
-   image on its scene's plate holds the place and dictates the framing;
-   dropping the plate frees the framing and loses the place. Two prompt
-   rewrites moved neither. This is the largest single limit on shot variety
-   and it is a workflow question, not a prompt one.
+4b. Settle the guidance scale per shot kind. One measurement showed 9.0
+   producing a close framing that 3.5 refused twice, in the same place, from
+   the same prompt and seed. What is not known is where it stops helping: a
+   high scale is also how an edit model produces contrast artefacts and
+   over-saturated faces. Sweep it across a few shots and record the range that
+   holds the house look, then set it as a workflow constant per shot kind
+   rather than per episode.
 4c. Re-timing a cut should not invalidate the footage in it.
    `planned_duration_sec` is part of a shot's content digest, so lengthening a
    shot to fit a spoken line marks its approved take stale even on workflows

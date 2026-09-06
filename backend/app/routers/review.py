@@ -670,6 +670,11 @@ def regenerate_shot(
             project_frame_rate=project.frame_rate or 0.0,
         )
 
+    for field, value in generation_planning.workflow_constants(
+        db, plan.workflow_id
+    ).items():
+        parameter_map.setdefault(field, value)
+
     request_params = dict(plan.request_params)
     if intent is not None:
         # Six takes of one shot are unreadable without knowing what each was

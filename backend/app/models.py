@@ -787,6 +787,13 @@ class Workflow(Base):
     required_custom_nodes = Column(JSON, default=list)
     parameter_mapping = Column(JSON, default=dict)
     output_mapping = Column(JSON, default=list)
+    #: Logical-field values fixed for this workflow and merged into every job
+    #: it drives, for settings a shot does not decide: a sampler's guidance
+    #: scale, a step count, a switch between two model paths. They fill in
+    #: what a request did not say and never overwrite what it did - a
+    #: workflow that could replace a prompt or a seed would make every shot's
+    #: own settings a suggestion.
+    constants = Column(JSON, default=dict)
     #: Frames per second the graph itself renders at, or 0 when it does not
     #: say. A clip's length is asked for in frames, so a graph tagged 24 given
     #: a project's 30 makes a clip a quarter longer than the shot wanted -
