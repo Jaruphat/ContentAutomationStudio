@@ -161,7 +161,8 @@ SF01: dict[str, Any] = {
              "weeds between the rails bend and spring back in the wind. A "
              "platform lamp flickers and steadies. Far down the track a "
              "headlight grows larger and brighter.",
-             "Locked-off camera at eye level."),
+             "Locked-off camera at eye level.",
+             "cold night air, a low rail vibration far down the track, wind across an empty platform"),
             "Every night at exactly 3:17, a train arrives at this abandoned station.",
             "EVERY NIGHT / AT 3:17 AM", [],
         ),
@@ -173,7 +174,8 @@ SF01: dict[str, Any] = {
             "85mm lens, shallow depth of field.",
             ("The second hand sweeps round the dial. A bead of condensation "
              "runs down the glass and stops.",
-             "Very slow push in with slight handheld micro-movement."),
+             "Very slow push in with slight handheld micro-movement.",
+             "an old station clock ticking close, faint wind behind it"),
             "", "3:17 AM", [],
         ),
         (
@@ -185,7 +187,8 @@ SF01: dict[str, Any] = {
             ("The train rolls into the platform and grows larger in frame, "
              "its headlights sweeping bright across the wet rails. Dust and "
              "steam blow past the lens. The train slows and comes to a stop.",
-             "Long lens, subtle vibration as it passes."),
+             "Long lens, subtle vibration as it passes.",
+             "a diesel rumble growing louder, steel wheels on rail, brakes beginning to bite"),
             "That's impossible.", "THE TRAIN RETURNS.", [],
         ),
         (
@@ -198,7 +201,8 @@ SF01: dict[str, Any] = {
             ("Weeds and moss shift in the wind. A loose sheet of paper in the "
              "timetable frame lifts and flaps against the glass. Light from "
              "the stationary train shifts slowly across the peeling paint.",
-             "Slow restrained lateral drift along the platform."),
+             "Slow restrained lateral drift along the platform.",
+             "a stationary train idling low, a loose sheet of paper flapping against glass, wind"),
             "The station closed thirty years ago.", "CLOSED 30 YEARS AGO.", [],
         ),
         (
@@ -211,7 +215,8 @@ SF01: dict[str, Any] = {
              "interior light spills out across the platform and widens. The "
              "interior lamp flickers twice. Steam curls out from beneath the "
              "carriage.",
-             "Locked-off camera."),
+             "Locked-off camera.",
+             "a pneumatic door hissing open, a low engine idle, the hum of an interior light"),
             "The train isn't on any schedule, and nobody has ever stepped off.",
             "NO ONE EVER GETS OFF.", [],
         ),
@@ -226,7 +231,8 @@ SF01: dict[str, Any] = {
              "foot then the other, and walks two unhurried paces forward. Her "
              "long coat swings with the movement. She shifts the folded "
              "newspaper to her other hand.",
-             "Locked-off camera at eye level."),
+             "Locked-off camera at eye level.",
+             "two unhurried footsteps on wet concrete, a heavy coat moving, the train idling behind"),
             "Until last night.", "UNTIL LAST NIGHT.", ["CHAR01"],
         ),
         (
@@ -238,7 +244,8 @@ SF01: dict[str, Any] = {
             ("The woman lifts the folded newspaper up toward her chest. The "
              "pages ripple and lift in the breeze. She turns her head "
              "slightly and looks down at it.",
-             "70mm lens, shallow focus, camera steady."),
+             "70mm lens, shallow focus, camera steady.",
+             "newsprint rustling in a breeze, quiet night wind, a distant train idle"),
             "A woman walked onto the platform carrying a newspaper dated tomorrow.",
             "", ["CHAR01"],
         ),
@@ -252,7 +259,8 @@ SF01: dict[str, Any] = {
             ("The newspaper page lifts and settles in the night air. The "
              "hands adjust their grip and turn the page a little toward the "
              "light, and the paper flexes across its fold.",
-             "85mm lens, shallow focus, camera steady."),
+             "85mm lens, shallow focus, camera steady.",
+             "paper flexing and creasing close to the microphone, almost nothing else"),
             "", "DATED TOMORROW.", [],
         ),
         (
@@ -265,7 +273,8 @@ SF01: dict[str, Any] = {
             ("The hands raise the newspaper toward the camera and hold it "
              "there. The page flexes and steadies. The photograph on the "
              "front page fills more of the frame.",
-             "Slow push in that comes to rest for the final half second."),
+             "Slow push in that comes to rest for the final half second.",
+             "the ambience falling away to almost nothing, then one low sub-bass swell"),
             "But that wasn't the strange part. The photograph on the front "
             "page... was him.",
             "IT WAS HIM.", ["CHAR02"],
@@ -279,34 +288,10 @@ SF01: dict[str, Any] = {
     #: Each starts with a patch, because the model does not leave a blank area
     #: when asked - it writes a plausible smear, and a real headline drawn over
     #: a fake one is two headlines.
-    "composites": {
-        8: [
-            # Four corners, not a centre and an angle: the page is a plane
-            # seen at an angle, so it is a trapezoid on screen and a rotated
-            # rectangle over it still reads as a sticker.
-            {"type": "rect", "colour": "#e8e2d4",
-             "corners": [[0.10, 0.676], [0.88, 0.634],
-                         [0.88, 0.694], [0.10, 0.738]]},
-            {"type": "text", "text": "TOMORROW'S EDITION", "colour": "#141414",
-             "size": 0.030,
-             "corners": [[0.12, 0.680], [0.86, 0.638],
-                         [0.86, 0.664], [0.12, 0.706]]},
-            {"type": "text", "text": "{tomorrow}", "colour": "#141414",
-             "size": 0.020,
-             "corners": [[0.30, 0.706], [0.70, 0.684],
-                         [0.70, 0.706], [0.30, 0.728]]},
-        ],
-        9: [
-            # The face on the front page has to be the observer's, and a
-            # front view is what a press photograph is. The full-body
-            # canonical view of this character is a back shot by design, so
-            # the recipe names the slot it needs rather than taking whichever
-            # view happens to be first.
-            {"type": "image", "reference_image_id": "{CHAR02:front}",
-             "grayscale": True,
-             "x": 0.50, "y": 0.72, "width": 0.34, "height": 0.24},
-        ],
-    },
+    #: Cleared for the v3 run. The corners below were measured on frames from
+    #: a previous set of key images and describe planes the new paper is not
+    #: on; they are placed again after this run's frames exist.
+    "composites": {},
     #: Section 6 of the blueprint, as an instruction a hosted voice can take.
     #: A platform voice has a name and a rate slider and no opinion about how
     #: a sentence should land; this is the reason to pay for one.
