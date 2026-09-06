@@ -369,8 +369,12 @@ SF02: dict[str, Any] = {
     # "rooms."; at 28 every line is one cue that breaks at its own full stop.
     "subtitles": {"max_chars_per_line": 28, "vertical_margin": 180},
     #: Beats whose key image is a detail rather than a view of the place, and
-    #: which are therefore generated from the prompt alone. See the producer.
-    "detail_beats": {9},
+    #: which are therefore generated from the prompt alone. Beat 9 was one
+    #: until the guidance scale turned out to be what held the framing wide:
+    #: raised to 9 it goes close *and* keeps the room, so it gave up its place
+    #: for nothing. Empty now, and kept because a shot with no place - a hand
+    #: against black, a title card - would still want it.
+    "detail_beats": set(),
     "cast": {
         "CHAR01": {
             "name": "CHAR01 - The Homeowner",
@@ -505,7 +509,7 @@ SF02: dict[str, Any] = {
             # for eight words - the narrator put a held pause at the full
             # stop, which is good reading and does not fit four seconds.
             "There are seven rooms in this house.",
-            "SEVEN ROOMS.", [], "street",
+            "SEVEN ROOMS. / SIX ON THE PLAN.", [], "street",
         ),
         (
             3.0, "The Floor Plan",
@@ -523,7 +527,7 @@ SF02: dict[str, Any] = {
             # The second half of the opening fact, moved off shot 1 so
             # neither line has to carry a full stop. The measuring this shot
             # used to narrate is in the picture: a tape measure and a pencil.
-            "The floor plan shows six.", "SIX ON THE PLAN.", [], "table",
+            "The floor plan shows six.", "", [], "table",
         ),
         (
             3.0, "The Survey",
@@ -626,10 +630,10 @@ SF02: dict[str, Any] = {
         ),
         (
             5.0, "Not Yet",
-            # A detail, generated from the prompt alone: see "detail_beats".
-            # Conditioned on the room plate this came back as another wide
-            # view of the room with the label too small to read, which is the
-            # one thing this shot exists to show.
+            # Conditioned on the room plate at guidance 3.5 this came back as
+            # a wide view of the room with the label too small to read. The
+            # plate was not the reason: at guidance 9 the same conditioning
+            # goes where the prompt says.
             "Extreme close-up photograph of a printed white self-adhesive "
             "delivery label taped to the padded arm of a grey fabric sofa. The "
             "label fills most of the frame and carries a blank unreadable "
@@ -657,7 +661,22 @@ SF02: dict[str, Any] = {
     #:
     #: Its corners were measured off the generated key image, which is the
     #: only order that works: generate, look, place, then animate.
-    "composites": {},
+    #:
+    #: No patch under it. The model left the label genuinely blank this time -
+    #: at guidance 3.5 it wrote a plausible smear and a patch was the only way
+    #: to have one surface instead of two.
+    "composites": {
+        9: [
+            {"type": "text", "text": "DELIVERY", "colour": "#1f1c18",
+             "size": 0.022,
+             "corners": [[0.450, 0.664], [0.730, 0.661],
+                         [0.730, 0.698], [0.448, 0.701]]},
+            {"type": "text", "text": "{next_year}", "colour": "#1f1c18",
+             "size": 0.026,
+             "corners": [[0.450, 0.703], [0.730, 0.700],
+                         [0.730, 0.742], [0.448, 0.745]]},
+        ],
+    },
     "voice_direction": (
         "Read as a calm male documentary narrator, aged 30 to 40, describing "
         "something that happened to him and that he has not finished thinking "

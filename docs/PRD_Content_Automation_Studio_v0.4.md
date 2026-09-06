@@ -346,6 +346,34 @@ something a person making a channel can do.
   not on. Offered only on a still, because compositing draws onto one frame
   and a clip has many.
 
+### 17. A scene drawn as one hosted sequence
+
+The frames of a scene can be asked for in order from a hosted model, each turn
+carrying the last, instead of being generated separately and held together by
+a plate. The mechanism is the Responses API: `model` is `gpt-6-astra`, the tool
+is `image_generation`, and `previous_response_id` links each turn to the one
+before.
+
+Astra does not draw - the documentation lists image generation as unsupported
+for it. It reasons about the next frame and calls the image tool, which is why
+it suits a storyboard: what has to stay the same across ten frames is a
+judgement about what stays, not a reference image. Reported limits are three to
+five frames working well and ten-frame sequences working less well, so it is a
+scene at a time rather than an episode.
+
+Each frame becomes a Pending take of its own shot, carrying the model, the turn
+and the frame's position so a sequence can be priced and reproduced. Nothing is
+approved and nothing already generated is replaced. A refusal stops the
+sequence rather than skipping past it: frame five asked after frame four failed
+would follow frame three, and the chain is the only thing this buys.
+
+Not yet exercised against the paid endpoint. The account has access to
+`gpt-image-2` and `gpt-6-astra`, the request shape is taken from the published
+guide, and every test records the call rather than making it. Two things are
+known to need attention before it replaces anything: the hosted canvas is 2:3
+or 1:1 where this channel delivers 9:16, and a local plate costs nothing per
+frame where this costs one image each.
+
 ## Delivered episode - SF02, "The Extra Room"
 
 Project `d7bd14bd-3078-4a49-8eaf-531c8e47806a`, started under the ODDVERSE
@@ -354,22 +382,24 @@ plates, one canonical character, nine key images and nine H3 Turbo clips at 8
 steps, 576×1024 source, delivered at 1080×1920.
 
 `review.mp4`: 32.034 s, 1080×1920, 30 fps, H.264 `yuv420p`, AAC 48 kHz stereo,
-6,937,093 bytes, -16.04 LUFS, -1.90 dBTP. SHA-256
-`d8a6bed41f8bdd75f949cb8a44608bd7399433254cce7bcd893565defc00258c`. No
+-16.03 LUFS, -2.05 dBTP. SHA-256
+`f651b0a3069c276d75cee43697234a9ca54e05f846f4380bd1b00156784a41f8`. No
 narration line runs past its shot. `subtitles.srt` exports nine cues with no
 broken word.
 
-**The publish gate blocked it**, with three reasons, and that is the honest
-result rather than a failure of the run:
+**The publish gate passed it** on the second card, after three shortfalls the
+first card named were addressed:
 
-| Metric | Scored | Target | Why |
+| Metric | First | Now | What changed |
 |---|---:|---:|---|
-| Hook strength | 7 | 8 | Opens on an ordinary house rather than on the anomaly. |
-| World consistency | 7 | 8 | Shot 9's room has a window and a wooden floor that shots 7 and 8 do not. |
-| Ending and reveal | 7 | 8 | The reveal is carried by the narration; the label reads as an object but its date is not legible. |
+| Hook strength | 7 | 8 | The contradiction is on the card inside the first second, rather than arriving with the second spoken line at four. |
+| World consistency | 7 | 8 | Shot 9 is the room shots 7 and 8 establish. |
+| Ending and reveal | 7 | 8 | The reveal is in the picture - a delivery label reading a date a year ahead - and not only in the narration. |
 
 The scorecard is agent-assisted and says so: it is one reading of the file, not
-a human's and not an audience's.
+a human's and not an audience's. It notes what the fix cost - guidance 9
+softens the man's head slightly in shot 6, visible on a still and not at four
+seconds from behind.
 
 ### The composition limit, and what it turned out to be
 

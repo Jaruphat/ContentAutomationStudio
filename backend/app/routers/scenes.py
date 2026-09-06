@@ -10,8 +10,15 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models import Project, Scene
-from app.schemas import SceneCreate, SceneReorderRequest, SceneResponse, SceneUpdate
-from app.services import revisions
+from app.schemas import (
+    SceneCreate,
+    SceneReorderRequest,
+    SceneResponse,
+    SceneUpdate,
+    StoryboardSequenceRequest,
+    StoryboardSequenceResult,
+)
+from app.services import revisions, storyboard_sequence
 
 router = APIRouter(prefix="/api/projects/{project_id}/scenes", tags=["scenes"])
 
@@ -147,4 +154,55 @@ def reorder_scenes(
         .filter(Scene.project_id == project_id)
         .order_by(Scene.order)
         .all()
+    )
+
+
+@router.get("/{scene_id}/storyboard-sequence/estimate")
+def estimate_storyboard_sequence(
+    project_id: str, scene_id: str, db: Session = Depends(get_db),
+):
+    """What drawing this scene as a hosted sequence would cost."""
+    project = _get_project_or_404(db, project_id)
+    scene = db.query(Scene).filter(
+        Scene.id == scene_id, Scene.project_id == project_id).first()
+    if not scene:
+        raise HTTPException(status_code=404, detail="Scene not found")
+    return storyboard_sequence.estimate_scene(db, project, scene)
+
+
+@router.post(
+    "/{scene_id}/storyboard-sequence", response_model=StoryboardSequenceResult,
+)
+def draw_storyboard_sequence(
+    project_id: str,
+    scene_id: str,
+    payload: StoryboardSequenceRequest,
+    db: Session = Depends(get_db),
+):
+    """Draw every shot in this scene as one chained hosted sequence.
+
+    Each frame becomes a Pending take of its own shot. Nothing is approved and
+    nothing already generated is replaced - the frames arrive to be reviewed
+    beside whatever the shot already has.
+    """
+    project = _get_project_or_404(db, project_id)
+    scene = db.query(Scene).filter(
+        Scene.id == scene_id, Scene.project_id == project_id).first()
+    if not scene:
+        raise HTTPException(status_code=404, detail="Scene not found")
+    try:
+        result = storyboard_sequence.draw_scene(
+            db, project, scene,
+            client=storyboard_sequence.HostedAstra(),
+            confirmed=payload.confirm_paid_generation,
+            extra_guidance=payload.extra_guidance,
+        )
+    except storyboard_sequence.SequenceError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return StoryboardSequenceResult(
+        scene_id=result.scene_id,
+        frames_drawn=result.frames_drawn,
+        take_ids=result.take_ids,
+        failures=result.failures,
+        last_response_id=result.last_response_id,
     )

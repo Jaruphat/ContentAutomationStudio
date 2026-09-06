@@ -428,6 +428,25 @@ class ChannelAnalyticsReport(BaseModel):
     winner_by_hook: dict[str, Any] = Field(default_factory=dict)
 
 
+class StoryboardSequenceRequest(BaseModel):
+    """Draw a scene's shots as one chained sequence. Every frame is billed."""
+
+    model_config = {"extra": "forbid"}
+
+    confirm_paid_generation: bool = False
+    extra_guidance: str = ""
+
+
+class StoryboardSequenceResult(BaseModel):
+    scene_id: str
+    frames_drawn: int
+    take_ids: list[str] = Field(default_factory=list)
+    #: Named, not counted: a sequence that stopped at frame three has to say
+    #: which frame and why, because the frames before it were paid for.
+    failures: list[str] = Field(default_factory=list)
+    last_response_id: str = ""
+
+
 class CompositeLayer(BaseModel):
     """One layer drawn over a generated frame.
 

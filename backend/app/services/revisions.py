@@ -33,6 +33,7 @@ from app.models import (
     Scene,
     Shot,
     Take,
+    Workflow,
 )
 from app.services import character_sets, continuity_frames, prompt_context
 
@@ -135,6 +136,20 @@ def _reference_fingerprint(
     return ids, hashes, sheet_digests
 
 
+def _workflow_constants(db: Session, project, shot: Shot) -> dict[str, Any]:
+    """The fixed settings of whichever workflow this shot would actually use."""
+    workflow_id = shot.workflow_preset_id or (
+        (project.default_video_workflow_id
+         if (shot.generation_mode or "image") != "image"
+         else project.default_image_workflow_id)
+        if project else None
+    )
+    if not workflow_id:
+        return {}
+    workflow = db.query(Workflow).filter(Workflow.id == workflow_id).first()
+    return dict(getattr(workflow, "constants", None) or {})
+
+
 def _character_set_fingerprint(
     db: Session, project_id: str, set_ids: list[str]
 ) -> list[str]:
@@ -231,6 +246,14 @@ def shot_digest(
         payload["character_set_sha256s"] = character_set_hashes
     if continuity["mode"] != continuity_frames.MODE_NONE:
         payload["continuity_source"] = continuity
+    # Settings the workflow fixes decide what the graph produces - 9.0 against
+    # 3.5 on a guidance scale is a different picture from the same prompt and
+    # seed, measured on a real shot. A take made under one set is not a take of
+    # the shot as it stands under another. Added only when a workflow has any,
+    # so no existing project's digest moves to record that nothing changed.
+    constants = _workflow_constants(db, project, shot)
+    if constants:
+        payload["workflow_constants"] = constants
 
     content_sha256 = _sha256(payload)
 
