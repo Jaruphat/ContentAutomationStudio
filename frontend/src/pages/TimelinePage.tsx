@@ -14,6 +14,8 @@ import {
   AlertCircle,
   Clock,
   ArrowRight,
+  ChevronDown,
+  ChevronUp,
   Terminal,
   AlertTriangle,
   Clapperboard,
@@ -55,7 +57,23 @@ export function currentProjectValue<T>(
  * belongs to, what the shot is of, and the frame itself. The ids are still
  * available as a tooltip for anyone reconciling against an export.
  */
-function TimelineRow({ item, index }: { item: TimelineItem; index: number }) {
+function TimelineRow({
+  item, index, onMove, onTrim, canMoveUp, canMoveDown,
+}: {
+  item: TimelineItem;
+  index: number;
+  onMove: (direction: -1 | 1) => void;
+  onTrim: (inPoint: number, outPoint: number) => void;
+  canMoveUp: boolean;
+  canMoveDown: boolean;
+}) {
+  // The trim is held locally while it is being typed and committed on blur:
+  // sending a request per keystroke would rewrite the whole manifest eight
+  // times to change one number.
+  const [inPoint, setInPoint] = useState(item.in_point_sec.toFixed(1));
+  const [outPoint, setOutPoint] = useState(item.out_point_sec.toFixed(1));
+  const commit = () => onTrim(parseFloat(inPoint) || 0, parseFloat(outPoint) || 0);
+
   return (
     <div className="flex items-center gap-3 rounded-lg border border-zinc-800 bg-zinc-900/60 px-3 py-2.5">
       {/* Order indicator */}
@@ -103,9 +121,45 @@ function TimelineRow({ item, index }: { item: TimelineItem; index: number }) {
         <span>{item.duration_sec.toFixed(1)}s</span>
       </div>
 
-      {/* Time range */}
-      <div className="hidden min-w-[80px] text-right text-[10px] text-zinc-500 md:block">
-        {item.in_point_sec.toFixed(1)}s - {item.out_point_sec.toFixed(1)}s
+      {/* Trim. The cut is assembled from approved takes, but where a clip
+          starts and stops inside its take is an editing decision, and it was
+          only reachable by rewriting the manifest through the API. */}
+      <div className="hidden shrink-0 items-center gap-1 text-[10px] text-zinc-500 md:flex">
+        <input
+          aria-label={`Clip ${index + 1} starts at`}
+          value={inPoint}
+          onChange={(e) => setInPoint(e.target.value)}
+          onBlur={commit}
+          className="w-12 rounded border border-zinc-700 bg-zinc-900 px-1 py-0.5 text-right text-zinc-200"
+        />
+        <span>-</span>
+        <input
+          aria-label={`Clip ${index + 1} ends at`}
+          value={outPoint}
+          onChange={(e) => setOutPoint(e.target.value)}
+          onBlur={commit}
+          className="w-12 rounded border border-zinc-700 bg-zinc-900 px-1 py-0.5 text-right text-zinc-200"
+        />
+        <span>s</span>
+      </div>
+
+      <div className="flex shrink-0 flex-col">
+        <button
+          aria-label={`Move clip ${index + 1} earlier`}
+          disabled={!canMoveUp}
+          onClick={() => onMove(-1)}
+          className="text-zinc-500 hover:text-zinc-200 disabled:opacity-25"
+        >
+          <ChevronUp size={12} />
+        </button>
+        <button
+          aria-label={`Move clip ${index + 1} later`}
+          disabled={!canMoveDown}
+          onClick={() => onMove(1)}
+          className="text-zinc-500 hover:text-zinc-200 disabled:opacity-25"
+        >
+          <ChevronDown size={12} />
+        </button>
       </div>
 
       {/* Transitions */}
@@ -475,6 +529,54 @@ export default function TimelinePage() {
     },
   });
 
+  const items = timelineQ.data?.items ?? [];
+  const ordered = [...items].sort((a, b) => a.order - b.order);
+
+  // The whole manifest is sent back, because that is what the endpoint takes
+  // and because a cut is an ordered whole: half an edit applied is two clips
+  // claiming the same position.
+  const editMut = useMutation({
+    mutationFn: (next: TimelineItem[]) =>
+      api.timeline.update(
+        currentProjectId as string,
+        next.map((item, order) => ({
+          shot_id: item.shot_id,
+          take_id: item.take_id,
+          order,
+          in_point_sec: item.in_point_sec,
+          out_point_sec: item.out_point_sec,
+          duration_sec: item.duration_sec,
+          transition_in: item.transition_in,
+          transition_out: item.transition_out,
+        })),
+      ),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["timeline", currentProjectId] }),
+  });
+
+  const moveItem = (index: number, direction: -1 | 1) => {
+    const next = [...ordered];
+    const target = index + direction;
+    if (target < 0 || target >= next.length) return;
+    [next[index], next[target]] = [next[target], next[index]];
+    editMut.mutate(next);
+  };
+
+  const trimItem = (index: number, inPoint: number, outPoint: number) => {
+    const current = ordered[index];
+    if (current.in_point_sec === inPoint && current.out_point_sec === outPoint) return;
+    const next = [...ordered];
+    next[index] = {
+      ...current,
+      in_point_sec: inPoint,
+      out_point_sec: outPoint,
+      // The length of a clip is the piece of it that is used, so a trim that
+      // did not change the duration would be a trim that changes nothing.
+      duration_sec: Math.max(0, outPoint - inPoint),
+    };
+    editMut.mutate(next);
+  };
+
   if (!currentProjectId) {
     return (
       <div className="flex h-full flex-col items-center justify-center text-center px-8">
@@ -487,7 +589,6 @@ export default function TimelinePage() {
     );
   }
 
-  const items = timelineQ.data?.items ?? [];
   const totalDuration = timelineQ.data?.total_duration_sec ?? 0;
   const coverage = timelineQ.data?.coverage;
   const loadError = timelineQ.isError ? toAIError(timelineQ.error).detail : null;
@@ -658,11 +759,17 @@ export default function TimelinePage() {
       {items.length > 0 && (
         <>
           <div className="space-y-2">
-            {[...items]
-              .sort((a, b) => a.order - b.order)
-              .map((item, i) => (
-                <TimelineRow key={item.id} item={item} index={i} />
-              ))}
+            {ordered.map((item, i) => (
+              <TimelineRow
+                key={item.id}
+                item={item}
+                index={i}
+                canMoveUp={i > 0}
+                canMoveDown={i < ordered.length - 1}
+                onMove={(direction) => moveItem(i, direction)}
+                onTrim={(inPoint, outPoint) => trimItem(i, inPoint, outPoint)}
+              />
+            ))}
           </div>
 
           {/* Where this stage leads. */}

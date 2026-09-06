@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Plus, Save, ShieldCheck } from "lucide-react";
+import { Loader2, Plus, Save, ShieldCheck, Trash2 } from "lucide-react";
 import api from "../api/client";
 import type { CharacterSet, CharacterSetCreate, CharacterViewSlot, MediaProviderId, Workflow } from "../types";
 import ActionError from "./ActionError";
@@ -59,6 +59,13 @@ function SetEditor({ projectId, value }: { projectId: string; value: CharacterSe
     onSuccess: refresh,
   });
   const save = useMutation({ mutationFn: () => api.characterSets.update(projectId, value.id, form), onSuccess: refresh });
+  // A set written by mistake otherwise stays bindable for ever, and a shot
+  // bound to the wrong character is a shot that generates the wrong person.
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const remove = useMutation({
+    mutationFn: () => api.characterSets.delete(projectId, value.id),
+    onSuccess: () => { setConfirmingDelete(false); refresh(); },
+  });
   const version = useMutation({
     mutationFn: async () => {
       const draft = await api.characterSets.createVersion(projectId, value.id, { slots });
@@ -86,7 +93,23 @@ function SetEditor({ projectId, value }: { projectId: string; value: CharacterSe
     </label>
   );
   return <article className="space-y-4 rounded-lg border border-zinc-700 bg-zinc-900/70 p-4">
-    <div className="flex items-center gap-2"><h3 className="font-semibold text-zinc-100">{value.name}</h3>{value.approved_version_id && <span className="rounded bg-emerald-950 px-2 py-0.5 text-[10px] text-emerald-300">Approved canonical</span>}</div>
+    <div className="flex items-center gap-2">
+      <h3 className="font-semibold text-zinc-100">{value.name}</h3>
+      {value.approved_version_id && <span className="rounded bg-emerald-950 px-2 py-0.5 text-[10px] text-emerald-300">Approved canonical</span>}
+      {confirmingDelete ? (
+        <span className="ml-auto flex items-center gap-2 text-xs text-zinc-300">
+          Delete “{value.name}” and every version of it?
+          <button type="button" onClick={() => remove.mutate()} disabled={remove.isPending} className="rounded bg-red-700 px-2 py-1 text-xs text-white disabled:opacity-50">
+            {remove.isPending ? "Deleting…" : "Delete"}
+          </button>
+          <button type="button" onClick={() => setConfirmingDelete(false)} className="text-zinc-400 hover:text-zinc-200">Keep</button>
+        </span>
+      ) : (
+        <button type="button" aria-label={`Delete character set ${value.name}`} onClick={() => setConfirmingDelete(true)} className="ml-auto text-zinc-500 hover:text-red-400">
+          <Trash2 size={14} />
+        </button>
+      )}
+    </div>
     {value.approved_version_id && !value.approved_version_is_current && <p role="alert" className="rounded border border-amber-800 bg-amber-950/40 p-2 text-xs text-amber-300">Canonical version is stale because the identity specification changed. Generate and approve a new version before binding it to new shots.</p>}
     <div className="grid gap-2 md:grid-cols-2">{field("name", "Name")}{field("appearance", "Appearance / identity", 2)}{field("proportions", "Proportions")}{field("wardrobe", "Wardrobe", 2)}{field("palette", "Palette")}{field("identity_tokens", "Identity tokens", 2)}{field("negative_tokens", "Negative specification", 2)}{field("notes", "Continuity notes", 2)}</div>
     <button type="button" onClick={() => save.mutate()} disabled={save.isPending || !form.name?.trim()} className="flex items-center gap-1 rounded bg-zinc-700 px-3 py-1.5 text-xs text-white disabled:opacity-50"><Save size={12} />Save identity specification</button>

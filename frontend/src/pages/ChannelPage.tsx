@@ -101,6 +101,15 @@ function ChannelEditor({ channel }: { channel: Channel }) {
 
   const refresh = () => qc.invalidateQueries({ queryKey: ["channels"] });
 
+  const [confirming, setConfirming] = useState(false);
+  const remove = useMutation({
+    mutationFn: () => api.channels.remove(channel.id),
+    onSuccess: () => {
+      setConfirming(false);
+      refresh();
+    },
+  });
+
   const save = useMutation({
     mutationFn: () =>
       api.channels.update(channel.id, {
@@ -240,6 +249,39 @@ function ChannelEditor({ channel }: { channel: Channel }) {
         Save channel bibles
       </button>
       <ActionError label="Save channel" error={save.error} />
+
+      {/* A channel that was tried once and abandoned otherwise stays in the
+          list for ever, and its premises keep appearing in the board. */}
+      {confirming ? (
+        <div className="flex flex-wrap items-center gap-2 text-xs text-zinc-300">
+          Delete “{channel.name}” and its premises?
+          <button
+            type="button"
+            onClick={() => remove.mutate()}
+            disabled={remove.isPending}
+            className="rounded bg-red-700 px-2 py-1 text-xs font-medium text-white disabled:opacity-50"
+          >
+            {remove.isPending ? "Deleting…" : "Delete channel"}
+          </button>
+          <button
+            type="button"
+            onClick={() => setConfirming(false)}
+            className="rounded px-2 py-1 text-xs text-zinc-400 hover:text-zinc-200"
+          >
+            Keep
+          </button>
+        </div>
+      ) : (
+        <button
+          type="button"
+          aria-label={`Delete channel ${channel.name}`}
+          onClick={() => setConfirming(true)}
+          className="text-xs text-zinc-500 hover:text-red-400"
+        >
+          Delete this channel
+        </button>
+      )}
+      <ActionError label="Delete channel" error={remove.error} />
 
       <PremiseBoard channel={channel} />
 

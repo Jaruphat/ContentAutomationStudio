@@ -20,6 +20,7 @@ import api, { toAIError } from "../api/client";
 import ActionError from "../components/ActionError";
 import AspectOverrideBanner from "../components/AspectOverrideBanner";
 import PublishGate from "../components/PublishGate";
+import AnalyticsCapture from "../components/AnalyticsCapture";
 import SubtitleSettingsSection, {
   subtitlePresets,
   subtitlePreviewAspect,
@@ -270,6 +271,10 @@ export default function ExportPage() {
           episode go out. Placed above the export cards because a package that
           is not ready makes every download below it premature. */}
       <PublishGate projectId={currentProjectId} />
+
+      {/* After the film goes out, what it did. The channel page compares
+          episodes; this is where the numbers it compares come from. */}
+      <AnalyticsCapture projectId={currentProjectId} />
 
       {timelineQ.data && (
         <AspectOverrideBanner

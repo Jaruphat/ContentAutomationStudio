@@ -188,6 +188,12 @@ test("a creator can take an episode from nothing to an export", async ({ page })
   // seconds because that is what was typed into the shot, not a default.
   await expect(page.getByText(/1 item .* 6\.0s/)).toBeVisible();
 
+  // Where a clip starts and stops inside its take is an editing decision, and
+  // the only way to make it used to be rewriting the manifest through the API.
+  await page.getByLabel("Clip 1 ends at").fill("4");
+  await page.getByLabel("Clip 1 ends at").blur();
+  await expect(page.getByText(/1 item .* 4\.0s/)).toBeVisible();
+
   // ── 7. Export ─────────────────────────────────────────────────────────
   // The strongest thing this can assert: the sentence typed into the shot
   // editor in step 3 comes back out of the far end of the pipeline.
@@ -245,6 +251,15 @@ test("an episode can be named for upload, and a project thrown away", async ({ p
   await page.reload();
   await expect(page.getByLabel("Published title")).toHaveValue("The Extra Room");
   await expect(page.getByLabel("Published hashtags")).toHaveValue("#shorts #liminal");
+
+  // The learning loop's other half. The channel page compares episodes and
+  // refuses to rank fewer than three per pillar; the numbers it compares had
+  // no page to be typed into.
+  await page.getByLabel("Views (24h)").fill("1840");
+  await page.getByLabel("Average viewed (%)").fill("62.5");
+  await page.getByLabel("Analytics notes").fill("posted late");
+  await page.getByRole("button", { name: "Record capture" }).click();
+  await expect(page.getByText("Capture recorded.")).toBeVisible();
 
   // A project with a non-ASCII title, because this runs on Windows and the
   // paths under it are the ones that break.

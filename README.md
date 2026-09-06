@@ -553,6 +553,13 @@ seven now have controls, and the browser walk-through exercises them:
   not it came from a channel. A clip's frame count is computed from the rate.
 - A **project can be deleted**, after confirming in place.
 
+Re-running the audit against the finished work found four more of the same
+kind, now also built: the cut's clips can be reordered and trimmed in place;
+what an episode did on the platform can be recorded on the export page (blank
+means unmeasured, not zero); and a channel or a character set can be deleted.
+What is left with no caller is a dozen single-item getters whose list
+equivalent is used - nothing that decides anything.
+
 ---
 
 ## Known Blockers

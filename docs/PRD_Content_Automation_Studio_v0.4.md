@@ -27,9 +27,9 @@ ComfyUI and FFmpeg. It is not a multi-user hosted publishing service.
 | Continuity | Explicit approved start and optional landing frames | Stale, missing, or incompatible source bindings block generation. |
 | Generate | Preflight, cost estimate, queued runs, progress, retry, cancellation. Registering a graph, binding its inputs, its frame rate and its fixed settings are a stage of their own | Preserve the actual graph, prompt, seed, references and provider settings. Explain unmapped fields. Registering and mapping a workflow must be possible without an HTTP client. |
 | Review | Playable takes, approval/rejection, regeneration, media provenance | Approval remains a review decision; staleness is enforced. |
-| Timeline | Approved takes, ordering, trims, shot audio, music and sound cues | Stale or missing media cannot silently enter a new render. |
+| Timeline | Approved takes, ordering and trims editable in place, shot audio, music and sound cues | Stale or missing media cannot silently enter a new render. A trim changes the clip's length, so the cut's own length follows it. |
 | Delivery | Narration, subtitles, emphasis, normalized audio, MP4, timeline exports, publish package | Inspect the exact final file and its caption/audio timing before recording quality approval. |
-| Learning | Episode quality cards and manually recorded analytics | Insufficient data is stated before rankings; no invented performance claims. |
+| Learning | Episode quality cards, and analytics captured from the platform on the export page | Insufficient data is stated before rankings; no invented performance claims. A blank measurement is not recorded as zero. |
 
 The existing perspective compositor is retained: four corners map text and
 patches onto the same plane. Critical readable typography should be authored
@@ -513,6 +513,27 @@ The publication copy is offered before the gate passes rather than after.
 Naming the film is part of finishing it, and waiting for a green scorecard
 would mean the last thing a creator does has to happen somewhere else.
 
+Re-running the audit against the finished work found four more of the same
+kind, built with the seven:
+
+* **The cut could not be edited.** Clips could be placed by a build and never
+  moved or trimmed, though where a clip starts and stops inside its approved
+  take is an editing decision and the manifest endpoint had always accepted
+  it. Two buttons and two numbers per row now, sending the whole manifest back
+  for the same reason the storyboard does.
+* **Analytics could be read and never recorded.** The channel page compares
+  episodes and refuses to rank fewer than three per pillar - comparing numbers
+  that no page could enter. Every field is optional, because a capture at a
+  day has views and little else while one at a week has retention, and a form
+  demanding all of them would be filled with zeroes. A blank field is left out
+  of the request: unmeasured is not zero.
+* **A channel and a character set could not be deleted**, so an abandoned one
+  stayed bindable and its premises kept appearing on the board.
+
+What is left with no caller is a dozen single-item getters whose list
+equivalent is used, and one duplicate health check. Nothing that decides
+anything.
+
 ### The walk-through, in a browser
 
 The coverage check above reads the code. What it cannot show is whether the
@@ -542,15 +563,17 @@ have:
   eye from the card around them, indistinguishable to anything that navigates
   by name. Each now says which export it is.
 
-It grew with the seven controls. It now also names a scene and writes its time
-of day and summary, moves a shot earlier and back, marks a second shot as a
-key image kept out of the cut - and then asserts the cut is one item, not two,
-which is the exact failure that turned a 32-second film into 48. A second case
+It grew with the controls. It now also names a scene and writes its time of day
+and summary, moves a shot earlier and back, marks a second shot as a key image
+kept out of the cut - and then asserts the cut is one item, not two, which is
+the exact failure that turned a 32-second film into 48. It trims that clip from
+six seconds to four and checks the cut's own length followed. A second case
 covers refusal rather than success: a shot with no prompt is blocked at
 preflight, the reason is named on the page, and Generate stays disabled. A
 third types the publication copy, reloads the page to prove it was saved rather
-than only typed, and deletes a project whose title is not ASCII, because this
-runs on Windows and those are the paths that break.
+than only typed, records a capture of what the episode did, and deletes a
+project whose title is not ASCII, because this runs on Windows and those are
+the paths that break.
 
 A queue that accepts an empty shot spends a GPU minute drawing nothing, and the
 first place anyone would find out is Review. That is what these cases are for.
@@ -758,11 +781,13 @@ The first three come from the coverage check above and share one shape: the
 material can be generated but not written by hand. They rank ahead of the
 measurement work because each of them is currently a reason to open a terminal.
 
-~~0a-0e~~ Done. Scene editing, reordering, the creative brief, publication
-copy, the three remaining shot fields, a project's frame rate and canvas, and
-deleting a project are all controls on the page now, covered by unit tests and
-by the browser walk-through. What remains below is measurement and evidence
-work, not reachability.
+~~0a-0e~~ Done, along with the four the second pass found: scene editing,
+reordering, the creative brief, publication copy, the three remaining shot
+fields, a project's frame rate and canvas, deleting a project, editing and
+trimming the cut, recording analytics, and deleting a channel or a character
+set are all controls on the page now, covered by unit tests and by the browser
+walk-through. Nothing that decides anything still requires an HTTP client.
+What remains below is measurement and evidence work, not reachability.
 
 1. Complete render-input fingerprints across cut, narration, subtitles and
    sound, with freshness shown consistently in Timeline and Publish.
