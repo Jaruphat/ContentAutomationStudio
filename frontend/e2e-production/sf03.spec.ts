@@ -207,6 +207,23 @@ async function selectShot(page: Page, row: Locator) {
   throw new Error("The inspector never followed the row that was clicked.");
 }
 
+/** Click a row and wait until the inspector is showing a shot with a
+ *  direction control - used where the shot already has one written. */
+async function selectShotByRow(page: Page, row: Locator) {
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    await row.click();
+    try {
+      await page
+        .getByLabel("What happens in the frame")
+        .waitFor({ state: "visible", timeout: 4000 });
+      return;
+    } catch {
+      // Not this one yet.
+    }
+  }
+  throw new Error("The inspector never showed a clip for the row clicked.");
+}
+
 async function stage(page: Page, name: string) {
   await page
     .getByRole("navigation", { name: "Production stages" })
@@ -905,20 +922,8 @@ test("approves the key images and gives every clip its own start frame", async (
  * the *surface*, not ask for the writing on it to be unreadable.
  */
 const REJECTED: string[] = [
-  // Empty on purpose, and it has to be emptied before a second review pass:
-  // leaving the two names here after they were reworked rejected the new
-  // takes as well - a list of shots to send back is only true of the pass it
-  // was written for.
-  //
-  // What it held, and why:
-  //  * "The kiosk · Shot 1"    - pages pinned behind the counter reading
-  //    "NEAYII STR" and "WECRNA LANCR UTS": the tell SF01 failed its publish
-  //    gate on, produced despite a negative prompt naming legible text,
-  //    headlines and lettering. Removing the surface fixed it where a
-  //    stronger negative had not.
-  //  * "The storeroom · Shot 5" - the last beat is the street corner at first
-  //    light and came back as the storeroom, because it sits in the storeroom
-  //    scene and was conditioned on that plate. Re-pointed at the corner.
+  // Nothing to send back this pass. The list is only ever true of the pass it
+  // was written for: leaving a name here once rejected the remade take too.
 ];
 
 test("reviews the key images one at a time", async ({ page }) => {
@@ -1022,7 +1027,9 @@ test("makes the two reworked shots again", async ({ page }) => {
   await selectEpisode(page);
   await stage(page, "Review");
 
-  for (const name of ["The kiosk · Shot 1", "The storeroom · Shot 5"]) {
+  // Whichever shots were reworked since the last pass. Like REJECTED above,
+  // this is only true of the pass it is written for.
+  for (const name of ["The corner before dawn · Shot 1"]) {
     // A shot that already has a take waiting has been made again: leave it.
     const waiting = await page
       .getByRole("button", { name: "Approve", exact: true })
@@ -1096,4 +1103,139 @@ test("puts scene one back in the order the story is told in", async ({ page }) =
   const second = await rows.nth(1).innerText();
   expect(second).toContain(beat.subject);
   expect(second).not.toContain("(key image)");
+});
+
+test("re-directs the dead opening and makes the reveal a held frame", async ({ page }) => {
+  await selectEpisode(page);
+  await stage(page, "Storyboard");
+  await expect(page.locator("tbody").first().locator("tr").first())
+    .toBeVisible({ timeout: 30_000 });
+
+  // 1. The opening clip did not move. The direction described the van
+  //    receding, but the frame it starts from already has the van at the far
+  //    end of the street - so there was nothing left to recede. Say what
+  //    moves in the frame that exists.
+  const opening = page.locator("tbody").first().locator("tr").nth(1);
+  await selectShotByRow(page, opening);
+  await page.getByLabel("What happens in the frame").fill(
+    "The van's tail lights slide left and shrink as it turns the corner. "
+    + "Rain falls steadily through the cone of lamplight and darkens the "
+    + "pavement.",
+  );
+  await page.getByRole("button", { name: "Save direction" }).click();
+  await expect(page.getByText("Saved. Generate this shot again")).toBeVisible();
+
+  // 2. The reveal is a held frame. Its key image is clean and its clip was
+  //    not: animating a page that is being handled makes the model redraw the
+  //    page, and it writes on it. The blueprint's own rule is that critical
+  //    text is composited in post rather than generated - a still is where
+  //    that holds. So the key image joins the cut and the clip leaves it.
+  const storeroom = page.locator("tbody").nth(2).locator("tr");
+  await storeroom.nth(2).getByRole("button", { name: /^Edit shot / }).click();
+  await page.getByLabel("Include this shot in the cut").check();
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Save", exact: true })).toHaveCount(0);
+
+  await storeroom.nth(3).getByRole("button", { name: /^Edit shot / }).click();
+  await page.getByLabel("Include this shot in the cut").uncheck();
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Save", exact: true })).toHaveCount(0);
+});
+
+test("gives the opening clip a graph with more to work with", async ({ page }) => {
+  // Twice now the opening has come back with a mean luma change of 0.32 and
+  // every sample near-static: the turbo graph, at eight steps, finds nothing
+  // to move in a still night street. Re-writing the direction did not change
+  // that, so the next thing to change is the graph - which is what a workflow
+  // per shot is for.
+  await selectEpisode(page);
+  await stage(page, "Storyboard");
+  const opening = page.locator("tbody").first().locator("tr").nth(1);
+  await expect(opening).toBeVisible({ timeout: 30_000 });
+  await opening.getByRole("button", { name: /^Edit shot / }).click();
+  await page.getByLabel("Shot workflow")
+    .selectOption({ label: "H3 I2V probe full 576x1024" });
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Save", exact: true })).toHaveCount(0);
+});
+
+test("re-makes the opening frame so there is something in it to move", async ({ page }) => {
+  // Three attempts at the opening clip, three dead ones: 0.33 mean luma
+  // change and every sample near-static, on the turbo graph and on the full
+  // one, with the direction rewritten in between. The graph is not the
+  // problem and neither is the wording - the frame is. A distant van on an
+  // empty street at night gives an image-to-video model nothing to move.
+  //
+  // So the key image is remade with the movement already implied: the van
+  // close and lit, rain visible in the lamplight, the pavement wet enough to
+  // carry a reflection that can shift.
+  await selectEpisode(page);
+  await stage(page, "Storyboard");
+  const key = page.locator("tbody").first().locator("tr").first();
+  await expect(key).toBeVisible({ timeout: 30_000 });
+  await key.getByRole("button", { name: /^Edit shot / }).click();
+  await page.getByLabel("Image prompt").fill(
+    "Wide shot of an empty city street corner before dawn in heavy rain. A "
+    + "white delivery van is close, half in frame at the kerb, its brake "
+    + "lights burning red on the wet asphalt and its exhaust visible in the "
+    + "cold air. A bundle of newspapers has just been dropped on the pavement "
+    + "under a single working streetlamp, rain streaking through the light. "
+    + "Closed shutters, no people. Film grain.",
+  );
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Save", exact: true })).toHaveCount(0);
+});
+
+test("re-points the opening clip at the frame that was just remade", async ({ page }) => {
+  // The binding names a take, not a shot, so remaking the key image leaves the
+  // clip pointing at the picture that was thrown away.
+  await selectEpisode(page);
+  await stage(page, "Storyboard");
+  const clip = page.locator("tbody").first().locator("tr").nth(1);
+  await expect(clip).toBeVisible({ timeout: 30_000 });
+  await clip.getByRole("button", { name: /^Edit shot / }).click();
+  await expect(page.getByText("Loading continuity candidates")).toHaveCount(0, {
+    timeout: 30_000,
+  });
+  const clear = page.getByRole("button", { name: /Clear continuity/ });
+  if (await clear.count()) {
+    await clear.first().click();
+    await expect(clear).toHaveCount(0, { timeout: 30_000 });
+  }
+  const picker = page.getByRole("combobox", {
+    name: "Choose an approved scene image take",
+  });
+  await expect.poll(async () => picker.locator("option").count(), { timeout: 30_000 })
+    .toBeGreaterThan(1);
+  const options = await picker.locator("option").allTextContents();
+  const own = options.find((text) => text.includes("Shot 0 "));
+  expect(own, "the remade opening frame should be offered").toBeTruthy();
+  await picker.selectOption({ label: own as string });
+  await page.getByRole("button", { name: "Use approved scene image as start frame" }).click();
+  await expect(page.getByRole("button", { name: /Clear continuity/ }))
+    .toBeVisible({ timeout: 60_000 });
+});
+
+test("builds the cut and renders the film", async ({ page }) => {
+  await selectEpisode(page);
+  await stage(page, "Timeline");
+  await page.getByRole("button", { name: "Build Timeline" }).click();
+  // Nine items: eight clips and one held frame - the reveal, which is a still
+  // because animating a page being handled makes the model write on it.
+  await expect(page.getByText(/9 items/)).toBeVisible({ timeout: 60_000 });
+
+  // Narrated with this machine's own voice: free, and it cannot be directed.
+  // The channel's voice direction is only read by the metered narrator, and
+  // spending on one is a decision for whoever owns the account, not for a
+  // production run to make on their behalf.
+  await page.getByText("Narrate", { exact: true }).click();
+  const render = page.getByRole("button", { name: "Render Review" });
+  await expect(render).toBeEnabled();
+  await render.click();
+
+  // FFmpeg, locally: a 32-second cut with narration and burned captions takes
+  // minutes rather than seconds. The button disabling itself is the render
+  // starting - the words "Finished Film" are on the page before it does.
+  await expect(render).toBeDisabled({ timeout: 30_000 });
+  await expect(render).toBeEnabled({ timeout: 20 * 60_000 });
 });

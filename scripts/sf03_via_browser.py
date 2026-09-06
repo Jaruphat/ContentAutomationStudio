@@ -58,8 +58,12 @@ PHASES = {
     "remake-two": "makes the two reworked shots",
     "bind-all": "approves the key images and gives",
     "order": "puts scene one back in the order",
+    "redirect": "re-directs the dead opening",
+    "opening-graph": "gives the opening clip a graph",
+    "opening-frame": "re-makes the opening frame",
+    "rebind-opening": "re-points the opening clip",
     "clips": "generates the clips",
-    "assemble": "assembles",
+    "assemble": "builds the cut and renders",
 }
 
 

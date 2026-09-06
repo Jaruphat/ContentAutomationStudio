@@ -775,6 +775,91 @@ Two smaller findings from the same pass, both fixed:
   did as it was told and invented hands, a newspaper and a headline. The
   direction and the framing are one decision and have to be changed together.
 
+## SF03, "Tomorrow's Newspaper" - the first episode typed in rather than scripted
+
+SF01 and SF02 were produced by a Python file posting to the API. SF03 was
+produced by driving the pages in a browser: every value typed into a control a
+creator can see, against the live backend, the live database and the live
+ComfyUI. It is the first end-to-end evidence that the application can be used
+rather than only called.
+
+**What it produced.** 32.541 seconds, 576x1024 at 30 fps, h264 and AAC,
+-16.5 LUFS integrated and -1.9 dBTP - the same delivery numbers as the two
+scripted episodes. Nine beats: eight clips and one held frame. Three location
+plates, nine key images, nine clips, and a review pass that sent five takes
+back.
+
+**Six defects it found**, each of which had gone unnoticed through two
+delivered episodes and 1,600 tests, because all of them live in the part of
+the application a script never touches:
+
+1. The Story page filled itself over what was being typed. A brief and a plot
+   typed while the project was still loading were replaced by the empty ones
+   that came back.
+2. Two shots could be given the same order, because Add Shot computed it from
+   a cached count.
+3. Saving a workflow mapping dropped fields the page had never heard of -
+   including the `samplerCfg` mapped on the graph both delivered episodes were
+   made with.
+4. A rejected take left its shot unusable: NeedsReview with nothing to review,
+   and stale from the digest of the picture that had just been thrown away.
+5. Approving one shot disabled Generate for every other shot, which makes the
+   two-pass shape both episodes were made in - key images, approved, then
+   animated - impossible from the browser.
+6. The Generate click used a different rule from the button that offered it,
+   so with one shot approved the button was live and pressing it did nothing.
+
+**What the pictures showed.** The stills are good and the discipline holds: of
+nine key images, seven were approved first time. The two that were not are the
+two findings worth keeping.
+
+* **A negative prompt does not stop a model writing.** Every shot carried
+  "legible text, headline, masthead, readable words, lettering" in its
+  negatives, and the kiosk still came back with pages pinned behind the
+  counter reading *NEAYII STR* and *WECRNA LANCR UTS*. Removing the surface
+  fixed it where the negative had not: nothing pinned up, no pages on display,
+  the one page in frame seen edge-on.
+* **A plate decides where a shot happens.** The last beat is the street corner
+  at first light, rhyming with the film's first shot. It came back as the
+  storeroom, because it sits in the storeroom scene and was conditioned on
+  that plate. Re-pointing it at the corner plate fixed it in one pass.
+
+**And the finding that stopped it being publishable.** SF01 failed its gate on
+a garbled headline. This run reproduces that at the next level of detail: the
+tell is introduced by the *video* model, from clean stills.
+
+* The reveal - a hand holding a front page toward a bulb - had a key image
+  whose type was nothing but grey texture. Its clip redrew the page with a
+  face and a headline reading *erdsys / KEPT / vepist alejr*. Made a held
+  frame instead, which is what the blueprint has always said: critical text is
+  composited in post, not generated.
+* The kiosk clip put the pinned pages back that the reworked still had
+  removed, and the closing clip abandoned its start frame altogether - the
+  empty corner became a shopfront reading *Vine Third* with another garbled
+  page beside it.
+
+So the rule from SF01 and SF02 needs a third line. A patch on a still object
+survives animation; a patch on a handled object does not; and *a scene
+containing newsprint at all* invites the video model to write, whatever the
+still it was given. On this channel that means: hold the frame where the words
+matter.
+
+**Three clips that would not move.** The opening beat came back three times
+with a mean luma change of 0.33 and every sample near-static - on the turbo
+graph, on the fuller graph, and with the direction rewritten in between. The
+frame was the problem: a distant van on an empty night street gives an
+image-to-video model nothing to move. Remaking the key image with the van
+close, its brake lights lit, exhaust in the air and rain crossing the
+lamplight brought it to 1.07 and 51% - weak, but a shot rather than a
+photograph. The application's own motion check caught all three without being
+asked to.
+
+**Time.** A still is about 150 seconds at 576x1024 and four and a half minutes
+at 1080x1920, which is why the delivery canvas and the generation canvas are
+not the same decision. A clip is two to seven minutes. The whole episode,
+including five rejected takes and three attempts at the opening, was a working
+evening.
+
 ## Prioritized follow-up requirements
 
 The first three come from the coverage check above and share one shape: the
