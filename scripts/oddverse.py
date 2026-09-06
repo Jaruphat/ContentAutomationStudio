@@ -272,38 +272,40 @@ SF01: dict[str, Any] = {
             "weak tungsten platform light, a dark deserted railway platform "
             "thrown completely out of focus behind. No other people in frame. "
             "85mm lens.",
-            ("The newspaper page lifts and settles in the night air. The "
-             "hands adjust their grip and turn the page a little toward the "
-             "light, and the paper flexes across its fold.",
+            # "Turn the page" is an invitation, and the model accepted it:
+            # the clip opened the newspaper out and invented new pages of
+            # colour photographs. The paper is held still and only flexes.
+            ("The folded newspaper is held still. Its top edge lifts a little "
+             "in the night air and settles, and the paper flexes once across "
+             "its fold. The hands do not move and the page is not turned.",
              "85mm lens, shallow focus, camera steady.",
              "paper flexing and creasing close to the microphone, almost nothing else"),
             "", "DATED TOMORROW.", [],
         ),
         (
             5.0, "The Reveal",
-            # A detail beat, framed on the photograph. The face is the shot;
-            # the columns of type around it are what gave the last cut away,
-            # so the frame is tight enough that they are not in it.
-            "Macro photograph of the top of a newspaper front page filling the "
-            "entire frame from edge to edge at night, so close that the edges "
-            "of the page are outside the picture. Visible in frame: a narrow "
-            "band of blank cream newsprint across the top, and beneath it one "
-            "large grainy monochrome press photograph of a man in a dark "
-            "brown jacket looking straight out, occupying most of the frame. "
-            "No columns of type, no paragraphs, no small print anywhere. Worn "
-            "newsprint with a coarse halftone dot pattern in the photograph, "
-            "weak warm tungsten light, the darkness behind the page "
-            "completely out of focus. 100mm macro lens.",
+            # A detail beat, framed with the page held in the scene rather
+            # than filling the screen. Framed tight, so that the page *was*
+            # the screen, the video model abandoned the start frame on every
+            # attempt - with a composite on it and without one - and invented
+            # a platform, a different newspaper, or no newspaper at all. It
+            # holds a start frame that has depth in it and does not hold a
+            # flat graphic. That is the constraint this shot is written to.
+            "An old-fashioned newspaper front page held toward the camera at "
+            "night on a dark deserted railway platform, a large grainy "
+            "monochrome press photograph of a man in a dark brown jacket "
+            "filling the upper half of the page, worn newsprint, weak "
+            "tungsten light, background thrown completely out of focus, "
+            "nobody else in frame. Shallow depth of field.",
             # Rewritten with the framing. Asked to "raise the newspaper
             # toward the camera" from a start frame that is already the
             # photograph filling the screen, the model invented a pair of
             # hands and a whole new front page - and drew its own headline on
             # it. There is nothing left to raise; the page is already there.
-            ("The printed page flexes very slightly, the way paper held in "
-             "one hand does, and settles. The halftone grain of the "
-             "photograph shifts with it. Nothing else in the frame changes.",
-             "A very slow push in that comes to rest for the final half "
-             "second.",
+            ("The hands hold the page steady and it flexes once in the night "
+             "air. The photograph on the front page comes to fill more of "
+             "the frame.",
+             "A slow push in that comes to rest for the final half second.",
              "the ambience falling away to almost nothing, then one low sub-bass swell"),
             "But that wasn't the strange part. The photograph on the front "
             "page... was him.",
@@ -339,29 +341,40 @@ SF01: dict[str, Any] = {
     #: What must not be in these two frames. Kept per beat because the rest of
     #: the episode is allowed to show a newspaper at a distance where its type
     #: is only texture; these two are close enough that type would be read.
-    #: Only shot 9, and only the part that was legible. Shot 8 keeps its
-    #: columns: at that distance they are texture, and excluding them took the
-    #: newspaper with them.
-    "negatives": {
-        9: ("columns of body text, paragraphs of small print, dense newsprint "
-            "type, article text, page edges, whole newspaper visible"),
-    },
-    #: The rule from the other episode: composite what must be read and is
-    #: never spoken. The model's own front page read "Noural not Of The News",
-    #: legible nonsense held for five seconds, which is the clearest AI tell
-    #: the film had. A face is not something to composite - a character sheet
-    #: on newsprint reads as a product photo - but a masthead is, and this one
-    #: does two jobs: it replaces nothing (the band above the photograph is
-    #: blank newsprint) and it says the thing being pushed into is the same
-    #: paper the shot before it established.
-    "composites": {
-        9: [
-            {"type": "text", "text": "TOMORROW", "colour": "#16130f",
-             "size": 0.052,
-             "corners": [[0.115, 0.048], [0.885, 0.048],
-                         [0.885, 0.152], [0.115, 0.152]]},
-        ],
-    },
+    #: Nothing. Excluding the columns from shot 9 took the newspaper with
+    #: them, and excluding them from shot 8 left a blank sheet the shot after
+    #: it had nothing to push into. At the distance these two are held, the
+    #: type is texture; what gave the film away was a *headline* large enough
+    #: to read, and there is no negative prompt for "spell correctly".
+    "negatives": {},
+    #: Empty, and this is the finding that emptied it.
+    #:
+    #: The model's own front page read "Noural not Of The News" - legible
+    #: nonsense held for five seconds, the clearest AI tell the film had. A
+    #: masthead composited over it fixed the *still* perfectly. The clip
+    #: generated from that still then threw it away and drew a different
+    #: newspaper with a new headline, and on the next attempt abandoned the
+    #: page altogether for a wide shot of the platform.
+    #:
+    #: The pattern across both episodes: a composite that is a small patch on
+    #: a real object survives being animated - the delivery label in SF02 came
+    #: through the clip intact - and a composite that fills the frame does
+    #: not. The blueprint calls compositing post-production, which is to say
+    #: *after* the video; this pipeline does it before, and that is fine for a
+    #: patch and wrong for a page.
+    #:
+    #: So shot 9 carries no composite: its photograph fills the page and there
+    #: is nothing on it to read.
+    #:
+    #: Shot 8 does not either, and this is where the rule found its edge.
+    #: A patch on a real object in a frame with depth is the case SF02's
+    #: delivery label proved survivable - and the same shape of composite on
+    #: this newspaper did not survive. The difference is what the shot is
+    #: doing: SF02's label sat on a sofa in a shot whose only movement was a
+    #: draught, and this page is being handled. A patch survives a still
+    #: object being filmed; it does not survive the object it is on being
+    #: moved.
+    "composites": {},
     #: Section 6 of the blueprint, as an instruction a hosted voice can take.
     #: A platform voice has a name and a rate slider and no opinion about how
     #: a sentence should land; this is the reason to pay for one.

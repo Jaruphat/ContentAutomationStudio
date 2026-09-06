@@ -522,6 +522,68 @@ only what a viewer must read and no one says aloud, and measure its corners off
 the generated key image - generate, look, place, then animate. Anything the
 narration carries is better left to the narration.
 
+## What a composite can and cannot survive
+
+Trying to remove one AI tell from SF01 - a front page whose headline read
+"Noural not Of The News", legible nonsense held for five seconds - produced the
+clearest limit this project has measured, across six generations of the same
+two shots.
+
+**A composite that is a patch on a real object survives being animated.** SF02's
+delivery label was composited onto the still and came through the clip intact,
+readable, still on the sofa arm.
+
+**A composite that fills the frame does not.** A masthead composited over the
+whole width of a front page produced a perfect still - verified - and a clip
+that threw it away and drew a different newspaper with a new headline. On the
+next attempt the clip abandoned the page altogether for a wide shot of the
+platform.
+
+**And it is not the composite.** The same thing happens to an uncomposited
+frame: a press photograph filling the screen, with no text on it at all, was
+abandoned by the video model just as completely. What the two rejected frames
+have in common is that they are flat - a graphic occupying the whole picture,
+with no depth for the model to hold on to. The framing that survives is the
+page held *in* the scene, with the platform behind it.
+
+**The patch rule has an edge too.** SF02's delivery label survived its clip;
+the same shape of composite on SF01's newspaper did not. The difference is not
+the composite, it is what the shot is doing: the label sat on a sofa in a shot
+whose only movement was a draught, and the newspaper is being handled. A patch
+survives a still object being filmed. It does not survive the object it is
+printed on being moved.
+
+**What the shot is told to do decides how far it can drift.** Shot 8's
+direction said "the hands adjust their grip and turn the page a little toward
+the light". The model accepted the invitation: the clip opened the newspaper
+out and invented pages of colour photographs that were not in the still. Told
+instead that the paper is held still and only flexes, it held. A direction is
+permission, and "turn the page" is permission to invent one.
+
+Six attempts on this shot produced the honest ending: what survives animation
+is the page held in a scene with depth, and that page carries the model's own
+spelling. The delivered episode records `ai_artifact: 7` for it and the gate
+blocks on that, which is the right answer rather than a score adjusted until
+it passes.
+
+The blueprint calls compositing post-production, meaning after the video. This
+pipeline composites onto the still and animates that, which is right for a
+patch and wrong for a page. Compositing onto the rendered clip needs temporal
+tracking, which is already the fourth follow-up below; this is the measurement
+that says why it matters.
+
+Two smaller findings from the same pass, both fixed:
+
+* **A re-run must reproduce its frame.** Key images were generated with a
+  random seed, so reverting a prompt to one that had worked returned a
+  different picture - every correction was a gamble and none could be
+  verified. Key images now take a fixed seed derived from their beat.
+* **A motion direction outlives the framing it was written for.** Shot 9 was
+  reframed and its direction still said "the hands raise the newspaper toward
+  the camera". Given a start frame that was already the photograph, the model
+  did as it was told and invented hands, a newspaper and a headline. The
+  direction and the framing are one decision and have to be changed together.
+
 ## Prioritized follow-up requirements
 
 1. Complete render-input fingerprints across cut, narration, subtitles and

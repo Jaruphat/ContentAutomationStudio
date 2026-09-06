@@ -468,7 +468,7 @@ def main() -> int:
                     # worked came back with a different picture, which turns
                     # every correction into a gamble.
                     "seed_policy": "fixed",
-                    "seed": PLATE_SEED + index * 101,
+                    "seed": PLATE_SEED + index * 307,
                 })
                 record["key_shot_id"] = shot["id"]
                 produced[str(index)] = record
