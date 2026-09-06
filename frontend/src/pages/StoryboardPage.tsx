@@ -431,8 +431,11 @@ function SceneCard({
 
   const addShotMut = useMutation({
     mutationFn: () =>
+      // No order: the server appends after the current last shot. Sending a
+      // count read from the cache put two shots on the same order when two
+      // were added before the list came back, and the storyboard then had two
+      // shot 3s in an order nobody chose.
       api.shots.create(projectId, scene.id, {
-        order: (shotsQ.data?.length ?? 0),
         shot_type: "wide",
         generation_mode: "image",
       }),
@@ -614,8 +617,9 @@ export default function StoryboardPage() {
 
   const addSceneMut = useMutation({
     mutationFn: () =>
+      // Same reason as the shots above: the server appends. The name is still
+      // a guess from the count, and is meant to be typed over.
       api.scenes.create(currentProjectId!, {
-        order: scenesQ.data?.length ?? 0,
         title: `Scene ${(scenesQ.data?.length ?? 0) + 1}`,
       }),
     onSuccess: () =>

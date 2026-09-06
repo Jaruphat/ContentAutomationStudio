@@ -2,7 +2,7 @@
    StoryPage -- Creative Brief, Plot, and Story Bible management.
    ────────────────────────────────────────────────────────────────────────── */
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Save,
@@ -487,8 +487,19 @@ export default function StoryPage() {
 
   // Populate the form only when this response still belongs to the selected
   // project. A request that resolves after New starts must not hydrate draft.
+  // Loading a project fills the form once. It used to fill it again on every
+  // response, so text typed while the project was still loading was silently
+  // replaced by what came back - the brief and the plot of a whole episode,
+  // in the run that found this.
+  const hydrated = useRef<string | null>(null);
   useEffect(() => {
+    if (currentProjectId !== hydrated.current) hydrated.current = null;
+  }, [currentProjectId]);
+
+  useEffect(() => {
+    if (hydrated.current === currentProjectId) return;
     if (shouldLoadProjectIntoForm(projectQ.data, currentProjectId, creatingProject)) {
+      hydrated.current = currentProjectId;
       const p = projectQ.data!;
       setTitle(p.title);
       setObjective(p.objective);

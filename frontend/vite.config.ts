@@ -7,7 +7,7 @@ export default defineConfig({
   // The browser walk-through under e2e/ is Playwright's, not Vitest's: it
   // needs a running backend and a real Chrome. Run it with
   // `python scripts/e2e_browser.py`.
-  test: { exclude: ["e2e/**", "node_modules/**", "dist/**"] },
+  test: { exclude: ["e2e/**", "e2e-production/**", "node_modules/**", "dist/**"] },
   server: {
     port: 5173,
     proxy: {

@@ -19,8 +19,14 @@ import type { Workflow, WorkflowPurpose } from "../types";
 
 const PURPOSES: WorkflowPurpose[] = ["image", "text-to-video", "image-to-video"];
 
-/** The logical fields the payload builder knows how to fill. */
-const LOGICAL_FIELDS = [
+/** The logical fields the payload builder knows how to fill.
+ *
+ * Not the whole list a graph may carry: a workflow can map a field this page
+ * has never heard of - `samplerCfg`, on the graph a delivered episode was made
+ * with - and rebuilding the mapping from this list alone would quietly drop
+ * it. Every field already on the workflow is shown as well.
+ */
+const KNOWN_FIELDS = [
   "positivePrompt", "negativePrompt", "seed", "width", "height", "frames",
   "referenceImage", "referenceImage2", "referenceImage3", "endFrameImage",
   "aspectRatio", "outputPrefix",
@@ -59,10 +65,18 @@ function MappingRow({
 
 function WorkflowCard({ workflow }: { workflow: Workflow }) {
   const qc = useQueryClient();
+  // The page's own fields first, in their usual order, then anything this
+  // graph maps that the page does not know about.
+  const fields = [
+    ...KNOWN_FIELDS,
+    ...Object.keys(workflow.parameter_mapping).filter(
+      (field) => !KNOWN_FIELDS.includes(field),
+    ),
+  ];
   const [mapping, setMapping] = useState<Record<string, { nodeId: string; field: string }>>(
     () => {
       const out: Record<string, { nodeId: string; field: string }> = {};
-      for (const field of LOGICAL_FIELDS) {
+      for (const field of fields) {
         const bound = workflow.parameter_mapping[field] as
           | { nodeId?: string; field?: string }
           | undefined;
@@ -144,7 +158,7 @@ function WorkflowCard({ workflow }: { workflow: Workflow }) {
           application names a node; leave a row blank when the graph has no such
           input.
         </p>
-        {LOGICAL_FIELDS.map((field) => (
+        {fields.map((field) => (
           <MappingRow
             key={field}
             field={field}
