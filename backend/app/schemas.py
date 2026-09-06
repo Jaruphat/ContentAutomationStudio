@@ -665,6 +665,8 @@ class StyleCreate(BaseModel):
     # nothing warned. Forbidding extras turns that into a 422 naming the field.
     model_config = {"extra": "forbid"}
 
+    #: A name for the list, never a brief for the model.
+    label: str = ""
     medium: str = ""
     genre: str = ""
     visual_keywords: str = ""
@@ -681,6 +683,7 @@ class StyleUpdate(BaseModel):
     # nothing warned. Forbidding extras turns that into a 422 naming the field.
     model_config = {"extra": "forbid"}
 
+    label: Optional[str] = None
     medium: Optional[str] = None
     genre: Optional[str] = None
     visual_keywords: Optional[str] = None
@@ -695,8 +698,13 @@ class StyleResponse(BaseModel):
 
     id: str
     project_id: str
+    label: str = ""
     medium: str
     genre: str
+
+    _coerce_label = field_validator("label", mode="before")(
+        _coerce_added_column("")
+    )
     visual_keywords: str
     camera_language: str
     palette: str

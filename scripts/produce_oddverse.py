@@ -418,6 +418,7 @@ def main() -> int:
         order_in_scene[beat_scene(beat)] = position
         record = produced.get(str(index), {})
         record["scene_id"] = sid
+        detail = index in (ep.get("detail_beats") or ())
         sets = [cast_ids[c] for c in cast]
         log(f"beat {index}/{len(beats)} - {name}")
 
@@ -436,11 +437,23 @@ def main() -> int:
                     "image_prompt": f"{image_prompt} {ep['style']}",
                     "negative_prompt": ep["negative"],
                     "character_set_ids": sets,
-                    # Every key image is an edit of the world plate, so all
-                    # nine are the same station. A shot with a character
-                    # carries two inputs: the canonical view, then the plate.
-                    "reference_asset_ids": world_ref,
-                    "workflow_preset_id": WF_EDIT2 if sets else WF_EDIT,
+                    # Every key image is an edit of its scene's plate, so all
+                    # the shots in a scene are the same place. A shot with a
+                    # character carries two inputs: the canonical view, then
+                    # the plate.
+                    #
+                    # A detail is the exception. The plate exists to hold a
+                    # *place* together, and an extreme close-up of a label has
+                    # no place in it - conditioning one on the plate hands
+                    # back the plate's framing, so the shot comes out as
+                    # another wide view of the room with the label somewhere
+                    # in it. Two shots of this episode were lost that way
+                    # before the rule was written down.
+                    "reference_asset_ids": [] if detail else world_ref,
+                    "workflow_preset_id": (
+                        (WF_EDIT if detail else WF_EDIT2) if sets
+                        else (WF_T2I if detail else WF_EDIT)
+                    ),
                     "image_provider_id": "comfyui", "image_model": "workflow",
                 })
                 record["key_shot_id"] = shot["id"]

@@ -194,7 +194,11 @@ def start_episode(db: Session, channel: Channel, data: dict[str, Any]) -> Projec
             project_id=project.id,
             # Named after the channel: a project's style list is flat, and
             # "Style 1" tells nobody where it came from once there are two.
-            medium=f"{channel.name} house look",
+            # The name goes in the label, which the compiler never reads. It
+            # was in `medium` once, which the compiler prepends to every
+            # prompt, and the channel's name got printed onto a prop.
+            label=f"{channel.name} house look",
+            medium="live-action documentary photography",
             visual_keywords=channel.visual_style or "",
             camera_language=channel.camera_language or "",
             negative_constraints=channel.negative_prompt or "",

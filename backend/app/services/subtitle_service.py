@@ -131,10 +131,124 @@ def _graphemes(text: str) -> list[str]:
     return regex.findall(r"\X", str(text))
 
 
-def _split_text(text: str, width: int) -> list[str]:
-    """Split exact source text into chunks that each fit at most two lines."""
+def _word_lines(text: str, width: int) -> list[str]:
+    """Greedy word wrap. A word is never broken unless it is the whole line.
+
+    There is no width at which cutting a word is the better choice: a reader
+    with two seconds to take in a line cannot spend one of them reassembling
+    "roo" and "ms". The single exception is a token wider than the line, where
+    there is no break to prefer and the alternative is text running off the
+    side of the frame.
+    """
+    lines: list[str] = []
+    current: list[str] = []
+    length = 0
+
+    def flush() -> None:
+        nonlocal current, length
+        if current:
+            lines.append(" ".join(current))
+            current, length = [], 0
+
+    for word in str(text).split():
+        clusters = _graphemes(word)
+        if len(clusters) > width:
+            flush()
+            while len(clusters) > width:
+                lines.append("".join(clusters[:width]))
+                clusters = clusters[width:]
+            if not clusters:
+                continue
+            word = "".join(clusters)
+        size = len(_graphemes(word))
+        needed = size + (1 if current else 0)
+        if current and length + needed > width:
+            flush()
+            current, length = [word], size
+        else:
+            current.append(word)
+            length += needed
+    flush()
+    return lines
+
+
+def _word_starts(clusters: list[str]) -> list[int]:
+    """Offsets where a word begins, i.e. every place a cue may be divided."""
+    return [
+        index
+        for index in range(1, len(clusters))
+        if clusters[index - 1].isspace() and not clusters[index].isspace()
+    ]
+
+
+def _sentence_bonus(clusters: list[str], offset: int, width: int) -> float:
+    """How much to prefer a break that follows the end of a sentence.
+
+    "This house has seven rooms. / The plan shows six." reads; "This house has
+    seven / rooms. The plan shows six." does not, even though the second is
+    closer to an even division. A full stop is where the writer already broke
+    the thought, so a break just after one is worth some imbalance.
+    """
+    for back in range(offset - 1, max(-1, offset - 4), -1):
+        if clusters[back] in ".?!":
+            return width / 2
+    return 0.0
+
+
+def _choose_cuts(clusters: list[str], starts: list[int], count: int) -> list[int]:
+    """Pick `count - 1` break offsets, aiming at an even division."""
+    cuts: list[int] = []
+    total = len(clusters)
+    width_hint = max(1, total // max(1, count))
+    available = list(starts)
+    for step in range(1, count):
+        if not available:
+            break
+        target = total * step / count
+        best = min(
+            available,
+            key=lambda offset: abs(offset - target)
+            - _sentence_bonus(clusters, offset, width_hint),
+        )
+        cuts.append(best)
+        available = [offset for offset in available if offset > best]
+    return cuts
+
+
+def _split_words(text: str, width: int) -> list[str]:
+    """Divide text at word boundaries into chunks that each fit two lines.
+
+    Slices the source rather than rejoining words, so the pieces concatenate
+    back to exactly what was written - trailing spaces and all. Rejoining
+    normalises whitespace, and a caption track that silently loses a space at
+    every cue boundary is a caption track that no longer matches the script.
+    """
+    clusters = _graphemes(str(text))
+    starts = _word_starts(clusters)
+    count = max(1, -(-len(_word_lines(text, width)) // 2))
+    while count <= len(starts) + 1:
+        cuts = _choose_cuts(clusters, starts, count)
+        edges = [0, *cuts, len(clusters)]
+        chunks = [
+            "".join(clusters[begin:end])
+            for begin, end in zip(edges, edges[1:])
+            if end > begin
+        ]
+        if chunks and all(len(_word_lines(chunk, width)) <= 2 for chunk in chunks):
+            return chunks
+        count += 1
+    return [str(text)]
+
+
+def _grapheme_chunks(text: str, capacity: int) -> list[str]:
+    """Chunk by grapheme count, preferring a space inside the window.
+
+    The fallback for writing that offers no word break to prefer. Thai runs
+    without spaces, so a Thai cue longer than two lines can only be divided
+    between grapheme clusters; refusing to divide it would leave one caption
+    on screen for the length of the shot.
+    """
     remaining = _graphemes(text)
-    capacity = width * 2
     chunks: list[str] = []
     while len(remaining) > capacity:
         cut = capacity
@@ -149,32 +263,65 @@ def _split_text(text: str, width: int) -> list[str]:
     return chunks
 
 
+def _split_text(text: str, width: int) -> list[str]:
+    """Split source text into chunks that each fit two lines of `width`.
+
+    Two lines is what a chunk is promised downstream, and the promise has to
+    hold after wrapping rather than at a character count: a chunk of exactly
+    twice the width only fits when a break happens to fall on the boundary,
+    and when it did not, the wrapper cut a word in half.
+
+    Applying this twice must give what applying it once gave. The renderers
+    validate cues again on their way out, so a splitter that keeps finding new
+    divisions would turn one caption into several between the timeline and the
+    file.
+    """
+    words = str(text).split()
+    if not words:
+        return [str(text)] if str(text).strip() else []
+    if all(len(_graphemes(word)) <= width for word in words):
+        return _split_words(text, width)
+    pieces = _grapheme_chunks(str(text), width * 2)
+    if len(pieces) <= 1:
+        return pieces
+    divided: list[str] = []
+    for piece in pieces:
+        divided.extend(_split_text(piece, width))
+    return divided
+
+
 def _wrap_two_lines(text: str, width: int) -> str:
-    """Wrap one bounded cue to at most two grapheme-safe lines."""
+    """Wrap one bounded cue to at most two lines, breaking on words if it can.
+
+    Two lines the writer wrote themselves are left as written when both
+    already fit. Otherwise the words are wrapped, and only writing that offers
+    no usable break inside the line - Thai, a URL - falls back to the
+    grapheme cut. That cut never inserts a space, because a space inside a
+    token turns one word into two.
+    """
     source_lines = [
         " ".join(line.split())
         for line in str(text).replace("\r", "").split("\n")
         if line.strip()
     ]
-    normalized = "\n".join(source_lines)
     if len(source_lines) == 2 and all(
         len(_graphemes(line)) <= width for line in source_lines
     ):
-        return normalized
-    normalized = " ".join(normalized.split())
-    clusters = _graphemes(normalized)
+        return "\n".join(source_lines)
+
+    flat = " ".join(" ".join(source_lines).split())
+    clusters = _graphemes(flat)
     if len(clusters) <= width:
-        return normalized
-    # A whitespace break is useful only when *both* resulting lines remain
-    # within the configured grapheme width. Otherwise use the hard safe cut.
-    cut = width
-    minimum_cut = max(1, len(clusters) - width)
-    for index in range(min(width, len(clusters)), minimum_cut - 1, -1):
-        if clusters[index - 1].isspace():
-            cut = index
-            break
-    first = "".join(clusters[:cut]).strip()
-    second = "".join(clusters[cut:]).strip()
+        return flat
+
+    lines = _word_lines(flat, width)
+    if len(lines) == 2 and all(len(_graphemes(line)) <= width for line in lines):
+        return "\n".join(lines)
+
+    # No pair of word-broken lines fits. `_split_text` prevents that for
+    # writing with usable breaks, so what arrives here has none.
+    first = "".join(clusters[:width]).rstrip()
+    second = "".join(clusters[width:]).strip()
     return f"{first}\n{second}" if second else first
 
 

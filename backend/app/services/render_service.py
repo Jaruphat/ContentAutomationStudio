@@ -159,6 +159,21 @@ def probe_media(file_path: str) -> dict[str, Any]:
     return probe_media_file(file_path)
 
 
+def _overrun_warning(track) -> str:
+    """Say by how much, because that is what decides whether to act.
+
+    A hosted narrator does not read at a fixed rate, so a line that fitted
+    yesterday can overrun today without a word changing. "Run past the shot"
+    on its own sends the writer to rewrite a line that was three tenths of a
+    second long.
+    """
+    worst = max(track.overrun_sec) if track.overrun_sec else 0.0
+    return (
+        f"{len(track.overruns)} narration line(s) run past the shot they "
+        f"belong to, by up to {worst:.1f}s; the picture was left in step."
+    )
+
+
 def _shot_audio_direction(
     db: Session, sources: list[tuple[dict[str, Any], "Take"]]
 ) -> list[tuple[bool, float]]:
@@ -514,10 +529,17 @@ def render_review_video(
         "srt_sidecar": {"path": "", "sha256": ""},
         "burned_in": False,
     }
+    # Burning the captions into the picture is not the same as having a
+    # caption file. A platform indexes an SRT, offers it as a setting and
+    # translates it; pixels do none of that, and a viewer who needs the
+    # captions larger cannot get them from a burned-in line. Both sidecars are
+    # written whenever captions are on - the ASS is what gets burned in, the
+    # SRT is what gets uploaded beside the video. The publish package has
+    # always listed a subtitle file; until now, in burn-in, there was none.
     keep_sidecars = {
         "off": set(),
         "soft": {"subtitles.ass", "subtitles.srt"},
-        "burn_in": {"subtitles.ass"},
+        "burn_in": {"subtitles.ass", "subtitles.srt"},
     }[subtitle_settings.mode]
     try:
         subtitle_service.remove_stale_sidecars(project_id, keep_sidecars)
@@ -527,12 +549,11 @@ def render_review_video(
             subtitle_record["ass_sidecar"] = {
                 "path": ass["path"], "sha256": ass["sha256"],
             }
-            if subtitle_settings.mode == "soft":
-                srt = subtitle_service.write_srt_sidecar(db, project)
-                subtitle_record["srt_sidecar"] = {
-                    "path": srt["path"], "sha256": srt["sha256"],
-                }
-            elif not ass["cue_count"]:
+            srt = subtitle_service.write_srt_sidecar(db, project)
+            subtitle_record["srt_sidecar"] = {
+                "path": srt["path"], "sha256": srt["sha256"],
+            }
+            if subtitle_settings.mode == "burn_in" and not ass["cue_count"]:
                 warnings.append(
                     "Subtitle burn-in is enabled, but the current timeline has no "
                     "non-blank Shot dialogue. The review was rendered without subtitles."
@@ -873,10 +894,7 @@ def render_review_video(
             concat_output = narrated
             keep_audio = True
             if track.overruns:
-                warnings.append(
-                    f"{len(track.overruns)} narration line(s) run past the shot "
-                    f"they belong to; the picture was left in step."
-                )
+                warnings.append(_overrun_warning(track))
             if track.failures:
                 warnings.append(
                     f"{len(track.failures)} narration line(s) could not be spoken."

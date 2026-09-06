@@ -69,6 +69,12 @@ class NarrationTrack:
     #: than trimmed: a clipped word is worse than a slight overrun, and the
     #: fix is to rewrite the line or lengthen the shot.
     overruns: list[str] = field(default_factory=list)
+    #: By how many seconds, in the same order. A hosted narrator does not read
+    #: at a fixed rate - one episode measured the same voice between 52 and
+    #: 179 words per minute - so "over" on its own says nothing about whether
+    #: it matters. Three tenths of a second is a bleed across a hard cut; five
+    #: seconds has swallowed the shot after it.
+    overrun_sec: list[float] = field(default_factory=list)
     #: Lines the speech engine refused. One bad line costs that line only.
     failures: list[str] = field(default_factory=list)
 
@@ -219,6 +225,7 @@ def build_track(
     canvas = array.array("h", bytes(2 * total_samples))
 
     overruns: list[str] = []
+    overrun_sec: list[float] = []
     failures: list[str] = []
 
     with tempfile.TemporaryDirectory(prefix="cas-narration-") as work_dir:
@@ -236,6 +243,7 @@ def build_track(
             available = max(0.0, cue.end_sec - cue.start_sec)
             if spoken_sec > available + 0.25:
                 overruns.append(text)
+                overrun_sec.append(round(spoken_sec - available, 2))
 
             offset = int(cue.start_sec * SAMPLE_RATE)
             for position, value in enumerate(samples):
@@ -259,6 +267,7 @@ def build_track(
         path=out_path,
         duration_sec=len(canvas) / float(SAMPLE_RATE),
         overruns=overruns,
+        overrun_sec=overrun_sec,
         failures=failures,
     )
 

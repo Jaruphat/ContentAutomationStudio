@@ -162,6 +162,202 @@ loudness/peaks and subtitle bounds; preserve render provenance. Record actual
 outcomes, limitations and paths in the production report. Creating a video
 does not authorize uploading it to the user's YouTube account.
 
+## Changes in v0.4, second pass
+
+Found by producing a second episode - ODDVERSE SF02, "The Extra Room" - end to
+end through the application's own API. SF01 exercised one station; this one
+moves between four places and has to be heard.
+
+### 6. An episode can happen in more than one place
+
+A Scene now carries the place it happens in and the approved plate every key
+image in it is edited from. SF01 needed one: all nine of its shots are the same
+abandoned station, so a single plate held them together. SF02 is a street, a
+kitchen table, an upstairs hall and the room at the end of it. Without a plate
+per scene, three shots of a hallway are three different hallways.
+
+Shot order is numbered within a scene rather than across the film. The role a
+shot plays - opens its scene, or continues it - is read off its position in its
+own scene, so film-wide numbering would make exactly one shot establishing and
+every other shot a continuation of the one before it, across scene boundaries
+where continuity is meant to reset.
+
+Starting an episode under a channel is now the production route: the channel's
+visual bible is copied into the episode's own Story Bible, and the pillar and
+hook it will be measured by are recorded before any generation. Verified in the
+submitted ComfyUI payload, which begins with the channel's house look and ends
+with the shot's own direction.
+
+### 7. A shot says what it sounds like
+
+The H3 video models render sound with the picture and take the direction for it
+from the same prompt, as a line beginning `Audio:`. Nothing in this application
+said that, so every clip came back with whatever ambience the model invented,
+and the blueprint's Sound Bible - wind, a clock tick, a pneumatic door,
+footsteps, paper rustle - lived in a document that never reached a render.
+
+`audio_direction` is a third field beside the motion pair, sent last. Order is
+deliberate and matches the reason the motion pair is two fields: given the
+camera first, the model treats it as the whole brief and animates nothing;
+given the sound first, it describes the scene from the ear and animates less of
+what is seen. A direction that already begins with the label is not labelled
+twice, and a shot with no sound direction compiles to exactly the prompt it
+compiled to before the field existed.
+
+Measured on the first SF02 clip, from a direction naming rain on tarmac and
+wind in a hedge: an AAC stereo stream at -27.2 dBFS RMS, -10.6 dBFS peak, flat
+factor 0. The model produced ambience, not silence and not a constant tone.
+
+### 8. The direction has a place in the cockpit
+
+The motion fields could only be set by script. The shot inspector showed
+`video_prompt`, which the compiler stops reading the moment a motion direction
+exists - so a fully directed shot displayed as an undirected one. All three
+directions now have a control, the camera-only warning appears while the shot
+is being written rather than at preflight, and the prompt panel shows the
+direction that will actually be sent.
+
+### 9. A cancelled render gives the shot back
+
+Cancel marked the job `Cancelled` and left the shot in `Generating`, which is
+not a state the queue accepts. The shot could then never be generated again -
+not by Generate, not by Regenerate, not by editing it - and the only remedy was
+a database write. Hit on the second beat of this production run. Cancelling the
+last active job for a shot now returns it to `Ready`, or to `NeedsReview` if it
+has a take nobody has judged; a shot still rendering another job is untouched,
+and an approved shot keeps its approval.
+
+### 10. Captions may not break a word
+
+A delivered cut opened with a caption reading "This house has seven roo / ms.
+The plan shows six." The wrapper looked for a space that would leave both lines
+inside the configured width, found none, and hard-cut at the character limit.
+
+Wrapping is now word-safe at every level, and the hard cut is kept only for
+writing that offers no break to prefer - Thai runs without spaces, and a token
+wider than a line has to go somewhere. Three further properties are enforced by
+test, because each was violated by an obvious-looking fix:
+
+* **Cue divisions land at sentence ends when one is near.** "This house has
+  seven rooms. / The plan shows six." rather than the more evenly balanced
+  "This house has seven / rooms. The plan shows six."
+* **Pieces concatenate back to the source exactly.** The splitter slices the
+  original text rather than rejoining words, so no space is lost or invented at
+  a cue boundary.
+* **Dividing twice gives what dividing once gave.** The renderers validate cues
+  again on the way out; a splitter that keeps finding new divisions turns one
+  caption into several between the timeline and the file.
+
+### 11. Burning captions in is not having a caption file
+
+The renderer wrote the SRT sidecar only in `soft` mode - the mode where the
+captions are *not* in the picture. A vertical short uses burn-in, so no episode
+this application delivered ever had an SRT, while the publish package listed
+one. A platform indexes and translates a caption track; pixels do neither, and
+a viewer who needs the captions larger cannot get that from a burned-in line.
+Both sidecars are written whenever captions are on.
+
+### 12. What a hosted narrator actually does to a script
+
+The dialogue-fit check reads a line at a fixed 150 words per minute. Measured
+against the narrator that speaks it - OpenAI `gpt-4o-mini-tts`, voice `onyx`,
+under this channel's voice direction - the same nine lines ran between **52 and
+179 words per minute**, and the pace is not a property of the line:
+
+| Line | Words | Spoken | Rate |
+|---|---:|---:|---:|
+| "This house has seven rooms." | 5 | 3.60 s | 83 wpm |
+| "There are seven rooms in this house." | 7 | 2.55 s | 165 wpm |
+| "There are seven rooms. The plan shows six." | 8 | 9.15 s | 52 wpm |
+| "It isn't on the 1974 survey." | 6 | 4.50 s | 80 wpm |
+| "It isn't on the survey." | 5 | 2.55 s | 118 wpm |
+| "There's a door at the end of the upstairs hall." | 10 | 3.35 s | 179 wpm |
+
+Two effects are repeatable. A full stop inside a line buys a held pause, which
+is good reading and does not fit a four-second shot. A spoken year costs about
+two seconds - "nineteen seventy-four" plus the beat after it - so the date was
+moved onto the emphasis card, where text costs no time at all. That is what
+having two caption tracks is for.
+
+Re-reading an unchanged line also moved it far enough to cross the tolerance
+and back between renders, so **no pre-check can size these lines**. Word count
+cannot, and neither can one measurement. What is actionable is the amount, so
+the render now reports it: "run past the shot they belong to, by up to 0.4s".
+Three tenths of a second is a bleed across a hard cut; five seconds has
+swallowed the shot after it, and the old warning said the same thing for both.
+
+### 13. A style's name is not a brief
+
+Starting an episode under a channel copied the channel's visual bible in and
+named the style after the channel - in `medium`, which the compiler prepends to
+every prompt. Every image generated for that channel therefore began with the
+words "ODDVERSE house look", and a delivery label in the last shot came back
+with ODDVERSE printed across it, in a house style whose negative prompt says
+"text, logo, watermark". The model was not disobeying; the channel's name was
+in the brief.
+
+The name lives in `Style.label`, which no prompt reads, and the inspector
+labels that field "not sent to the model".
+
+## Delivered episode - SF02, "The Extra Room"
+
+Project `d7bd14bd-3078-4a49-8eaf-531c8e47806a`, started under the ODDVERSE
+channel as pillar `strange_files`, hook `H04`. Four scenes, four approved world
+plates, one canonical character, nine key images and nine H3 Turbo clips at 8
+steps, 576×1024 source, delivered at 1080×1920.
+
+`review.mp4`: 32.034 s, 1080×1920, 30 fps, H.264 `yuv420p`, AAC 48 kHz stereo,
+6,937,093 bytes, -16.04 LUFS, -1.90 dBTP. SHA-256
+`d8a6bed41f8bdd75f949cb8a44608bd7399433254cce7bcd893565defc00258c`. No
+narration line runs past its shot. `subtitles.srt` exports nine cues with no
+broken word.
+
+**The publish gate blocked it**, with three reasons, and that is the honest
+result rather than a failure of the run:
+
+| Metric | Scored | Target | Why |
+|---|---:|---:|---|
+| Hook strength | 7 | 8 | Opens on an ordinary house rather than on the anomaly. |
+| World consistency | 7 | 8 | Shot 9's room has a window and a wooden floor that shots 7 and 8 do not. |
+| Ending and reveal | 7 | 8 | The reveal is carried by the narration; the label reads as an object but its date is not legible. |
+
+The scorecard is agent-assisted and says so: it is one reading of the file, not
+a human's and not an audience's.
+
+### The composition limit this episode measured
+
+Every key image is an edit conditioned on its scene's approved plate, which is
+what keeps three shots of a hallway in one hallway. It also decides the
+framing. Two shots were written as close views and came back as the plate's
+wide view with the subject somewhere inside it; a second, far more explicit
+prompt - naming the framing and the door twice - moved neither. **On this
+workflow the plate, not the prompt, decides the composition.**
+
+Generating a shot without the plate does free the framing, and costs the place:
+shot 9's key image, made from its prompt alone, produced a delivery label large
+enough to see and a room that does not match the two shots before it. Both
+halves of that trade are visible in the delivered file, and the scorecard is
+marked down for it.
+
+The rule that follows is narrower than "condition everything on the plate": a
+shot that shows the place is conditioned on it, and a shot that shows a detail
+is not. The episode data carries that as `detail_beats`. What is still missing
+is a way to have both - a tight framing inside a known place - and that is a
+workflow question, not a prompt one.
+
+### Composites: only text that must be read and is never spoken
+
+SF02 was written with three composites and delivered with none. The floor-plan
+title block and the survey stamp came back as white stickers laid over the
+props: their corners were written before the frame existed, so they described a
+plane the paper was not on. Both were dropped rather than corrected, because
+the narration already says "the plan shows six" and "the survey from 1974".
+
+The rule this leaves is narrower than "composite critical typography". Compose
+only what a viewer must read and no one says aloud, and measure its corners off
+the generated key image - generate, look, place, then animate. Anything the
+narration carries is better left to the narration.
+
 ## Prioritized follow-up requirements
 
 1. Complete render-input fingerprints across cut, narration, subtitles and
@@ -172,6 +368,21 @@ does not authorize uploading it to the user's YouTube account.
    comparisons; include a creator-visible side-by-side comparison view.
 4. Temporal text tracking for moving newspaper/prop composites and stronger
    character/motion evaluation across several scenes, not just one example.
+4b. A way to frame a shot tightly inside a known place. Conditioning a key
+   image on its scene's plate holds the place and dictates the framing;
+   dropping the plate frees the framing and loses the place. Two prompt
+   rewrites moved neither. This is the largest single limit on shot variety
+   and it is a workflow question, not a prompt one.
+4c. Re-timing a cut should not invalidate the footage in it.
+   `planned_duration_sec` is part of a shot's content digest, so lengthening a
+   shot to fit a spoken line marks its approved take stale even on workflows
+   that never receive a duration. Removing it changes every existing digest,
+   so this needs a migration rather than an edit.
+4d. Measure a narration line against its shot while it is being written, not
+   at render time. The hosted narrator's pace is not predictable from word
+   count and varies between readings of the same line, so the only reliable
+   check is to speak it - which is cheap, and currently happens only once the
+   whole film is assembled.
 5. Investigate Windows native SQLite initialization diagnostics observed in
    the test process. Tests continued, but this is not reported as resolved.
 6. Additional real episodes and user feedback before claiming generalized

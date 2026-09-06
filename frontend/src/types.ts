@@ -243,6 +243,8 @@ export interface Location {
 export interface Style {
   id: string;
   project_id: string;
+  /** A name for this style in a list. Never sent to a model. */
+  label?: string;
   medium: string;
   genre: string;
   visual_keywords: string;

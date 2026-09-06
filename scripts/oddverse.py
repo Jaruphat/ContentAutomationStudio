@@ -364,7 +364,13 @@ SF02: dict[str, Any] = {
     "style": GLOBAL_STYLE,
     "negative": GLOBAL_NEGATIVE,
     "world": SF02_WORLD,
-    "subtitles": {"max_chars_per_line": 24, "vertical_margin": 180},
+    # 28, not SF01's 24. Measured against this episode's nine narration lines:
+    # at 24 two of them break into a second cue with an orphan line reading
+    # "rooms."; at 28 every line is one cue that breaks at its own full stop.
+    "subtitles": {"max_chars_per_line": 28, "vertical_margin": 180},
+    #: Beats whose key image is a detail rather than a view of the place, and
+    #: which are therefore generated from the prompt alone. See the producer.
+    "detail_beats": {9},
     "cast": {
         "CHAR01": {
             "name": "CHAR01 - The Homeowner",
@@ -490,8 +496,16 @@ SF02: dict[str, Any] = {
              "bare hedge moves in the wind and water runs off the wall.",
              "Locked-off camera from across the street, eye level.",
              "fine rain falling on wet tarmac, wind moving through a bare hedge, a distant car passing on a wet road"),
-            "This house has seven rooms. The plan shows six.",
-            "SEVEN ROOMS. / SIX ON THE PLAN.", [], "street",
+            # Every line below was measured with the narrator that speaks
+            # them, because word count does not predict this voice: "This
+            # house has seven rooms." (five words) took 3.60 seconds and
+            # "There are seven rooms in this house." (seven) took 2.55, from
+            # the same voice under the same direction. The first cut of this
+            # line was one sentence too long and came back at 9.15 seconds
+            # for eight words - the narrator put a held pause at the full
+            # stop, which is good reading and does not fit four seconds.
+            "There are seven rooms in this house.",
+            "SEVEN ROOMS.", [], "street",
         ),
         (
             3.0, "The Floor Plan",
@@ -506,7 +520,10 @@ SF02: dict[str, Any] = {
              "and settles back flat.",
              "Overhead, camera steady.",
              "the small tap of a pencil on paper, a sheet of paper shifting on a table, a fridge humming in a quiet kitchen"),
-            "We measured every wall twice.", "", [], "table",
+            # The second half of the opening fact, moved off shot 1 so
+            # neither line has to carry a full stop. The measuring this shot
+            # used to narrate is in the picture: a tape measure and a pencil.
+            "The floor plan shows six.", "SIX ON THE PLAN.", [], "table",
         ),
         (
             3.0, "The Survey",
@@ -520,7 +537,11 @@ SF02: dict[str, Any] = {
              "settles.",
              "85mm lens, shallow focus, camera steady.",
              "brittle old paper unfolding and creasing, a clock ticking somewhere else in the house"),
-            "It isn't on the survey from 1974.", "NOT ON THE SURVEY.",
+            # "1974" costs four and a half seconds on its own: the narrator
+            # says "nineteen seventy-four" and holds after it. The date is on
+            # the emphasis card instead, where text costs no time at all -
+            # which is what having two caption tracks is for.
+            "It isn't on the survey.", "NOT ON THE 1974 SURVEY.",
             [], "table",
         ),
         (
@@ -555,11 +576,18 @@ SF02: dict[str, Any] = {
         ),
         (
             4.0, "Last Sunday",
-            "A man in a faded navy jumper seen from behind at close range, one "
-            "hand on the chipped brass handle of a plain white panel door at "
-            "the end of a dark upstairs hallway, the door beginning to swing "
-            "inward, warm light spilling out through the widening gap onto his "
-            "shoulder and the carpet, 35mm lens.",
+            # Rewritten after the first attempt put him beside a side door "
+            # while the door at the end of the hall stood open behind him. The
+            # framing and the door are both stated twice, because the scene
+            # plate keeps pulling the composition back to its own wide view.
+            "Close view from directly behind a man's head and shoulders, which "
+            "fill the lower half of the frame. He stands immediately in front "
+            "of the single white panel door at the far end of an upstairs "
+            "hallway, close enough to touch it. His right hand grips its "
+            "chipped brass handle. That door is open a few inches and warm "
+            "light spills through the narrow gap onto his shoulder. Every "
+            "other door in the hallway is shut. Faded navy jumper, dark jeans, "
+            "seen from behind at shoulder height, 35mm lens.",
             ("The man turns the handle and pushes the door inward. The door "
              "swings open and warm light spreads across his shoulders, up the "
              "wallpaper and along the carpet. He takes one step forward.",
@@ -598,11 +626,17 @@ SF02: dict[str, Any] = {
         ),
         (
             5.0, "Not Yet",
-            "Extreme close-up of the arm of a grey fabric sofa with a printed "
-            "furniture delivery label still taped to it, plain white "
-            "self-adhesive label with a blank unreadable printed area, clean "
-            "unused upholstery, warm floor lamp light, the room heavily out of "
-            "focus behind, 85mm lens.",
+            # A detail, generated from the prompt alone: see "detail_beats".
+            # Conditioned on the room plate this came back as another wide
+            # view of the room with the label too small to read, which is the
+            # one thing this shot exists to show.
+            "Extreme close-up photograph of a printed white self-adhesive "
+            "delivery label taped to the padded arm of a grey fabric sofa. The "
+            "label fills most of the frame and carries a blank unreadable "
+            "printed area. Clean unused grey upholstery around it, one corner "
+            "of the label lifting away from the fabric, warm lamp light from "
+            "the left, everything behind it thrown completely out of focus. "
+            "85mm macro lens, very shallow depth of field.",
             ("The taped corner of the label lifts and falls in the draught "
              "from the open door and comes to rest. The lamplight steadies "
              "across the fabric.",

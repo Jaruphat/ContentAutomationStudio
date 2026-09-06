@@ -344,6 +344,7 @@ function StyleForm({
   onCancel: () => void;
   saving: boolean;
 }) {
+  const [label, setLabel] = useState(initial?.label ?? "");
   const [medium, setMedium] = useState(initial?.medium ?? "");
   const [genre, setGenre] = useState(initial?.genre ?? "");
   const [visualKeywords, setVisualKeywords] = useState(initial?.visual_keywords ?? "");
@@ -353,6 +354,12 @@ function StyleForm({
 
   return (
     <div className="space-y-3 rounded-md border border-zinc-700 bg-zinc-800/50 p-3">
+      {/* A name for the list, kept above the prompt fields and clearly out of
+          them: the channel's name lived in Medium once, and the compiler
+          prepends Medium to every prompt, so it was printed onto a prop. */}
+      <FormField label="Name (not sent to the model)">
+        <TextInput value={label} onChange={setLabel} placeholder="ODDVERSE house look" />
+      </FormField>
       <div className="grid grid-cols-2 gap-3">
         <FormField label="Medium">
           <TextInput value={medium} onChange={setMedium} placeholder="digital art, 3D render..." />
@@ -384,6 +391,7 @@ function StyleForm({
           disabled={saving}
           onClick={() =>
             onSave({
+              label,
               medium,
               genre,
               visual_keywords: visualKeywords,

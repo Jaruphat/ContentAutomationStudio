@@ -359,6 +359,11 @@ class Style(Base):
 
     id = Column(String, primary_key=True, default=_uuid)
     project_id = Column(String, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    #: What to call this style in a list of them. Deliberately not a prompt
+    #: field: the channel's name used to live in `medium`, the compiler
+    #: prepends `medium` to every prompt, and a delivery label in a delivered
+    #: episode came back with the channel's name printed across it.
+    label = Column(String, default="")
     medium = Column(String, default="")
     genre = Column(String, default="")
     visual_keywords = Column(Text, default="")

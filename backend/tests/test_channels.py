@@ -251,9 +251,16 @@ def test_deleting_a_channel_does_not_delete_the_films_made_under_it(
 # ---------------------------------------------------------------------------
 
 def test_the_seeded_style_is_named_after_the_channel(db_session, client):
-    """A project's style list is flat and its rows have no name field, so the
-    medium carries the attribution - otherwise nobody can tell where a style
-    came from once a project has two."""
+    """A project's style list is flat, so a copied style has to say where it
+    came from - in the label, which no prompt reads.
+
+    The attribution was in `medium` until an episode was produced with it
+    there. The compiler prepends `medium` to every prompt, so every image
+    generated for the channel began with the words "ODDVERSE house look", and
+    a delivery label in the last shot came back with ODDVERSE printed across
+    it - under a house style whose negative prompt says "text, logo,
+    watermark".
+    """
     channel = client.post("/api/channels", json={
         "name": "ODDVERSE", "visual_style": "muted realism",
     }).json()
@@ -262,7 +269,8 @@ def test_the_seeded_style_is_named_after_the_channel(db_session, client):
     }).json()
 
     styles = client.get(f"/api/projects/{episode['id']}/styles").json()
-    assert "ODDVERSE" in styles[0]["medium"]
+    assert "ODDVERSE" in styles[0]["label"]
+    assert "ODDVERSE" not in styles[0]["medium"]
 
 
 def test_validation_errors_name_what_was_offered(db_session):
