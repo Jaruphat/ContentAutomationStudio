@@ -22,6 +22,37 @@ from app.models import Project, Shot, Workflow
 from app.services import media_providers
 
 
+def workflow_frame_rate(db: Session, workflow_id: str | None) -> float:
+    """The rate the chosen graph renders at, or 0 when it has not said."""
+    if not workflow_id:
+        return 0.0
+    workflow = db.query(Workflow).filter(Workflow.id == workflow_id).first()
+    return float(getattr(workflow, "frame_rate", 0.0) or 0.0)
+
+
+def frames_for(
+    *,
+    planned_duration_sec: float,
+    workflow_frame_rate: float,
+    project_frame_rate: float,
+) -> int:
+    """How many frames a shot's clip should be, at the graph's own rate.
+
+    Every clip in a delivered episode came back 5.167 seconds long because the
+    graph's frame count was baked and unmapped, and the cut then trimmed each
+    one - so the pacing was right and a third of the GPU time rendered frames
+    nobody would see. It also capped the edit: no shot could run longer than
+    the baked length.
+
+    The graph's rate is preferred because that is the rate the frames will be
+    played back at. The project's delivery rate is a fallback estimate for a
+    workflow that has not said, and is named as one.
+    """
+    rate = float(workflow_frame_rate or 0.0) or float(project_frame_rate or 0.0) or 24.0
+    seconds = float(planned_duration_sec or 0.0) or 3.0
+    return max(1, round(seconds * rate))
+
+
 def parse_resolution(value: str) -> tuple[int, int]:
     """Parse positive H.264-safe dimensions, falling back to 1920x1080."""
     try:

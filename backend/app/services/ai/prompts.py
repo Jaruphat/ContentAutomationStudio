@@ -16,7 +16,7 @@ import re
 from typing import Any
 
 PROMPT_VERSIONS: dict[str, str] = {
-    "scene_decomposition": "1.0",
+    "scene_decomposition": "2.0",
     "story_bible": "1.0",
     "shot_prompts": "1.1",
 }
@@ -106,7 +106,26 @@ SCENE_DECOMPOSITION_SYSTEM = (
     "- Choose generation_mode per shot: 'image' for a static frame, 'video' "
     "for motion generated from text, 'image-to-video' only when the shot "
     "should animate a still established by an earlier shot in the same scene.\n"
-    "- video_prompt must be an empty string when generation_mode is 'image'.\n"
+    "- Leave video_prompt empty and direct motion with the three fields "
+    "below. They are sent to the model in that order, and it does not weigh "
+    "them evenly.\n"
+    "- subject_motion says what happens in the frame, with verbs. It comes "
+    "first because it is what an image-to-video model is being asked to "
+    "invent. A shot directed only by its camera comes back as a held frame: "
+    "one film asked every shot for 'slow gentle camera drift' and produced "
+    "twenty-three still paintings.\n"
+    "- camera_motion says how the camera behaves, and nothing else. It "
+    "qualifies subject_motion; given it alone, the model takes it as the "
+    "whole brief and animates nothing.\n"
+    "- audio_direction says what the shot sounds like, ambience first. The "
+    "video model renders sound from it. It comes last, because a model given "
+    "the sound first describes the scene from the ear and animates less of "
+    "what is seen.\n"
+    "- emphasis_text is a card held over the shot: three to six words, upper "
+    "case, and not the spoken line - the dialogue is captioned separately. "
+    "Leave it empty on shots that carry no card.\n"
+    "- video_prompt, subject_motion, camera_motion and audio_direction must "
+    "all be empty strings when generation_mode is 'image'.\n"
     "- Write prompts as descriptive phrases, not instructions to an assistant.\n\n"
     + _JSON_DISCIPLINE
 )

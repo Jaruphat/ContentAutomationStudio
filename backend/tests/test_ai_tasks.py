@@ -80,6 +80,13 @@ def shot_entry(order: int, **overrides) -> dict:
         "generation_mode": "image",
         "image_prompt": "a courier at dawn",
         "video_prompt": "",
+        # What happens, how the camera behaves, what it sounds like, and the
+        # card held over it. Required by the schema, because a property the
+        # model may omit is a direction that silently never arrives.
+        "subject_motion": "",
+        "camera_motion": "",
+        "audio_direction": "",
+        "emphasis_text": "",
         "negative_prompt": "watermark",
     }
     entry.update(overrides)

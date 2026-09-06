@@ -44,6 +44,13 @@ from app.services.ai.prompts import (
 )
 from app.services.ai.task_schemas import SCHEMA_VERSIONS, TASK_SCHEMAS
 from app.services.ai.validation import SchemaViolation, validate_object
+from app.services import motion_direction
+
+
+#: Three to six words on a card, per the channel's subtitle bible. Six is the
+#: cap rather than the target: a card is read at a glance over a moving
+#: picture, and a seventh word is one nobody finishes.
+EMPHASIS_MAX_WORDS = 6
 
 logger = logging.getLogger("cas.ai.tasks")
 
@@ -590,11 +597,37 @@ def _apply_storyboard(
 
         for shot_index, shot_entry in enumerate(shot_entries):
             mode = str(shot_entry.get("generation_mode") or "image").strip()
-            video_prompt = str(shot_entry.get("video_prompt") or "").strip()
-            if mode == "image" and video_prompt:
-                # The schema cannot express "empty when mode is image"; drop it
-                # rather than carry motion text into a still.
-                video_prompt = ""
+            still = mode == "image"
+
+            def _text(field: str, blank_on_still: bool = True) -> str:
+                # The schema cannot express "empty when mode is image", so a
+                # still's motion and sound are dropped here rather than
+                # carried into a prompt that draws a picture.
+                if still and blank_on_still:
+                    return ""
+                return str(shot_entry.get(field) or "").strip()
+
+            subject_motion = _text("subject_motion")
+            camera_motion = _text("camera_motion")
+            audio_direction = _text("audio_direction")
+            emphasis_text = _text("emphasis_text", blank_on_still=False)
+
+            where = f"Scene {scene_index + 1}, shot {shot_index + 1}"
+            if not still:
+                # Said while the storyboard is still free to change, rather
+                # than measured after four hundred seconds a shot.
+                for problem in motion_direction.review(
+                    subject_motion=subject_motion, camera_motion=camera_motion,
+                ):
+                    warnings.append(f"{where}: {problem}")
+            if len(emphasis_text.replace("/", " ").split()) > EMPHASIS_MAX_WORDS:
+                warnings.append(
+                    f"{where}: the emphasis card is "
+                    f"{len(emphasis_text.split())} words. A card is held over "
+                    f"the picture and read at a glance - three to six words. "
+                    f"The full line is carried by the caption track."
+                )
+
             db.add(Shot(
                 id=str(uuid.uuid4()),
                 scene_id=scene.id,
@@ -610,7 +643,15 @@ def _apply_storyboard(
                 planned_duration_sec=float(shot_entry.get("planned_duration_sec") or 0.0),
                 generation_mode=mode,
                 image_prompt=str(shot_entry.get("image_prompt") or "").strip(),
-                video_prompt=video_prompt,
+                video_prompt=_text("video_prompt"),
+                # What happens, how the camera behaves, and what it sounds
+                # like: three fields because the video model does not weigh
+                # them evenly, and in this order because that is how they are
+                # sent.
+                subject_motion=subject_motion,
+                camera_motion=camera_motion,
+                audio_direction=audio_direction,
+                emphasis_text=emphasis_text,
                 negative_prompt=str(shot_entry.get("negative_prompt") or "").strip(),
                 reference_asset_ids=[],
                 seed_policy="random",

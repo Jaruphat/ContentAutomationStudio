@@ -719,10 +719,13 @@ def start_generation(
             job_payload.OUTPUT_PREFIX: f"{project_id[:8]}_{shot.id[:8]}",
         }
         if shot.generation_mode in ("video", "image-to-video"):
-            frames = max(1, round(
-                (shot.planned_duration_sec or 3.0) * (project.frame_rate or 24.0)
-            ))
-            parameter_map[job_payload.FRAMES] = frames
+            parameter_map[job_payload.FRAMES] = generation_planning.frames_for(
+                planned_duration_sec=shot.planned_duration_sec or 0.0,
+                workflow_frame_rate=generation_planning.workflow_frame_rate(
+                    db, plan.workflow_id
+                ),
+                project_frame_rate=project.frame_rate or 0.0,
+            )
 
         request_params = dict(plan.request_params)
         if plan.paid:

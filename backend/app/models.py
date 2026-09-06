@@ -787,6 +787,11 @@ class Workflow(Base):
     required_custom_nodes = Column(JSON, default=list)
     parameter_mapping = Column(JSON, default=dict)
     output_mapping = Column(JSON, default=list)
+    #: Frames per second the graph itself renders at, or 0 when it does not
+    #: say. A clip's length is asked for in frames, so a graph tagged 24 given
+    #: a project's 30 makes a clip a quarter longer than the shot wanted -
+    #: which is the waste this exists to remove, with an extra step.
+    frame_rate = Column(Float, default=0.0)
     tested_comfyui_version = Column(String, default="")
     validation_status = Column(String, default="pending")  # pending / valid / invalid
     created_at = Column(DateTime, default=_utcnow)

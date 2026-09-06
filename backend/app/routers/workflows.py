@@ -92,6 +92,8 @@ def update_mapping(
     workflow.parameter_mapping = payload.parameter_mapping
     if payload.output_mapping:
         workflow.output_mapping = payload.output_mapping
+    if payload.frame_rate is not None:
+        workflow.frame_rate = payload.frame_rate
     workflow.validation_status = "pending"
     workflow.updated_at = datetime.now(timezone.utc)
     db.commit()

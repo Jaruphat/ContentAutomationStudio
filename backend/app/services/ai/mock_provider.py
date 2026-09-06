@@ -119,9 +119,22 @@ class MockAIProvider(AIProvider):
                     "planned_duration_sec": 5.0,
                     "generation_mode": "video" if shot_index % 2 else "image",
                     "image_prompt": f"{shot_type}, {lens}, {beat}",
-                    "video_prompt": (
-                        f"{movement}, {beat}" if shot_index % 2 else ""
+                    # Left empty on purpose: the motion pair replaces it, and a
+                    # mock that still filled it would let a regression in the
+                    # real path pass unnoticed.
+                    "video_prompt": "",
+                    # What happens leads, the camera qualifies, the sound comes
+                    # last. A mock that omits a required property is a schema
+                    # nobody is checking.
+                    "subject_motion": (
+                        f"{beat} The subject moves through frame."
+                        if shot_index % 2 else ""
                     ),
+                    "camera_motion": movement if shot_index % 2 else "",
+                    "audio_direction": (
+                        "room tone and distant traffic" if shot_index % 2 else ""
+                    ),
+                    "emphasis_text": "",
                     "negative_prompt": "text overlays, watermarks",
                 })
             shot_total += len(shots)

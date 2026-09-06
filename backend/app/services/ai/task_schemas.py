@@ -19,7 +19,9 @@ every generation so an old artifact stays interpretable.
 from typing import Any
 
 SCHEMA_VERSIONS: dict[str, str] = {
-    "scene_decomposition": "1.0",
+    # 2.0: a shot carries its motion, sound and emphasis card apart from
+    # video_prompt. Two produced episodes measured why each is its own field.
+    "scene_decomposition": "2.0",
     "story_bible": "1.0",
     "shot_prompts": "1.0",
 }
@@ -79,8 +81,30 @@ SHOT_PROPERTIES: dict[str, Any] = {
         "setting, framing, lens and lighting. No negatives, no camera motion."
     ),
     "video_prompt": _string(
-        "Self-contained motion prompt: what moves, how the camera moves, and "
-        "over what span. Empty string when generation_mode is 'image'."
+        "Left empty. The motion direction below replaces it; this field is "
+        "kept only so shots written before it still compile."
+    ),
+    "subject_motion": _string(
+        "What happens inside the frame, with verbs: what moves, what changes, "
+        "what a viewer would see occur. Never how the camera behaves. Empty "
+        "string when generation_mode is 'image'."
+    ),
+    "camera_motion": _string(
+        "How the camera behaves, e.g. 'locked-off camera at eye level' or "
+        "'slow push in'. A qualifier on subject_motion, never the whole "
+        "direction. Empty string when generation_mode is 'image'."
+    ),
+    "audio_direction": _string(
+        "What this shot sounds like: ambience first, then any foley, e.g. "
+        "'fine rain on wet tarmac, wind in a bare hedge'. The video model "
+        "renders sound from this. Empty string when generation_mode is "
+        "'image'."
+    ),
+    "emphasis_text": _string(
+        "A short card held over the shot, three to six words, upper case, "
+        "with ' / ' between two lines if needed. Not the spoken line - the "
+        "full dialogue is carried by a separate caption track. Empty string "
+        "when this shot carries no card."
     ),
     "negative_prompt": _string(
         "What must not appear. Empty string when there is nothing to exclude."
