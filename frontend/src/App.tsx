@@ -16,6 +16,7 @@ const GeneratePage = lazy(() => import("./pages/GeneratePage"));
 const ReviewPage = lazy(() => import("./pages/ReviewPage"));
 const TimelinePage = lazy(() => import("./pages/TimelinePage"));
 const ExportPage = lazy(() => import("./pages/ExportPage"));
+const WorkflowsPage = lazy(() => import("./pages/WorkflowsPage"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -42,6 +43,7 @@ export default function App() {
               <Route path="/review" element={<ReviewPage />} />
               <Route path="/timeline" element={<TimelinePage />} />
               <Route path="/export" element={<ExportPage />} />
+              <Route path="/workflows" element={<WorkflowsPage />} />
               <Route path="*" element={<Navigate to="/story" replace />} />
             </Route>
           </Routes>

@@ -47,6 +47,7 @@ import type {
   Shot,
   ShotCreate,
   Workflow,
+  WorkflowValidation,
   WorkflowAnalysis,
   GenerationJob,
   GenerationRun,
@@ -363,18 +364,43 @@ export const workflows = {
   get: (id: string) =>
     http.get<Workflow>(`/workflows/${id}`).then((r) => r.data),
 
-  import: (data: { name: string; purpose: string; workflow_json: unknown }) =>
-    http.post<Workflow>("/workflows/import", data).then((r) => r.data),
-
-  updateMapping: (id: string, mapping: Record<string, unknown>) =>
-    http
-      .put<Workflow>(`/workflows/${id}/mapping`, {
-        parameter_mapping: mapping,
+  /**
+   * Register a ComfyUI graph. The endpoint takes the file itself, not JSON
+   * wrapped around it: it hashes the bytes it was given so a run can be traced
+   * back to the exact graph, and a re-encoded copy would not hash the same.
+   */
+  import: (
+    file: File,
+    fields: { name: string; purpose: string; version?: string },
+  ) => {
+    const body = new FormData();
+    body.append("file", file);
+    body.append("name", fields.name);
+    body.append("purpose", fields.purpose);
+    if (fields.version) body.append("version", fields.version);
+    return http
+      .post<Workflow>("/workflows/import", body, {
+        headers: { "Content-Type": "multipart/form-data" },
       })
-      .then((r) => r.data),
+      .then((r) => r.data);
+  },
+
+  updateMapping: (
+    id: string,
+    body: {
+      parameter_mapping: Record<string, unknown>;
+      output_mapping?: Array<Record<string, unknown>>;
+      /** Frames per second the graph renders at; 0 when it has not said. */
+      frame_rate?: number;
+      /** Values fixed for this workflow rather than decided per shot. */
+      constants?: Record<string, string | number | boolean>;
+    },
+  ) => http.put<Workflow>(`/workflows/${id}/mapping`, body).then((r) => r.data),
 
   validate: (id: string) =>
-    http.post<Workflow>(`/workflows/${id}/validate`).then((r) => r.data),
+    http
+      .post<WorkflowValidation>(`/workflows/${id}/validate`)
+      .then((r) => r.data),
 
   /** Format diagnostics, dependency check and candidate logical mappings. */
   analysis: (id: string) =>

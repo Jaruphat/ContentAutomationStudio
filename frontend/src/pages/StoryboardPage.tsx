@@ -23,6 +23,7 @@ import { useAppState, useAppDispatch } from "../store/useProjectStore";
 import StatusBadge from "../components/StatusBadge";
 import AIGenerationPanel from "../components/AIGenerationPanel";
 import MediaProviderFields from "../components/MediaProviderFields";
+import ShotProductionControls from "../components/ShotProductionControls";
 import { ShotReferenceAssignment } from "../components/VisualReferenceBible";
 import { ShotCharacterBinding, ShotContinuityControls } from "../components/ShotContinuityControls";
 import type { MediaProviderId, Scene, SceneRole, Shot, ShotCreate } from "../types";
@@ -59,6 +60,12 @@ function ShotRow({
   const [imageModel, setImageModel] = useState(shot.image_model || "workflow");
   const [referenceAssetIds, setReferenceAssetIds] = useState(shot.reference_asset_ids);
   const [characterSetIds, setCharacterSetIds] = useState(shot.character_set_ids ?? []);
+  // Which graph generates this shot, whether it reaches the cut, and what must
+  // not appear in this frame. All three decided a delivered episode and none
+  // of them could be set without the API.
+  const [workflowPresetId, setWorkflowPresetId] = useState(shot.workflow_preset_id ?? "");
+  const [includeInCut, setIncludeInCut] = useState(shot.include_in_cut !== false);
+  const [negativePrompt, setNegativePrompt] = useState(shot.negative_prompt ?? "");
 
   const referencesQ = useQuery({
     queryKey: ["references", projectId],
@@ -175,6 +182,16 @@ function ShotRow({
               sceneId={sceneId}
               shotId={shot.id}
             />
+            <ShotProductionControls
+              workflowPresetId={workflowPresetId}
+              includeInCut={includeInCut}
+              negativePrompt={negativePrompt}
+              onChange={(next) => {
+                if (next.workflowPresetId !== undefined) setWorkflowPresetId(next.workflowPresetId);
+                if (next.includeInCut !== undefined) setIncludeInCut(next.includeInCut);
+                if (next.negativePrompt !== undefined) setNegativePrompt(next.negativePrompt);
+              }}
+            />
             <div>
               <label className="text-[10px] text-zinc-500 uppercase">Image Prompt</label>
               <textarea value={imagePrompt} onChange={(e) => setImagePrompt(e.target.value)} className="w-full rounded px-2 py-1 text-xs" rows={2} />
@@ -202,6 +219,9 @@ function ShotRow({
                     image_model: imageModel,
                     reference_asset_ids: referenceAssetIds,
                     character_set_ids: characterSetIds,
+                    workflow_preset_id: workflowPresetId || null,
+                    include_in_cut: includeInCut,
+                    negative_prompt: negativePrompt,
                   })
                 }
                 disabled={updateMut.isPending}

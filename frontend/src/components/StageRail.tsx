@@ -17,6 +17,7 @@ import {
   CheckCircle,
   Film,
   Download,
+  Settings2,
   Monitor,
   Sun,
   Moon,
@@ -41,6 +42,7 @@ const stages: Stage[] = [
   { label: "Review", path: "/review", icon: CheckCircle },
   { label: "Timeline", path: "/timeline", icon: Film },
   { label: "Export", path: "/export", icon: Download },
+  { label: "Workflows", path: "/workflows", icon: Settings2 },
 ];
 
 const themeOptions: { value: ThemePreference; label: string; icon: LucideIcon }[] = [

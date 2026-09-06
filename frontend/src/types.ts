@@ -343,6 +343,12 @@ export interface Shot {
   /** A short card held over the shot. Not the spoken line. */
   emphasis_text?: string;
   negative_prompt: string;
+  /**
+   * Whether this shot is a piece of the film or a piece of production. A key
+   * image generated so a clip can be animated from it is a real shot with a
+   * prompt, a seed and a reviewed take, but it is not part of the cut.
+   */
+  include_in_cut: boolean;
   reference_asset_ids: string[];
   character_set_ids: string[];
   character_set_sha256s: string[];
@@ -385,10 +391,21 @@ export interface Workflow {
   required_custom_nodes: string[];
   parameter_mapping: Record<string, unknown>;
   output_mapping: unknown[];
+  /** Values fixed for this workflow rather than decided per shot. */
+  constants?: Record<string, string | number | boolean>;
+  /** Frames per second the graph renders at; 0 when it has not said. */
+  frame_rate?: number;
   tested_comfyui_version: string;
   validation_status: ValidationStatus;
   created_at: string;
   updated_at: string;
+}
+
+/** What validating a mapping against the stored graph found. */
+export interface WorkflowValidation {
+  valid: boolean;
+  errors: string[];
+  warnings: string[];
 }
 
 /** A proposed binding of one logical field to a node input. */

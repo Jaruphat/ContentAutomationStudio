@@ -26,6 +26,7 @@ import { buildDiagnosticId, sanitizeErrorDetail } from "../lib/errorDiagnostics"
 const STAGE_QUERY_PREFIXES: Record<string, string[]> = {
   "/story": ["project", "projects", "characters", "locations", "styles"],
   "/channel": ["channels", "channel-episodes"],
+  "/workflows": ["workflows"],
   "/storyboard": ["scenes", "shots", "references", "media-providers"],
   "/generate": [
     "selected-project",
@@ -47,6 +48,7 @@ const STAGE_QUERY_PREFIXES: Record<string, string[]> = {
 
 const STAGE_LABELS: Record<string, string> = {
   "/story": "Story",
+  "/workflows": "Workflows",
   "/channel": "Channel",
   "/storyboard": "Storyboard",
   "/generate": "Generate",
