@@ -122,6 +122,35 @@ npm run dev
 
 Then open **http://localhost:5173** in your browser.
 
+### 3. Register a workflow before anything else
+
+A shot cannot be generated without a mapped workflow, so a fresh install has
+nothing to generate with. Open **Workflows** in the left rail and:
+
+1. Export the graph from ComfyUI with **Workflow -> Export (API)**. The editor
+   format cannot be executed; the page flags a graph imported in that format
+   rather than failing later at submission.
+2. Register it with a name and a purpose (`image`, `text-to-video`,
+   `image-to-video`).
+3. Bind each logical field - `positivePrompt`, `seed`, `frames`,
+   `referenceImage`, and the rest - to a node id and input name. This is the
+   only place in the application where node ids appear.
+4. Say what frame rate the graph renders at. A clip's length is asked for in
+   frames, so a graph that renders 24 fps while the project assumes 30 makes
+   every clip a quarter longer than the shot asked for. `0` means it has not
+   said, and the project's rate is used as an estimate.
+5. Optionally give it fixed settings as JSON (`{"samplerCfg": 9.0}`) - values
+   this workflow fixes rather than a shot deciding. A shot's own value still
+   wins, and a constant naming a field that is not mapped is refused.
+6. **Validate against the graph** checks every mapped field reaches a node that
+   exists.
+
+Three shot-level decisions live in the storyboard's shot editor: which workflow
+generates it (blank means the project's), whether it is **included in the cut**
+(turn this off for a key image that exists only so a later clip can animate from
+it - left on, it plays as a still and lengthens the film), and its own negative
+prompt, which is added to the style's negatives rather than replacing them.
+
 ---
 
 ## Running Tests
@@ -458,7 +487,8 @@ The frontend uses a production cockpit layout:
 
 - **Left rail**: Stage navigation following the workflow `Story -> Storyboard -> Generate -> Review -> Timeline -> Export`
 - **Center panel**: Storyboard grid or timeline view depending on the active stage
-- **Right panel**: Inspector for prompt details, camera settings, references, seed, workflow selection, and take review
+- **Right panel**: Inspector for the compiled prompt, camera and motion direction, on-screen captions, references, seed and take review
+- **Workflows**: Graph registration, field mapping, frame rate, fixed settings and validation. Nothing generates until one is registered and mapped.
 - **Status states**: Draft / Ready / Generating / Needs Review / Approved / Failed
 - **Approval gates**: Required before Generation and Final Render stages
 
