@@ -859,3 +859,168 @@ test("approves the key images and gives every clip its own start frame", async (
     }
   }
 });
+
+/**
+ * The one still that had to go back.
+ *
+ * Every shot in this episode carries a negative prompt that names legible
+ * text, headlines and lettering, and the edit model wrote three of them
+ * anyway: the kiosk's overhead shot came back with pages pinned behind the
+ * counter reading "NEAYII STR" and "WECRNA LANCR UTS". That is the exact tell
+ * SF01 failed its publish gate on, and it confirms what was written there -
+ * there is no negative prompt for "spell correctly". The prompt has to remove
+ * the *surface*, not ask for the writing on it to be unreadable.
+ */
+const REJECTED = [
+  // Pages pinned behind the counter, reading "NEAYII STR".
+  "The kiosk · Shot 1",
+  // The last beat is the street corner at first light, rhyming with the first
+  // shot of the film. It came back as the storeroom again, seen through a
+  // window: this shot is conditioned on the storeroom plate because it sits in
+  // the storeroom scene, and the plate decided where it happened. The shot is
+  // in the wrong scene, which is a fault in the storyboard rather than in the
+  // model - and the fix is to condition it on the corner instead.
+  "The storeroom · Shot 5",
+  // The leftover from the pass made at the delivery canvas. Its shot has since
+  // been made again and approved, so this one can only be thrown away:
+  // approving it is refused because the shot moved on without it.
+  "The corner before dawn · Shot 0",
+];
+
+test("reviews the key images one at a time", async ({ page }) => {
+  await selectEpisode(page);
+  await stage(page, "Review");
+
+  // Wait for the takes to arrive before counting them: an empty list a moment
+  // after the page opens is indistinguishable from nothing left to review, and
+  // the loop below would report a finished review having done nothing.
+  await expect(
+    page.getByRole("button", { name: "Approve", exact: true }).first(),
+  ).toBeVisible({ timeout: 30_000 });
+
+  // One take at a time, reading the card each decision belongs to. Filtering
+  // for "a div that contains an Approve button" matches every wrapper up to
+  // the page, so the count never settles and the loop stops after one click -
+  // which is how the first version of this reviewed exactly one take and
+  // reported success.
+  for (let guard = 0; guard < 24; guard += 1) {
+    const approve = page.getByRole("button", { name: "Approve", exact: true });
+    const remaining = await approve.count();
+    if (remaining === 0) break;
+
+    const first = approve.first();
+    const label = await first.evaluate((el) => {
+      const card = el.closest("[class*='rounded-lg']") as HTMLElement | null;
+      return card?.innerText ?? "";
+    });
+    const bad = REJECTED.some((name) => label.includes(name));
+    if (bad) {
+      await first.locator("xpath=following-sibling::button[1]").click();
+    } else {
+      await first.click();
+    }
+    await expect(approve).toHaveCount(remaining - 1, { timeout: 30_000 });
+  }
+});
+
+
+
+test("reworks the two shots that came back wrong", async ({ page }) => {
+  await selectEpisode(page);
+  await stage(page, "Storyboard");
+
+  // 1. The kiosk overhead. The negative prompt named legible text, headlines
+  //    and lettering, and the model wrote three headlines anyway on pages
+  //    pinned behind the counter. The fix is not a stronger negative - it is
+  //    removing the surface: no pages on display, nothing pinned up, and the
+  //    one page in frame seen edge-on.
+  const kiosk = page.locator("tbody").nth(1).locator("tr").first();
+  await kiosk.getByRole("button", { name: /^Edit shot / }).click();
+  await page.getByLabel("Image prompt").fill(
+    "Overhead shot at a steep raking angle of the top newspaper on a stack, "
+    + "on a bare wooden kiosk counter under a warm bulb. The page is seen "
+    + "almost edge-on, so its printing is only a grey rhythm. Nothing is "
+    + "pinned up, no pages on display, no boards, no posters - bare timber and "
+    + "glass behind. Film grain.",
+  );
+  await page.getByLabel("Shot negative prompt").fill(
+    "pages pinned up, display boards, posters, notices, front pages facing "
+    + "the camera, legible text, headline, masthead, lettering, watermark",
+  );
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Save", exact: true })).toHaveCount(0);
+
+  // 2. The last beat is the street corner at first light, and it came back as
+  //    the storeroom again: it sits in the storeroom scene, so it was
+  //    conditioned on the storeroom plate, and the plate decides where a shot
+  //    happens. It needs the corner.
+  const corner = page.locator("tbody").nth(2).locator("tr").nth(4);
+  await corner.getByRole("button", { name: /^Edit shot / }).click();
+  const attached = page.getByRole("button", { name: /^Detach / });
+  for (let count = await attached.count(); count > 0; count = await attached.count()) {
+    await attached.first().click();
+    await expect(attached).toHaveCount(count - 1);
+  }
+  const attach = page.getByRole("combobox", { name: "Attach reference" });
+  const options = await attach.locator("option").allTextContents();
+  const plate = options.find((text) => text.includes(PLATES[0].name));
+  expect(plate, "the corner plate should be offered").toBeTruthy();
+  await attach.selectOption({ label: plate as string });
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Save", exact: true })).toHaveCount(0);
+});
+
+test("makes the two reworked shots again", async ({ page }) => {
+  // Their takes were rejected, so the shots cannot be picked up by the queue
+  // on this server - the fix that gives a shot back when its last take is
+  // thrown away is committed but not running here. Regenerate works on a
+  // rejected take, which is the point of it: the rejection is the reason to
+  // make another one.
+  await selectEpisode(page);
+  await stage(page, "Review");
+
+  for (const name of ["The kiosk · Shot 1", "The storeroom · Shot 5"]) {
+    // A shot that already has a take waiting has been made again: leave it.
+    const waiting = await page
+      .getByRole("button", { name: "Approve", exact: true })
+      .evaluateAll((buttons, shot) =>
+        buttons.some((el) => {
+          const card = el.closest("[class*='rounded-lg']") as HTMLElement | null;
+          return (card?.innerText ?? "").includes(shot);
+        }), name);
+    if (waiting) continue;
+
+    const buttons = page.getByRole("button", { name: "Regenerate" });
+    await expect(buttons.first()).toBeVisible({ timeout: 30_000 });
+    const count = await buttons.count();
+    let found = false;
+    for (let index = 0; index < count; index += 1) {
+      const button = buttons.nth(index);
+      const label = await button.evaluate((el) => {
+        const card = el.closest("[class*='rounded-lg']") as HTMLElement | null;
+        return card?.innerText ?? "";
+      });
+      if (label.includes(name)) {
+        await button.click();
+        found = true;
+        break;
+      }
+    }
+    expect(found, `${name} should be on the review page`).toBe(true);
+    // Regenerate fetches a fresh price before it submits anything, so the
+    // request is still in flight when the click returns. Ending the test here
+    // tore the page down before it was sent, and nothing was ever queued.
+    // What proves it landed is a take appearing for that shot: the card gains
+    // the Approve button a pending take carries.
+    await expect
+      .poll(async () => page.getByRole("button", { name: "Approve", exact: true }).count(),
+        { timeout: 10 * 60_000, intervals: [2000] })
+      .toBeGreaterThan(0);
+  }
+
+  // Proof the queue actually took them, rather than the page having said so.
+  await stage(page, "Generate");
+  await expect(page.getByText(/Queued|Running/).first()).toBeVisible({
+    timeout: 60_000,
+  });
+});
