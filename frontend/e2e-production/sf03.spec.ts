@@ -800,9 +800,12 @@ test("runs the shots that are ready", async ({ page }) => {
   const generate = page.getByTestId("generate-button");
   await expect(generate).toBeEnabled({ timeout: 30_000 });
   await generate.click();
-  await expect(page.getByText(/Queued|Running/).first()).toBeVisible({
-    timeout: 60_000,
-  });
+  // The request is in flight when the click returns, and the page already has
+  // old jobs on it - so looking for the words "Queued" or "Running" finds
+  // yesterday's and proves nothing. The button disabling itself is the run
+  // actually starting.
+  await expect(generate).toBeDisabled({ timeout: 30_000 });
+  await expect(generate).toBeEnabled({ timeout: 120_000 });
 });
 
 test("approves the key images and gives every clip its own start frame", async ({ page }) => {
@@ -818,8 +821,18 @@ test("approves the key images and gives every clip its own start frame", async (
   }
 
   await stage(page, "Storyboard");
+  // Wait for the storyboard to arrive. Counting rows before it does finds
+  // none, and a loop over none is a pass that bound nothing.
+  await expect(page.locator("tbody").first().locator("tr").first())
+    .toBeVisible({ timeout: 30_000 });
+  await expect
+    .poll(async () => page.locator("tbody").count(), { timeout: 30_000 })
+    .toBe(3);
+
   for (let sceneIndex = 0; sceneIndex < 3; sceneIndex += 1) {
     const rows = page.locator("tbody").nth(sceneIndex).locator("tr");
+    await expect.poll(async () => rows.count(), { timeout: 30_000 })
+      .toBeGreaterThan(0);
     const total = await rows.count();
     for (let rowIndex = 0; rowIndex < total; rowIndex += 1) {
       const row = rows.nth(rowIndex);
@@ -831,9 +844,25 @@ test("approves the key images and gives every clip its own start frame", async (
         await page.getByRole("button", { name: "Cancel" }).first().click();
         continue;
       }
+      // The candidates load after the editor opens, and "already bound" is
+      // only knowable once they have: checking too early found nothing bound
+      // and tried to bind a clip that already had its frame.
+      await expect(page.getByText("Loading continuity candidates"))
+        .toHaveCount(0, { timeout: 30_000 });
       if (await page.getByRole("button", { name: /Clear continuity/ }).count()) {
         await page.getByRole("button", { name: "Cancel" }).first().click();
         continue;
+      }
+
+      // The plate comes off first. It was attached to every shot so preflight
+      // would pass before any key image existed; now the clip has a frame of
+      // its own to start from, and this graph takes one image. Leaving both
+      // on means the one that reaches the model is whichever the resolver
+      // happens to pick.
+      const attached = page.getByRole("button", { name: /^Detach / });
+      for (let n = await attached.count(); n > 0; n = await attached.count()) {
+        await attached.first().click();
+        await expect(attached).toHaveCount(n - 1);
       }
 
       // The key image for this beat is the shot immediately before it.
@@ -855,7 +884,11 @@ test("approves the key images and gives every clip its own start frame", async (
       await expect(
         page.getByRole("button", { name: /Clear continuity/ }),
       ).toBeVisible({ timeout: 60_000 });
-      await page.getByRole("button", { name: "Cancel" }).first().click();
+      // Binding is saved by the control itself; detaching the plate is part of
+      // the shot form, so it needs the form's own Save.
+      await page.getByRole("button", { name: "Save", exact: true }).click();
+      await expect(page.getByRole("button", { name: "Save", exact: true }))
+        .toHaveCount(0);
     }
   }
 });
@@ -871,20 +904,21 @@ test("approves the key images and gives every clip its own start frame", async (
  * there is no negative prompt for "spell correctly". The prompt has to remove
  * the *surface*, not ask for the writing on it to be unreadable.
  */
-const REJECTED = [
-  // Pages pinned behind the counter, reading "NEAYII STR".
-  "The kiosk · Shot 1",
-  // The last beat is the street corner at first light, rhyming with the first
-  // shot of the film. It came back as the storeroom again, seen through a
-  // window: this shot is conditioned on the storeroom plate because it sits in
-  // the storeroom scene, and the plate decided where it happened. The shot is
-  // in the wrong scene, which is a fault in the storyboard rather than in the
-  // model - and the fix is to condition it on the corner instead.
-  "The storeroom · Shot 5",
-  // The leftover from the pass made at the delivery canvas. Its shot has since
-  // been made again and approved, so this one can only be thrown away:
-  // approving it is refused because the shot moved on without it.
-  "The corner before dawn · Shot 0",
+const REJECTED: string[] = [
+  // Empty on purpose, and it has to be emptied before a second review pass:
+  // leaving the two names here after they were reworked rejected the new
+  // takes as well - a list of shots to send back is only true of the pass it
+  // was written for.
+  //
+  // What it held, and why:
+  //  * "The kiosk · Shot 1"    - pages pinned behind the counter reading
+  //    "NEAYII STR" and "WECRNA LANCR UTS": the tell SF01 failed its publish
+  //    gate on, produced despite a negative prompt naming legible text,
+  //    headlines and lettering. Removing the surface fixed it where a
+  //    stronger negative had not.
+  //  * "The storeroom · Shot 5" - the last beat is the street corner at first
+  //    light and came back as the storeroom, because it sits in the storeroom
+  //    scene and was conditioned on that plate. Re-pointed at the corner.
 ];
 
 test("reviews the key images one at a time", async ({ page }) => {
@@ -897,6 +931,8 @@ test("reviews the key images one at a time", async ({ page }) => {
   await expect(
     page.getByRole("button", { name: "Approve", exact: true }).first(),
   ).toBeVisible({ timeout: 30_000 });
+
+  const decided = new Set<string>();
 
   // One take at a time, reading the card each decision belongs to. Filtering
   // for "a div that contains an Approve button" matches every wrapper up to
@@ -913,7 +949,14 @@ test("reviews the key images one at a time", async ({ page }) => {
       const card = el.closest("[class*='rounded-lg']") as HTMLElement | null;
       return card?.innerText ?? "";
     });
-    const bad = REJECTED.some((name) => label.includes(name));
+    // Two attempts at one shot can both be waiting - a regenerate that was
+    // clicked twice. The newest is first in the list, so the first card for a
+    // shot is the one to keep and any later card for the same shot is the
+    // older attempt.
+    const shot = (label.split(String.fromCharCode(10))[0] ?? label).trim();
+    const duplicate = decided.has(shot);
+    decided.add(shot);
+    const bad = duplicate || REJECTED.some((name) => label.includes(name));
     if (bad) {
       await first.locator("xpath=following-sibling::button[1]").click();
     } else {
@@ -1023,4 +1066,34 @@ test("makes the two reworked shots again", async ({ page }) => {
   await expect(page.getByText(/Queued|Running/).first()).toBeVisible({
     timeout: 60_000,
   });
+});
+
+test("puts scene one back in the order the story is told in", async ({ page }) => {
+  // The first beat's clip was remade, and a remade shot is appended: it sat at
+  // the end of its scene, so the film would have opened with the second beat
+  // and ended the scene on the first. Order is what the cut follows.
+  const beat = SHOTS[0];
+  await selectEpisode(page);
+  await stage(page, "Storyboard");
+  const rows = page.locator("tbody").first().locator("tr");
+  await expect(rows.first()).toBeVisible({ timeout: 30_000 });
+
+  const clip = () =>
+    rows.filter({ hasText: beat.subject }).filter({ hasNotText: "(key image)" });
+
+  for (let step = 0; step < 6; step += 1) {
+    const second = await rows.nth(1).innerText();
+    if (second.includes(beat.subject) && !second.includes("(key image)")) break;
+    const up = clip().getByRole("button", { name: /earlier$/ }).first();
+    if (!(await up.isEnabled())) break;
+    const before = (await rows.allInnerTexts()).join("|");
+    await up.click();
+    await expect
+      .poll(async () => (await rows.allInnerTexts()).join("|"), { timeout: 15_000 })
+      .not.toBe(before);
+  }
+
+  const second = await rows.nth(1).innerText();
+  expect(second).toContain(beat.subject);
+  expect(second).not.toContain("(key image)");
 });

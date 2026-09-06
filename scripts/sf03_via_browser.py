@@ -57,6 +57,7 @@ PHASES = {
     "rework": "reworks the two shots",
     "remake-two": "makes the two reworked shots",
     "bind-all": "approves the key images and gives",
+    "order": "puts scene one back in the order",
     "clips": "generates the clips",
     "assemble": "assembles",
 }
