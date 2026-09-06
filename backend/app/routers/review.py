@@ -218,20 +218,35 @@ def reject_take(
     db.commit()
     db.refresh(take)
 
-    # Check if all takes for this shot are rejected -> mark shot as Failed
+    # A shot whose takes have all been rejected is a shot that has not been
+    # made yet: it has its prompt, its references and its workflow, and no
+    # picture. That is Ready. It used to be left in NeedsReview with nothing
+    # left to review, which preflight refuses - so the shot could never be
+    # generated again without reaching into the database.
     shot = db.query(Shot).filter(Shot.id == take.shot_id).first()
     if shot:
-        remaining_pending = (
-            db.query(Take)
+        remaining = (
+            db.query(Take.review_status)
             .filter(
                 Take.shot_id == take.shot_id,
                 Take.review_status.in_(["Pending", "Approved"]),
             )
-            .count()
+            .all()
         )
-        if remaining_pending == 0:
+        statuses = {row[0] for row in remaining}
+        if "Pending" in statuses:
             shot.status = "NeedsReview"
-            db.commit()
+        elif "Approved" in statuses:
+            shot.status = "Approved"
+        else:
+            shot.status = "Ready"
+            # It has produced nothing that still stands, so it is not stale
+            # either: staleness means "what this shot produced is not what it
+            # now is", and what it produced has been thrown away.
+            shot.generated_revision = 0
+            shot.generated_content_sha256 = ""
+            shot.is_stale = False
+        db.commit()
 
     return take
 
