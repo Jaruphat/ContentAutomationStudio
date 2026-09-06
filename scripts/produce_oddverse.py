@@ -422,6 +422,11 @@ def main() -> int:
         record = produced.get(str(index), {})
         record["scene_id"] = sid
         detail = index in (ep.get("detail_beats") or ())
+        # A beat can exclude what only it must not show. The house negative is
+        # about the look; this is about what has no business in *this* frame.
+        negative = ", ".join(part for part in (
+            ep["negative"], (ep.get("negatives") or {}).get(index, ""),
+        ) if part.strip())
         sets = [cast_ids[c] for c in cast]
         log(f"beat {index}/{len(beats)} - {name}")
 
@@ -438,7 +443,7 @@ def main() -> int:
                     "include_in_cut": False,
                     "scene_role": "establishing",
                     "image_prompt": f"{image_prompt} {ep['style']}",
-                    "negative_prompt": ep["negative"],
+                    "negative_prompt": negative,
                     "character_set_ids": sets,
                     # Every key image is an edit of its scene's plate, so all
                     # the shots in a scene are the same place. A shot with a
@@ -458,6 +463,12 @@ def main() -> int:
                         else (WF_T2I if detail else WF_EDIT)
                     ),
                     "image_provider_id": "comfyui", "image_model": "workflow",
+                    # Fixed and derived from the beat. Re-running one has to
+                    # reproduce its frame: reverting a prompt to one that had
+                    # worked came back with a different picture, which turns
+                    # every correction into a gamble.
+                    "seed_policy": "fixed",
+                    "seed": PLATE_SEED + index * 101,
                 })
                 record["key_shot_id"] = shot["id"]
                 produced[str(index)] = record
@@ -533,7 +544,7 @@ def main() -> int:
                     # direction for it from the same prompt. Left out, the
                     # clip comes back with whatever ambience it invented.
                     "audio_direction": audio_direction,
-                    "negative_prompt": ep["negative"],
+                    "negative_prompt": negative,
                     "workflow_preset_id": WF_I2V,
                     "image_provider_id": "comfyui", "image_model": "workflow",
                 })

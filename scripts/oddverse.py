@@ -259,6 +259,12 @@ SF01: dict[str, Any] = {
             3.0, "Tomorrow",
             # A detail beat: see shot 2. Night and an empty platform are
             # stated because no plate is carrying them.
+            #
+            # This shot's job is to establish that the object is a newspaper,
+            # so it is held at a distance where its columns read as texture
+            # rather than as words. Framed tighter to keep type out of the
+            # picture entirely, it stopped being a newspaper - a blank sheet
+            # at an angle - and the shot after it had nothing to push into.
             "Extreme close-up of a folded old-fashioned newspaper held by one "
             "pair of realistic hands at night, traditional monochrome "
             "broadsheet layout with blank unreadable placeholder areas where "
@@ -275,20 +281,29 @@ SF01: dict[str, Any] = {
         ),
         (
             5.0, "The Reveal",
-            # A detail beat with a cast: conditioned on the observer's
-            # canonical view so the press photograph is his face, and not on
-            # the station, which is not in this frame.
-            "An old-fashioned newspaper front page held toward the camera at "
-            "night on a dark deserted railway platform, a large grainy "
-            "monochrome press photograph of a man in a dark brown jacket "
-            "filling the upper half of the page, blank unreadable placeholder "
-            "areas where the headline would be, worn newsprint, weak tungsten "
-            "light, background thrown completely out of focus, nobody else in "
-            "frame. Shallow depth of field.",
-            ("The hands raise the newspaper toward the camera and hold it "
-             "there. The page flexes and steadies. The photograph on the "
-             "front page fills more of the frame.",
-             "Slow push in that comes to rest for the final half second.",
+            # A detail beat, framed on the photograph. The face is the shot;
+            # the columns of type around it are what gave the last cut away,
+            # so the frame is tight enough that they are not in it.
+            "Macro photograph of the top of a newspaper front page filling the "
+            "entire frame from edge to edge at night, so close that the edges "
+            "of the page are outside the picture. Visible in frame: a narrow "
+            "band of blank cream newsprint across the top, and beneath it one "
+            "large grainy monochrome press photograph of a man in a dark "
+            "brown jacket looking straight out, occupying most of the frame. "
+            "No columns of type, no paragraphs, no small print anywhere. Worn "
+            "newsprint with a coarse halftone dot pattern in the photograph, "
+            "weak warm tungsten light, the darkness behind the page "
+            "completely out of focus. 100mm macro lens.",
+            # Rewritten with the framing. Asked to "raise the newspaper
+            # toward the camera" from a start frame that is already the
+            # photograph filling the screen, the model invented a pair of
+            # hands and a whole new front page - and drew its own headline on
+            # it. There is nothing left to raise; the page is already there.
+            ("The printed page flexes very slightly, the way paper held in "
+             "one hand does, and settles. The halftone grain of the "
+             "photograph shifts with it. Nothing else in the frame changes.",
+             "A very slow push in that comes to rest for the final half "
+             "second.",
              "the ambience falling away to almost nothing, then one low sub-bass swell"),
             "But that wasn't the strange part. The photograph on the front "
             "page... was him.",
@@ -321,44 +336,32 @@ SF01: dict[str, Any] = {
     #: and compositing that; the blueprint says so, and it is a shot this
     #: episode does not otherwise need.
     #:
-    #: The rule stands from the other episode: composite what must be read and
-    #: is never spoken. A face is neither - but a masthead is.
-    #:
-    #: The model's own front page reads "Noural not Of The News", legible
-    #: nonsense held for five seconds, which is the clearest AI tell in the
-    #: film and exactly what the quality rubric's "would I know this was AI
-    #: within two seconds" asks about. The paper in the shot before it is
-    #: headed *Tomorrow*; it is the same paper, so it gets the same masthead.
-    #: Corners measured off this run's key image.
+    #: What must not be in these two frames. Kept per beat because the rest of
+    #: the episode is allowed to show a newspaper at a distance where its type
+    #: is only texture; these two are close enough that type would be read.
+    #: Only shot 9, and only the part that was legible. Shot 8 keeps its
+    #: columns: at that distance they are texture, and excluding them took the
+    #: newspaper with them.
+    "negatives": {
+        9: ("columns of body text, paragraphs of small print, dense newsprint "
+            "type, article text, page edges, whole newspaper visible"),
+    },
+    #: The rule from the other episode: composite what must be read and is
+    #: never spoken. The model's own front page read "Noural not Of The News",
+    #: legible nonsense held for five seconds, which is the clearest AI tell
+    #: the film had. A face is not something to composite - a character sheet
+    #: on newsprint reads as a product photo - but a masthead is, and this one
+    #: does two jobs: it replaces nothing (the band above the photograph is
+    #: blank newsprint) and it says the thing being pushed into is the same
+    #: paper the shot before it established.
     "composites": {
         9: [
-            {"type": "rect", "colour": "#e9e2d2",
-             "corners": [[0.252, 0.426], [0.818, 0.426],
-                         [0.818, 0.472], [0.252, 0.472]]},
             {"type": "text", "text": "TOMORROW", "colour": "#16130f",
-             "size": 0.034,
-             "corners": [[0.268, 0.431], [0.802, 0.431],
-                         [0.802, 0.467], [0.268, 0.467]]},
+             "size": 0.052,
+             "corners": [[0.115, 0.048], [0.885, 0.048],
+                         [0.885, 0.152], [0.115, 0.152]]},
         ],
     },
-    #: Beats whose key image is a detail, generated from the prompt alone.
-    #:
-    #: A guidance scale of 9 lets the prompt move the framing *within* the
-    #: place the plate establishes - a man at a door, a label on a sofa arm.
-    #: It does not make a small object in the plate become the subject. Asked
-    #: at 9 for an 85mm close-up of the station clock, the model returned the
-    #: station again with the clock the size it is on the building.
-    #:
-    #: These three are the shots where the place is out of focus anyway: a
-    #: clock face, a newspaper held to the lens, and its front page. Beat 9
-    #: keeps its cast, so its key image is conditioned on the observer's
-    #: canonical view and not on the station.
-    "detail_beats": {2, 8, 9},
-    #: Characters whose canonical sheets a composite needs, but whose beats do
-    #: not condition on them. Empty here now that the front page composites
-    #: nothing - kept because the distinction is real: conditioning beat 9 on
-    #: the observer's portrait made the model draw the man instead of the page.
-    "composite_cast": [],
     #: Section 6 of the blueprint, as an instruction a hosted voice can take.
     #: A platform voice has a name and a rate slider and no opinion about how
     #: a sentence should land; this is the reason to pay for one.
