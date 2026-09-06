@@ -163,15 +163,21 @@ SF01: dict[str, Any] = {
              "headlight grows larger and brighter.",
              "Locked-off camera at eye level.",
              "cold night air, a low rail vibration far down the track, wind across an empty platform"),
-            "Every night at exactly 3:17, a train arrives at this abandoned station.",
+            "Every night at 3:17, a train arrives.",
             "EVERY NIGHT / AT 3:17 AM", [],
         ),
         (
             2.0, "3:17",
-            "Close-up of an old analog railway station clock beneath a weathered "
-            "canopy, chipped cream-painted metal frame, condensation on the "
-            "glass, weak tungsten light, abandoned station blurred behind, "
-            "85mm lens, shallow depth of field.",
+            # A detail beat: no plate, so the conditions the plate was
+            # carrying are restated here. Without them the first attempt came
+            # back at dusk with two commuters standing on a platform the story
+            # says has been closed for thirty years.
+            "Close-up of an old analog railway station clock beneath a "
+            "weathered canopy at night, chipped cream-painted metal frame, "
+            "condensation on the glass, lit only by weak warm tungsten light, "
+            "the deserted abandoned station blurred in darkness behind it. "
+            "Cold damp autumn night, nobody present, no people anywhere in "
+            "frame. 85mm lens, shallow depth of field.",
             ("The second hand sweeps round the dial. A bead of condensation "
              "runs down the glass and stops.",
              "Very slow push in with slight handheld micro-movement.",
@@ -217,7 +223,7 @@ SF01: dict[str, Any] = {
              "carriage.",
              "Locked-off camera.",
              "a pneumatic door hissing open, a low engine idle, the hum of an interior light"),
-            "The train isn't on any schedule, and nobody has ever stepped off.",
+            "Nobody has ever stepped off.",
             "NO ONE EVER GETS OFF.", [],
         ),
         (
@@ -246,16 +252,20 @@ SF01: dict[str, Any] = {
              "slightly and looks down at it.",
              "70mm lens, shallow focus, camera steady.",
              "newsprint rustling in a breeze, quiet night wind, a distant train idle"),
-            "A woman walked onto the platform carrying a newspaper dated tomorrow.",
+            "A woman stepped off, carrying tomorrow's newspaper.",
             "", ["CHAR01"],
         ),
         (
             3.0, "Tomorrow",
-            "Extreme close-up of a folded old-fashioned newspaper held by "
-            "realistic hands, traditional monochrome broadsheet layout with "
-            "blank unreadable placeholder areas where the headline and date "
-            "would be, worn newsprint texture, railway platform heavily out of "
-            "focus behind, 85mm lens.",
+            # A detail beat: see shot 2. Night and an empty platform are
+            # stated because no plate is carrying them.
+            "Extreme close-up of a folded old-fashioned newspaper held by one "
+            "pair of realistic hands at night, traditional monochrome "
+            "broadsheet layout with blank unreadable placeholder areas where "
+            "the headline and date would be, worn newsprint texture, lit by "
+            "weak tungsten platform light, a dark deserted railway platform "
+            "thrown completely out of focus behind. No other people in frame. "
+            "85mm lens.",
             ("The newspaper page lifts and settles in the night air. The "
              "hands adjust their grip and turn the page a little toward the "
              "light, and the paper flexes across its fold.",
@@ -265,11 +275,16 @@ SF01: dict[str, Any] = {
         ),
         (
             5.0, "The Reveal",
-            "An old-fashioned newspaper front page held toward the camera on a "
-            "dark railway platform, a large grainy monochrome press photograph "
-            "of a man in a dark brown jacket filling the upper half of the page, "
-            "blank unreadable placeholder areas where the headline would be, "
-            "worn newsprint, shallow depth of field.",
+            # A detail beat with a cast: conditioned on the observer's
+            # canonical view so the press photograph is his face, and not on
+            # the station, which is not in this frame.
+            "An old-fashioned newspaper front page held toward the camera at "
+            "night on a dark deserted railway platform, a large grainy "
+            "monochrome press photograph of a man in a dark brown jacket "
+            "filling the upper half of the page, blank unreadable placeholder "
+            "areas where the headline would be, worn newsprint, weak tungsten "
+            "light, background thrown completely out of focus, nobody else in "
+            "frame. Shallow depth of field.",
             ("The hands raise the newspaper toward the camera and hold it "
              "there. The page flexes and steadies. The photograph on the "
              "front page fills more of the frame.",
@@ -277,7 +292,7 @@ SF01: dict[str, Any] = {
              "the ambience falling away to almost nothing, then one low sub-bass swell"),
             "But that wasn't the strange part. The photograph on the front "
             "page... was him.",
-            "IT WAS HIM.", ["CHAR02"],
+            "IT WAS HIM.", [],
         ),
     ],
     #: Appendix A: "do not let AI generate critical text/date/newspaper
@@ -288,10 +303,62 @@ SF01: dict[str, Any] = {
     #: Each starts with a patch, because the model does not leave a blank area
     #: when asked - it writes a plausible smear, and a real headline drawn over
     #: a fake one is two headlines.
-    #: Cleared for the v3 run. The corners below were measured on frames from
-    #: a previous set of key images and describe planes the new paper is not
-    #: on; they are placed again after this run's frames exist.
-    "composites": {},
+    #: Empty, and the reason is worth keeping.
+    #:
+    #: The blueprint composites the observer's face onto the front page, so
+    #: this run pasted his canonical view there, in grayscale, on corners
+    #: measured off the frame. It placed correctly and looked wrong: a
+    #: canonical view is a studio portrait on a plain ground, which is what a
+    #: character sheet is *for*, and on newsprint it reads as a product photo
+    #: stuck to a page. A canonical view is a reference, not a frame that can
+    #: be put in the film.
+    #:
+    #: What the page already had was better. The model draws a plausible press
+    #: photograph of a man in a dark jacket, and this character is written as
+    #: "mostly seen from behind or out of focus until the final reveal" - the
+    #: audience has never seen his face, so a plausible man *is* the reveal.
+    #: Doing it properly would mean generating a candid of him on the platform
+    #: and compositing that; the blueprint says so, and it is a shot this
+    #: episode does not otherwise need.
+    #:
+    #: The rule stands from the other episode: composite what must be read and
+    #: is never spoken. A face is neither - but a masthead is.
+    #:
+    #: The model's own front page reads "Noural not Of The News", legible
+    #: nonsense held for five seconds, which is the clearest AI tell in the
+    #: film and exactly what the quality rubric's "would I know this was AI
+    #: within two seconds" asks about. The paper in the shot before it is
+    #: headed *Tomorrow*; it is the same paper, so it gets the same masthead.
+    #: Corners measured off this run's key image.
+    "composites": {
+        9: [
+            {"type": "rect", "colour": "#e9e2d2",
+             "corners": [[0.252, 0.426], [0.818, 0.426],
+                         [0.818, 0.472], [0.252, 0.472]]},
+            {"type": "text", "text": "TOMORROW", "colour": "#16130f",
+             "size": 0.034,
+             "corners": [[0.268, 0.431], [0.802, 0.431],
+                         [0.802, 0.467], [0.268, 0.467]]},
+        ],
+    },
+    #: Beats whose key image is a detail, generated from the prompt alone.
+    #:
+    #: A guidance scale of 9 lets the prompt move the framing *within* the
+    #: place the plate establishes - a man at a door, a label on a sofa arm.
+    #: It does not make a small object in the plate become the subject. Asked
+    #: at 9 for an 85mm close-up of the station clock, the model returned the
+    #: station again with the clock the size it is on the building.
+    #:
+    #: These three are the shots where the place is out of focus anyway: a
+    #: clock face, a newspaper held to the lens, and its front page. Beat 9
+    #: keeps its cast, so its key image is conditioned on the observer's
+    #: canonical view and not on the station.
+    "detail_beats": {2, 8, 9},
+    #: Characters whose canonical sheets a composite needs, but whose beats do
+    #: not condition on them. Empty here now that the front page composites
+    #: nothing - kept because the distinction is real: conditioning beat 9 on
+    #: the observer's portrait made the model draw the man instead of the page.
+    "composite_cast": [],
     #: Section 6 of the blueprint, as an instruction a hosted voice can take.
     #: A platform voice has a name and a rate slider and no opinion about how
     #: a sentence should land; this is the reason to pay for one.

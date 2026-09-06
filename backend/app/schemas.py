@@ -1175,6 +1175,8 @@ class ShotCreate(BaseModel):
     generation_mode: str = "image"
     scene_role: str = ""
     include_in_cut: bool = True
+    #: A name for this shot in a list. Never sent to a model.
+    label: str = ""
     emphasis_text: str = ""
     image_prompt: str = ""
     video_prompt: str = ""
@@ -1215,6 +1217,7 @@ class ShotUpdate(BaseModel):
     generation_mode: Optional[str] = None
     scene_role: Optional[str] = None
     include_in_cut: Optional[bool] = None
+    label: Optional[str] = None
     emphasis_text: Optional[str] = None
     image_prompt: Optional[str] = None
     video_prompt: Optional[str] = None
@@ -1294,10 +1297,12 @@ class ShotResponse(BaseModel):
     #: Blank on any row written before roles existed, which reads as "infer it
     #: from position" - the same thing an unset role means for a new shot.
     scene_role: str = ""
+    #: A name for the list, which no prompt reads.
+    label: str = ""
 
     _coerce_added_strings = field_validator(
-        "scene_role", "emphasis_text", "subject_motion", "camera_motion",
-        "audio_direction",
+        "scene_role", "label", "emphasis_text", "subject_motion",
+        "camera_motion", "audio_direction",
         mode="before",
     )(_coerce_added_column(""))
     _coerce_added_flags = field_validator("include_in_cut", mode="before")(

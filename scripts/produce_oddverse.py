@@ -372,7 +372,10 @@ def main() -> int:
 
     # -- canonical cast -----------------------------------------------------
     cast_ids: dict[str, str] = state.get("cast_ids", {})
+    # Cast a beat conditions on, plus anyone a composite will paste in: the
+    # sheet has to exist either way, and only the first kind reaches a prompt.
     needed = {name for beat in beats for name in beat[6]}
+    needed |= set(ep.get("composite_cast") or [])
     for key in sorted(needed - set(cast_ids)):
         member = ep["cast"][key]
         spec = {k: v for k, v in member.items() if k != "slots"}
@@ -430,7 +433,7 @@ def main() -> int:
                 shot = call("POST", f"/api/projects/{pid}/scenes/{sid}/shots",
                             expect=201, json={
                     "order": position * 2 - 1,
-                    "shot_type": name,
+                    "label": name,
                     "generation_mode": "image",
                     "include_in_cut": False,
                     "scene_role": "establishing",
@@ -515,7 +518,7 @@ def main() -> int:
                 shot = call("POST", f"/api/projects/{pid}/scenes/{sid}/shots",
                             expect=201, json={
                     "order": position * 2,
-                    "shot_type": name,
+                    "label": name,
                     "generation_mode": "image-to-video",
                     "scene_role": "establishing" if position == 1 else "continuation",
                     "planned_duration_sec": seconds,

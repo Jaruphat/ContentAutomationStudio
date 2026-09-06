@@ -374,6 +374,77 @@ known to need attention before it replaces anything: the hosted canvas is 2:3
 or 1:1 where this channel delivers 9:16, and a local plate costs nothing per
 frame where this costs one image each.
 
+### 17. A shot's name is not a brief either
+
+Seen printed on the picture, twice. A shot called "Tomorrow" produced a
+newspaper whose masthead read *Tomorrow*; the shot after it, called "The
+Reveal", produced a front page headlined *theE IINTD REVEAL*. The producer had
+put each beat's name in `shot_type`, which the compiler sends as the framing
+term - the field means "wide shot", "medium close-up", and a model handed "The
+Reveal" instead has nothing to frame with, so it drew the words.
+
+The second field in this application to conflate a name with a brief, after a
+style's name in `medium`. `Shot.label` holds the name, no prompt reads it, and
+naming a shot does not invalidate what it generated.
+
+## Re-running the first episode on the pipeline the second one built
+
+SF01 was produced again from its own data, unchanged except for the sound
+direction the blueprint always specified and a script re-measured against the
+narrator that speaks it. What it showed:
+
+**The claim about guidance was too broad, twice.** Recorded first as "the plate
+decides the composition", corrected to "the guidance scale decides how much of
+the prompt survives", and corrected again here: asked at 9.0 for an 85mm
+close-up of a station clock, against a plate of the whole station, the model
+returned the station with the clock the size it is on the building. A high
+scale moves the framing *within* the place; it does not make a small object in
+the plate become the subject.
+
+**Dropping the plate costs more than the place.** The clock, generated from its
+prompt alone, came back at dusk with two commuters standing on a platform the
+story says closed thirty years ago. The plate had been carrying night,
+abandonment and emptiness as well as geometry. A detail shot without a plate
+has to restate the conditions the plate was holding.
+
+**Motion, on the episode whose first cut was 86% identical frames:**
+
+| Shot | Mean change | Near-static |
+|---|---:|---:|
+| Tomorrow | 11.109 | 0% |
+| The Reveal | 10.477 | 2.5% |
+| The Train | 6.384 | 0% |
+| Closed 30 Years Ago | 3.003 | 0% |
+| The Station | 2.896 | 31% |
+| Until Last Night | 1.815 | 30% |
+| 3:17 | 1.482 | 11% |
+| Nobody Gets Off | 1.139 | 31% |
+| The Newspaper | 0.878 | 60% |
+
+**Requested frame counts are honoured approximately.** Four measurements: 48
+asked returned 56, 72 returned 73, 96 returned 107, and the graph's own baked
+default is 124. Those four are 17 apart, and a request appears to round up to
+the next of them - which would mean an overshoot of up to sixteen frames. The
+cut trims either way, so the saving is real and smaller than the request
+implies. Stated as the pattern four points show, not as a documented rule.
+
+**A canonical view is a reference, not a frame.** The blueprint composites the
+observer's face onto the front page, so this run pasted his canonical view
+there in grayscale, on corners measured off the frame. It placed correctly and
+looked wrong: a character sheet is a studio portrait on a plain ground, and on
+newsprint it reads as a product photo stuck to a page. The model's own press
+photograph was better - this character is written as never clearly seen until
+the reveal, so a plausible man *is* the reveal.
+
+**What the gate blocked, and rightly.** The delivered file is 32.034 s,
+1080×1920, -16.13 LUFS, -1.91 dBTP, SHA-256 beginning `59cb3dd5`. Nine shots,
+one station, one night. The quality card records `ai_tell: true`: the newsprint
+body text in two shots is legible-looking nonsense held for five seconds. The
+mastheads are composited and read correctly; the columns beneath them cannot
+be. The gate's answer is the right one - "nobody watching gets as far as the
+rest of the film" - and the fix is a real shallow depth of field on those two
+shots rather than another composite.
+
 ## Delivered episode - SF02, "The Extra Room"
 
 Project `d7bd14bd-3078-4a49-8eaf-531c8e47806a`, started under the ODDVERSE
@@ -420,14 +491,23 @@ the gap, in the same hallway the plate establishes.
 
 So the plate holds the place and the guidance scale decides how much of the
 prompt is allowed to survive it. At 3.5 the reference dominates; at 9.0 the
-prompt wins and the place is kept. This is one image, not a series - but it is
-the image two prompt rewrites could not produce.
+prompt wins and the place is kept.
+
+**How far that goes was over-stated on first writing, and the next episode
+showed the limit.** Asked at 9.0 for an 85mm close-up of a station clock, with
+a plate of the whole station, the model returned the station again with the
+clock the size it is on the building. The rule that survives both measurements
+is narrower: a high guidance scale lets the prompt move the framing *within*
+the place the plate establishes - a man at a door, a label on a sofa arm - and
+does not make a small object in the plate become the subject of the frame.
 
 Two consequences follow. The camera language the blueprint asks for -
-establishing, medium, detail, reaction, reveal - is reachable on this
-workflow. And `detail_beats`, which drops the plate to free the framing, is
-solving a problem that has a better answer: SF02's closing shot gave up its
-room to show a delivery label, and did not have to.
+establishing, medium, detail, reaction, reveal - is reachable for a subject the
+plate already features. And `detail_beats`, which drops the plate to free the
+framing, is the right tool after all, for the narrower case it was named for:
+a shot whose background is out of focus anyway. SF02's closing shot did not
+need it and gave up its room for nothing; SF01's clock face, newspaper and
+front page do need it, because the station is not in those frames.
 
 ### Composites: only text that must be read and is never spoken
 

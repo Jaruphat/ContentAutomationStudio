@@ -68,10 +68,15 @@ def shot_display_name(shot: Shot | None) -> str:
     if shot is None:
         return "Deleted shot"
     label = f"Shot {shot.order}"
+    # A name the writer gave it wins: that is what it is for. Everything else
+    # is the shot describing itself.
     descriptor = next(
         (
             value.strip()
-            for value in (shot.subject, shot.action, shot.shot_type)
+            for value in (
+                getattr(shot, "label", "") or "",
+                shot.subject, shot.action, shot.shot_type,
+            )
             if (value or "").strip()
         ),
         "",

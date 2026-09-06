@@ -680,6 +680,12 @@ class Shot(Base):
     #: stated means the writer knows something position cannot express, such
     #: as a cut back to a location already established.
     scene_role = Column(String, default="")
+    #: What to call this shot in a list of them. Deliberately not a prompt
+    #: field. Production named its shots in `shot_type`, which the compiler
+    #: sends as the framing term, so a shot called "Tomorrow" produced a
+    #: newspaper whose masthead read Tomorrow and one called "The Reveal"
+    #: produced a front page headlined THE REVEAL.
+    label = Column(String, default="")
     image_prompt = Column(Text, default="")
     video_prompt = Column(Text, default="")
     #: What happens inside the frame - what moves, what changes. Held apart
