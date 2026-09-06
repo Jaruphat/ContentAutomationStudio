@@ -34,3 +34,8 @@ comfyworkflow/
 .idea/
 *.swp
 *.swo
+
+# Playwright browser walk-through artifacts
+frontend/test-results/
+frontend/playwright-report/
+frontend/blob-report/

@@ -192,6 +192,8 @@ function ExportCard({
         </div>
 
         <button
+          data-testid={`export-${opt.id}`}
+          aria-label={`Export ${opt.label}`}
           onClick={() => exportMut.mutate()}
           disabled={exportMut.isPending}
           className="flex shrink-0 items-center gap-1.5 rounded-md bg-zinc-800 px-3 py-1.5 text-xs font-medium text-zinc-300 hover:bg-zinc-700 disabled:opacity-50"

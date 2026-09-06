@@ -483,6 +483,40 @@ who lets the AI author a storyboard and then generates, reviews, assembles and
 exports it can work entirely in the cockpit today. A creator who wants to type
 their own scenes cannot.
 
+### The walk-through, in a browser
+
+The coverage check above reads the code. What it cannot show is whether the
+pages work when a person uses them, so there is now a walk-through that drives
+the real application in a real browser and types every value into a control a
+creator can see: a workflow registered from its API export and mapped field by
+field, a project, a scene, a shot with its prompt, duration, workflow and
+negatives, preflight, generation, approval, the cut, and the storyboard export.
+The last assertion is the sentence typed into the shot editor coming back out
+of the export at the far end.
+
+It runs against a backend of its own - port 8011, mock providers, a database
+wiped before each run - so it cannot touch the production database, cannot
+reach a paid provider, and cannot leave a half-finished project in the
+switcher. What it generates is a deterministic placeholder. It proves the
+pages work; picture quality is judged on real renders, elsewhere in this
+document.
+
+Two things it found immediately, neither of which any existing test could
+have:
+
+* **Every field in the shot editor was anonymous.** The labels above them are
+  plain `<label>` elements with no `htmlFor` and no wrapped control, so the
+  inputs had no accessible name at all - a screen reader would read nine
+  unlabelled text boxes. Named now.
+* **The export buttons were seven identical "Export"s.** Distinguishable by
+  eye from the card around them, indistinguishable to anything that navigates
+  by name. Each now says which export it is.
+
+A second case covers the refusal rather than the success: a shot with no
+prompt is blocked at preflight, the reason is named on the page, and Generate
+stays disabled. A queue that accepts an empty shot spends a GPU minute drawing
+nothing, and the first place anyone would find out is Review.
+
 ## Re-running the first episode on the pipeline the second one built
 
 SF01 was produced again from its own data, unchanged except for the sound

@@ -209,6 +209,32 @@ cd frontend
 npm run build
 ```
 
+### Browser walk-through (Playwright)
+
+Everything else here tests the application through its API or through a
+rendered component. This one drives the real pages in a real browser and types
+every value into a field a creator can see - a workflow registered from its
+JSON export and mapped, a project, a scene, a shot, preflight, generation,
+approval, the cut, and the export that the typed sentence comes back out of.
+
+```bash
+cd frontend && npm install     # once
+python scripts/e2e_browser.py  # from the repository root
+python scripts/e2e_browser.py --headed   # watch it happen
+```
+
+The script starts a backend of its own on port 8011 with mock providers and a
+database at `backend/data/e2e-browser` that it wipes before each run, so a
+walk-through cannot touch the real one, cannot reach a paid provider, and
+cannot leave a half-finished project behind. What it generates is a
+deterministic placeholder: this proves the pages work, not that a picture is
+good.
+
+Playwright uses the Chrome already installed on the machine
+(`channel: "chrome"`), because downloading its own browser is blocked here.
+`npx playwright install chromium` would remove that dependency where the
+download works.
+
 ### End-to-End Test (requires the backend running)
 
 Drives the whole vertical slice over HTTP against a running server: workflow

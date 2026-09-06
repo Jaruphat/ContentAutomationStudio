@@ -105,33 +105,33 @@ function ShotRow({
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
               <div>
                 <label className="text-[10px] text-zinc-500 uppercase">Type</label>
-                <input value={shotType} onChange={(e) => setShotType(e.target.value)} className="w-full rounded px-2 py-1 text-xs" placeholder="wide, close-up..." />
+                <input aria-label="Shot type" value={shotType} onChange={(e) => setShotType(e.target.value)} className="w-full rounded px-2 py-1 text-xs" placeholder="wide, close-up..." />
               </div>
               <div>
                 <label className="text-[10px] text-zinc-500 uppercase">Camera Angle</label>
-                <input value={cameraAngle} onChange={(e) => setCameraAngle(e.target.value)} className="w-full rounded px-2 py-1 text-xs" placeholder="eye level..." />
+                <input aria-label="Camera angle" value={cameraAngle} onChange={(e) => setCameraAngle(e.target.value)} className="w-full rounded px-2 py-1 text-xs" placeholder="eye level..." />
               </div>
               <div>
                 <label className="text-[10px] text-zinc-500 uppercase">Camera Movement</label>
-                <input value={cameraMovement} onChange={(e) => setCameraMovement(e.target.value)} className="w-full rounded px-2 py-1 text-xs" placeholder="pan, dolly..." />
+                <input aria-label="Camera movement" value={cameraMovement} onChange={(e) => setCameraMovement(e.target.value)} className="w-full rounded px-2 py-1 text-xs" placeholder="pan, dolly..." />
               </div>
               <div>
                 <label className="text-[10px] text-zinc-500 uppercase">Subject</label>
-                <input value={subject} onChange={(e) => setSubject(e.target.value)} className="w-full rounded px-2 py-1 text-xs" />
+                <input aria-label="Shot subject" value={subject} onChange={(e) => setSubject(e.target.value)} className="w-full rounded px-2 py-1 text-xs" />
               </div>
             </div>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
               <div>
                 <label className="text-[10px] text-zinc-500 uppercase">Action</label>
-                <input value={action} onChange={(e) => setAction(e.target.value)} className="w-full rounded px-2 py-1 text-xs" placeholder="character walks..." />
+                <input aria-label="Shot action" value={action} onChange={(e) => setAction(e.target.value)} className="w-full rounded px-2 py-1 text-xs" placeholder="character walks..." />
               </div>
               <div>
                 <label className="text-[10px] text-zinc-500 uppercase">Duration (sec)</label>
-                <input value={duration} onChange={(e) => setDuration(e.target.value)} className="w-full rounded px-2 py-1 text-xs" placeholder="5.0" />
+                <input aria-label="Planned duration in seconds" value={duration} onChange={(e) => setDuration(e.target.value)} className="w-full rounded px-2 py-1 text-xs" placeholder="5.0" />
               </div>
               <div>
                 <label className="text-[10px] text-zinc-500 uppercase">Gen Mode</label>
-                <select value={genMode} onChange={(e) => setGenMode(e.target.value as typeof genMode)} className="w-full rounded px-2 py-1 text-xs">
+                <select aria-label="Generation mode" value={genMode} onChange={(e) => setGenMode(e.target.value as typeof genMode)} className="w-full rounded px-2 py-1 text-xs">
                   <option value="image">Image</option>
                   <option value="video">Video</option>
                   <option value="image-to-video">Image to Video</option>
@@ -146,6 +146,7 @@ function ShotRow({
                   express, such as cutting back to a location already seen. */}
               <label className="text-[10px] text-zinc-500 uppercase">Scene Role</label>
               <select
+                aria-label="Scene role"
                 value={sceneRole}
                 onChange={(e) => setSceneRole(e.target.value as SceneRole)}
                 className="w-full rounded px-2 py-1 text-xs"
@@ -194,7 +195,7 @@ function ShotRow({
             />
             <div>
               <label className="text-[10px] text-zinc-500 uppercase">Image Prompt</label>
-              <textarea value={imagePrompt} onChange={(e) => setImagePrompt(e.target.value)} className="w-full rounded px-2 py-1 text-xs" rows={2} />
+              <textarea aria-label="Image prompt" value={imagePrompt} onChange={(e) => setImagePrompt(e.target.value)} className="w-full rounded px-2 py-1 text-xs" rows={2} />
             </div>
             <div className="flex justify-end gap-1">
               <button
