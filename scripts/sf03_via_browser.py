@@ -76,6 +76,11 @@ PHASES = {
     "ep1-draw": "draws the sixteen beats",
     "ep1-diagrams": "takes the character out",
     "ep1-render": "cuts and renders the episode",
+    # ก้าง EP002, five minutes, 16:9.
+    "ep2-setup": "sets up the episode and its master",
+    "ep2-type": "types the fifty-four beats",
+    "ep2-draw": "draws the fifty-four beats",
+    "ep2-render": "cuts and renders the five minutes",
 }
 
 
