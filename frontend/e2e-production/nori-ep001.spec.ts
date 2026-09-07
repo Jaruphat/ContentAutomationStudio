@@ -391,6 +391,34 @@ const SECOND_PASS: { n: number; d: string; toCharacter?: true }[] = [
     d: "Nori standing on a plain warm backdrop holding up one plain white triangular rice ball wrapped in a crisp dark green seaweed sheet, a thin clear plastic film peeled back and hanging from it. Nothing on his head, no flat white panels and no signs anywhere. Exactly ONE character in the frame." },
 ];
 
+/**
+ * The holds, re-derived from the narration that was actually recorded.
+ *
+ * The first cut planned every shot at 135 words per minute plus air. The
+ * hosted narrator read the same script at 194 - it does not take the pace it
+ * is given - so nothing overran, but forty-three per cent of a nine-minute
+ * film was silence: about three seconds of nothing after every sentence.
+ *
+ * These are the measured length of each line in that render, plus fifteen per
+ * cent (the same voice does not read the same line at the same speed twice)
+ * and nine tenths of a second of air, floored at two and a half seconds.
+ * Runtime falls from 9:17 to 7:19 and the silence with it.
+ *
+ * They are applied to the timeline rather than to the shots. A still does not
+ * change because it is held longer, but a shot's planned duration is part of
+ * what decides whether its picture is current - so re-timing through the shots
+ * would mark all seventy-nine stale and ask for the film to be drawn again.
+ * Where a clip starts and stops is an editing decision, and the timeline is
+ * where editing decisions belong.
+ */
+const MEASURED_HOLDS = [
+  2.5, 8, 7.5, 6.5, 3.5, 3.5, 7.5, 6, 6.5, 5.5, 8, 2.5, 6, 5.5, 7.5, 4.5,
+  6, 8, 7.5, 6, 5, 4.5, 6.5, 6, 3.5, 4.5, 7, 6.5, 4.5, 3.5, 4.5, 7, 4,
+  5.5, 5, 5, 4.5, 4, 5, 2.5, 6.5, 7.5, 4.5, 5.5, 4.5, 4, 8, 6, 6, 5, 5.5,
+  7, 6, 5, 3, 9.5, 5, 4, 4, 6.5, 4, 6, 7.5, 6.5, 5, 7, 7.5, 7.5, 8, 4, 6,
+  3.5, 4, 5, 5.5, 8, 3, 7.5, 4,
+];
+
 async function stage(page: Page, name: string) {
   await page
     .getByRole("navigation", { name: "Production stages" })
@@ -837,6 +865,45 @@ test("cuts and renders Nori's history", async ({ page }) => {
   await page.getByLabel("Style preset").selectOption("clean");
   await page.getByRole("button", { name: /Save settings/ }).click();
   await expect(page.getByText(/Saved|saved/).first()).toBeVisible({ timeout: 30_000 });
+
+  await page.getByText("Narrate", { exact: true }).click();
+  await page.getByRole("combobox").filter({ hasText: "OpenAI voice" }).first()
+    .selectOption("openai");
+  const render = page.getByRole("button", { name: "Render Review" });
+  await render.click();
+  await expect(render).toBeDisabled({ timeout: 30_000 });
+  await expect(render).toBeEnabled({ timeout: 60 * 60_000 });
+});
+
+test("re-times the cut to the narration and renders again", async ({ page }) => {
+  test.setTimeout(120 * 60_000);
+  await page.goto("/story");
+  await page.getByRole("combobox", { name: "Switch project" })
+    .selectOption({ label: EPISODE });
+  await stage(page, "Timeline");
+  await expect(page.getByText(new RegExp(`${BEATS.length} items`)))
+    .toBeVisible({ timeout: 60_000 });
+
+  // The build writes in and out points as positions on the timeline, and a
+  // clip's length is the distance between them. Re-timing sets each clip's
+  // own span - zero to the hold - which is what the render reads.
+  for (const [index, hold] of MEASURED_HOLDS.entries()) {
+    const from = page.getByLabel(`Clip ${index + 1} starts at`);
+    const to = page.getByLabel(`Clip ${index + 1} ends at`);
+    await from.fill("0");
+    await from.blur();
+    await to.fill(hold.toFixed(1));
+    await to.blur();
+    // Each edit rewrites the whole manifest, so the next one has to read the
+    // result of this one rather than the copy it replaced. The length printed
+    // on the row is that result, arriving back from the server.
+    const row = page
+      .locator("div")
+      .filter({ has: page.getByLabel(`Clip ${index + 1} starts at`) })
+      .filter({ has: page.getByLabel(`Move clip ${index + 1} earlier`) })
+      .last();
+    await expect(row).toContainText(`${hold.toFixed(1)}s`, { timeout: 30_000 });
+  }
 
   await page.getByText("Narrate", { exact: true }).click();
   await page.getByRole("combobox").filter({ hasText: "OpenAI voice" }).first()

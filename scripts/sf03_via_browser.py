@@ -102,6 +102,7 @@ PHASES = {
     "nori-rework4": "re-draws the last two frames without the handover",
     "nori-rework5": "moves the last two frames onto the plain backdrop",
     "nori-render": "cuts and renders Nori's history",
+    "nori-retime": "re-times the cut to the narration",
 }
 
 
