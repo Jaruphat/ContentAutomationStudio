@@ -1,0 +1,22 @@
+{
+  "kind": "cas.derived_workflow.provenance",
+  "derived_from": "Qwen-Image-Edit 2511 GGUF (2 References)",
+  "source_file": "backend/data/workflows/ba9929d0-…_Qwen-Image-Edit_2511_GGUF__2_References_.json",
+  "changes": [
+    "Inserted a LoraLoaderModelOnly (node 300) between the GGUF UNET loader and everything that consumed its MODEL output, loading Qwen-Image-Edit-2511-Lightning-4steps-V1.0-bf16.safetensors at strength 1.0.",
+    "KSampler steps 40 -> 4 and cfg 4.0 -> 1.0, which is what the Lightning LoRA is trained for."
+  ],
+  "why": "Measured on a stick-figure pose library. Boogu Edit at guidance 9 kept the character's identity and lost its proportions, its scale and, in one of three poses, its legs. Qwen-Image-Edit 2511 kept all of them - and took 170 seconds a picture at 40 steps, which is not a production rate. With the Lightning LoRA the same three poses came back in 36, 36 and 37 seconds, close enough in quality to use for everything except the canonical views worth waiting for.",
+  "measured": {
+    "boogu_edit_guidance_9_sec": [
+      20,
+      40
+    ],
+    "qwen_2511_40_step_sec": 170,
+    "qwen_2511_lightning_4_step_sec": [
+      36,
+      36,
+      37
+    ]
+  }
+}
