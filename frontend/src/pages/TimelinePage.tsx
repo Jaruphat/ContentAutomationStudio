@@ -26,6 +26,7 @@ import api, { toAIError } from "../api/client";
 import ActionError from "../components/ActionError";
 import AspectOverrideBanner from "../components/AspectOverrideBanner";
 import SoundCueList from "../components/SoundCueList";
+import SubtitleSettingsSection from "../components/SubtitleSettingsSection";
 import { useAppState } from "../store/useProjectStore";
 import type {
   RenderedFilm,
@@ -792,6 +793,12 @@ export default function TimelinePage() {
       {/* Sound design belongs beside the cut it is timed to: a cue is placed
           inside a shot, and the shot's position is what the offset is measured
           from. */}
+      {/* How the spoken lines are drawn on the picture. It lives here because
+          captions are burned at render, and it lived nowhere at all until a
+          Thai-language prototype needed a font with Thai glyphs: the component
+          and its tests existed, and no page mounted it. */}
+      <SubtitleSettingsSection projectId={currentProjectId} />
+
       <SoundCueList
         projectId={currentProjectId}
         shots={items

@@ -64,6 +64,12 @@ PHASES = {
     "rebind-opening": "re-points the opening clip",
     "clips": "generates the clips",
     "assemble": "builds the cut and renders",
+    # The stickman prototype, a different episode in the same driver.
+    "stick-type": "types the stickman story",
+    "stick-draw": "draws the twenty beats",
+    "stick-cut": "approves the drawings and cuts",
+    "stick-thai": "tells the same story in Thai",
+    "stick-render-thai": "renders the Thai version",
 }
 
 
