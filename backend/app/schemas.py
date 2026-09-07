@@ -475,6 +475,10 @@ class CompositeLayer(BaseModel):
     width: float = 0.5
     height: float = 0.5
     grayscale: bool = False
+    #: Make the flat field around a drawing transparent, from the border
+    #: inward. What a character placed on a background needs, and what a patch
+    #: over a newspaper must not have: that one is meant to be opaque.
+    key_out_background: bool = False
     opacity: float = 1.0
     #: Both. Either an x/y centre, or four corners - never both.
     x: Optional[float] = None

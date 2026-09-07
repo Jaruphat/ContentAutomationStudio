@@ -289,6 +289,11 @@ def _layer_source(db: Session, layer: dict[str, Any]) -> str:
     reference bible. Without the second, the only way to composite a face is
     to have generated it as a shot first - a shot nobody wants in the film.
     """
+    direct = str(layer.get("path") or "")
+    if direct:
+        if not os.path.isfile(direct):
+            raise CompositeError(f"The file for image layer {direct} is missing.")
+        return direct
     take_id = str(layer.get("take_id") or "")
     image_id = str(layer.get("reference_image_id") or "")
     if take_id and image_id:
@@ -324,6 +329,84 @@ def _layer_source(db: Session, layer: dict[str, Any]) -> str:
     return path
 
 
+#: How far from the corner colour still counts as the same flat field. A
+#: generated white is not one value: it is 253s and 255s with a little
+#: dithering where the ink meets it.
+FIELD_TOLERANCE = 12
+
+#: A field has to be light. When the corners are as dark as the drawing there
+#: is nothing to key out, and filling from them would eat the character.
+FIELD_MIN_LUMA = 140
+
+
+def key_out_field(patch: Image.Image) -> Image.Image:
+    """Make the flat field around a drawing transparent, from the outside in.
+
+    The stick-figure format needs this: a character generated on plain white,
+    approved once, and placed on separately generated backgrounds. Pasted as
+    it comes it is a white rectangle sitting on the room.
+
+    Keying every white pixel is the wrong way and the tempting one. A stick
+    figure's head is a white disc inside a black ring, so a colour match
+    punches a hole through the face. This fills from the border instead, so
+    white the outside cannot reach - a head, an eye, a speech bubble - stays.
+    """
+    flat = patch.convert("RGBA")
+    width, height = flat.size
+    pixels = flat.load()
+
+    corners = [
+        pixels[0, 0], pixels[width - 1, 0],
+        pixels[0, height - 1], pixels[width - 1, height - 1],
+    ]
+    field = (
+        sum(c[0] for c in corners) // 4,
+        sum(c[1] for c in corners) // 4,
+        sum(c[2] for c in corners) // 4,
+    )
+    if (field[0] * 299 + field[1] * 587 + field[2] * 114) / 1000 < FIELD_MIN_LUMA:
+        # The corners are ink, not paper. Nothing is keyed rather than
+        # everything: an image that is dark all over has no field to remove.
+        return flat
+
+    def matches(pixel: tuple[int, int, int, int]) -> bool:
+        return (
+            abs(pixel[0] - field[0]) <= FIELD_TOLERANCE
+            and abs(pixel[1] - field[1]) <= FIELD_TOLERANCE
+            and abs(pixel[2] - field[2]) <= FIELD_TOLERANCE
+        )
+
+    # Flood fill from every border pixel, iteratively rather than recursively:
+    # a 1024-wide field would blow the stack.
+    stack: list[tuple[int, int]] = []
+    seen = bytearray(width * height)
+    for x in range(width):
+        stack.append((x, 0))
+        stack.append((x, height - 1))
+    for y in range(height):
+        stack.append((0, y))
+        stack.append((width - 1, y))
+
+    while stack:
+        x, y = stack.pop()
+        if x < 0 or y < 0 or x >= width or y >= height:
+            continue
+        index = y * width + x
+        if seen[index]:
+            continue
+        seen[index] = 1
+        pixel = pixels[x, y]
+        if not matches(pixel):
+            continue
+        pixels[x, y] = (pixel[0], pixel[1], pixel[2], 0)
+        stack.append((x + 1, y))
+        stack.append((x - 1, y))
+        stack.append((x, y + 1))
+        stack.append((x, y - 1))
+
+    return flat
+
+
 def _draw_image(
     db: Session, canvas: Image.Image, layer: dict[str, Any]
 ) -> None:
@@ -338,6 +421,10 @@ def _draw_image(
 
     with Image.open(source_path) as handle:
         patch = handle.convert("RGBA")
+    if layer.get("key_out_background"):
+        # Asked for by name. A character placed on a background wants it; a
+        # patch over a newspaper is meant to be an opaque rectangle.
+        patch = key_out_field(patch)
     if layer.get("grayscale"):
         # A press photograph is monochrome, and a colour portrait composited
         # into newsprint is the tell that makes the whole frame read as fake.
