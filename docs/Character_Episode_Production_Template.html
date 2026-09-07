@@ -1,0 +1,411 @@
+<title>Character Episode Template</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+
+<style>
+  :root {
+    --ground: #eef1f2;
+    --panel: #ffffff;
+    --ink: #0f1618;
+    --muted: #5a6a70;
+    --rule: #ccd6d9;
+    --signal: #c0522a;      /* only on failures and warnings */
+    --measure: #12707e;     /* only on measured numbers */
+    --code: #e8edee;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #0e1416;
+      --panel: #151d20;
+      --ink: #e7eef0;
+      --muted: #94a7ad;
+      --rule: #27353a;
+      --signal: #e8845c;
+      --measure: #58c3d1;
+      --code: #0a1012;
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground: #0e1416;
+    --panel: #151d20;
+    --ink: #e7eef0;
+    --muted: #94a7ad;
+    --rule: #27353a;
+    --signal: #e8845c;
+    --measure: #58c3d1;
+    --code: #0a1012;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: "Source Serif 4", Georgia, serif;
+    font-size: 17px;
+    line-height: 1.65;
+  }
+  .wrap { max-width: 900px; margin: 0 auto; padding: 44px 20px 90px; }
+
+  header { border-bottom: 3px solid var(--ink); padding-bottom: 22px; }
+  .kicker {
+    font-family: "IBM Plex Mono", monospace; font-size: 12px; letter-spacing: .16em;
+    text-transform: uppercase; color: var(--muted);
+  }
+  h1 {
+    font-family: Archivo, system-ui, sans-serif; font-weight: 700;
+    font-size: clamp(30px, 5.2vw, 50px); line-height: 1.05; letter-spacing: -.02em;
+    margin: 10px 0 12px; text-wrap: balance;
+  }
+  .standfirst { margin: 0; max-width: 64ch; color: var(--muted); font-size: 18px; }
+
+  h2 {
+    font-family: Archivo, system-ui, sans-serif; font-weight: 600;
+    font-size: 13px; letter-spacing: .18em; text-transform: uppercase;
+    color: var(--muted); margin: 52px 0 6px;
+  }
+  h3 {
+    font-family: Archivo, system-ui, sans-serif; font-weight: 600;
+    font-size: 20px; margin: 26px 0 6px; letter-spacing: -.01em;
+  }
+  p { margin: 0 0 14px; max-width: 68ch; }
+  ul { margin: 0 0 14px; padding-left: 20px; max-width: 68ch; }
+  li { margin-bottom: 6px; }
+
+  /* The pipeline is a real sequence, so the steps are numbered and the rules
+     are not - the rules are referenced by name from shot scripts. */
+  .step { display: grid; grid-template-columns: 46px 1fr; gap: 0 18px; padding: 18px 0; border-bottom: 1px solid var(--rule); }
+  .step .n {
+    font-family: "IBM Plex Mono", monospace; font-size: 22px; font-weight: 500;
+    color: var(--measure); font-variant-numeric: tabular-nums; line-height: 1.2;
+  }
+  .step h3 { margin-top: 0; }
+
+  .rule { background: var(--panel); border: 1px solid var(--rule); border-left: 4px solid var(--signal); padding: 16px 18px; margin: 0 0 12px; }
+  .rule .tag {
+    font-family: "IBM Plex Mono", monospace; font-size: 11px; letter-spacing: .12em;
+    text-transform: uppercase; color: var(--signal);
+  }
+  .rule h3 { margin: 4px 0 8px; font-size: 18px; }
+  .rule .cost { color: var(--muted); font-size: 15.5px; margin-bottom: 0; }
+
+  pre {
+    margin: 10px 0 16px; padding: 14px 16px; background: var(--code);
+    border: 1px solid var(--rule); overflow-x: auto;
+    font-family: "IBM Plex Mono", monospace; font-size: 12.5px; line-height: 1.6;
+    white-space: pre-wrap; word-break: break-word;
+  }
+  code { font-family: "IBM Plex Mono", monospace; font-size: .88em; background: var(--code); padding: 1px 5px; }
+
+  .tablewrap { overflow-x: auto; margin-bottom: 18px; }
+  table { border-collapse: collapse; width: 100%; font-family: Archivo, system-ui, sans-serif; font-size: 14.5px; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  th { font-weight: 600; font-size: 12px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+  td.num { font-family: "IBM Plex Mono", monospace; font-variant-numeric: tabular-nums; color: var(--measure); white-space: nowrap; }
+
+  .open { background: var(--panel); border: 1px solid var(--signal); padding: 20px 22px; margin-top: 14px; }
+  .open h3 { margin-top: 0; color: var(--signal); }
+
+  footer { margin-top: 56px; padding-top: 18px; border-top: 1px solid var(--rule); color: var(--muted); font-size: 14px; }
+  a { color: var(--measure); }
+  :focus-visible { outline: 2px solid var(--measure); outline-offset: 2px; }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="kicker">Content Automation Studio · production template · 7 Sep 2026</div>
+    <h1>Character Episode Template</h1>
+    <p class="standfirst">
+      How to take a character sheet and come out with a finished episode. Seven
+      episodes, three characters and four visual registers were produced through
+      this path; every number below was measured on the workstation, not
+      estimated. The pictures are ready to be a house style. The audio is not,
+      and the last section says so plainly.
+    </p>
+  </header>
+
+  <h2>What this produces</h2>
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>Episode</th><th>Register</th><th>Format</th><th>Shots</th><th>GPU</th><th>Delivered</th></tr></thead>
+      <tbody>
+        <tr><td>The Man With No Shadow</td><td>Ink silhouettes</td><td>9:16 · 50s</td><td class="num">20</td><td class="num">7 min</td><td class="num">−16.2 LUFS</td></tr>
+        <tr><td>ก้าง EP001</td><td>Ink stick figure</td><td>9:16 · 50s</td><td class="num">16</td><td class="num">12 min</td><td class="num">−16.2 LUFS</td></tr>
+        <tr><td>ก้าง EP002</td><td>Ink figure, painted world</td><td>16:9 · 4:50</td><td class="num">54</td><td class="num">32 min</td><td class="num">−16.2 LUFS</td></tr>
+        <tr><td>FLINT EP001</td><td>Pencil &amp; ink sketch</td><td>9:16 · 60s</td><td class="num">15</td><td class="num">9 min</td><td class="num">−16.2 LUFS</td></tr>
+        <tr><td>MELLO EP001</td><td>Soft 3D render</td><td>16:9 · 2:00</td><td class="num">24</td><td class="num">15 min</td><td class="num">−16.1 LUFS</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>
+    A rule of thumb that has held across all five: <strong>one drawing per
+    spoken sentence, four to six seconds on screen, thirty-six seconds of GPU
+    per drawing.</strong> A two-minute episode is a lunch break; five minutes is
+    an afternoon.
+  </p>
+
+  <h2>The path</h2>
+
+  <div class="step">
+    <div class="n">01</div>
+    <div>
+      <h3>Turn the character sheet into a master prompt</h3>
+      <p>
+        Read the sheet as a specification and write it out as one paragraph in
+        this order: <em>who they are → the head → the face → the body and limbs
+        → the one identifying accessory → the drawing medium → the background
+        → what must not be in frame.</em> Name real colours where the sheet
+        gives them. End with a plain, evenly filled background and an explicit
+        ban on lettering.
+      </p>
+      <p>
+        Generate it with the text-to-image graph at the channel's aspect ratio,
+        at a fixed seed, and keep that seed. Everything downstream is an edit of
+        this one picture.
+      </p>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="n">02</div>
+    <div>
+      <h3>Write the script as beats, not paragraphs</h3>
+      <p>
+        One sentence of narration is one beat is one drawing. Structure the
+        episode in five parts — hook, setup, cause and effect, the turn, the
+        close — and put the turn at roughly four fifths of the running time.
+        Write the spoken line first and the picture second: the picture
+        illustrates the sentence, never the other way round.
+      </p>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="n">03</div>
+    <div>
+      <h3>Build every shot prompt from four fixed parts</h3>
+      <pre>[IDENTITY]  Use the attached image as the authoritative character identity
+            reference. Keep the exact same character: &lt;the four or five
+            features that must never change&gt;. Never redraw him as &lt;the
+            thing the model keeps drifting toward&gt;.
+
+[BEAT]      &lt;what is in this frame: who, doing what, where, in what light&gt;
+
+[WORLD]     &lt;the medium, the palette, the background, the light source&gt;
+            No text, no letters, no numbers. &lt;Aspect&gt; composition with
+            room around him.
+
+[NEGATIVE]  text, letters, numbers, watermark, + the failure modes of this
+            particular character</pre>
+      <p>
+        IDENTITY, WORLD and NEGATIVE are constants for the whole episode. Only
+        BEAT changes. This is what makes fifty-four shots look like one film.
+      </p>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="n">04</div>
+    <div>
+      <h3>Generate, review one at a time, send back what fails</h3>
+      <p>
+        Look at every frame before it goes in the cut. Across five episodes the
+        first-pass keep rate was roughly seven in nine. Rejections are cheap —
+        a still is under a minute — and the two things worth rejecting for are
+        readable text and a shot that quietly drew the wrong place.
+      </p>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="n">05</div>
+    <div>
+      <h3>Cut, then narrate, then check the numbers</h3>
+      <p>
+        Build the timeline from approved takes, render, and read the meter: the
+        delivery target is <span class="num">−16 LUFS</span> integrated with
+        true peak under <span class="num">−1.5 dBTP</span>. Every episode above
+        landed within 0.2 LU of target without hand adjustment.
+      </p>
+    </div>
+  </div>
+
+  <h2>Rules, and what each one cost to learn</h2>
+
+  <div class="rule">
+    <div class="tag">R1 · one world</div>
+    <h3>State the background in every prompt, identically</h3>
+    <p class="cost">
+      Letting each shot describe its own background produced sixteen frames in
+      grey, cream and white by turns. It is invisible in a contact sheet and
+      reads as a flicker at every cut. One sentence — the exact ground colour,
+      evenly filled, plus the light source — fixed all sixteen at once.
+    </p>
+  </div>
+
+  <div class="rule">
+    <div class="tag">R2 · attach, never describe</div>
+    <h3>The master is attached to every shot, through an edit model</h3>
+    <p class="cost">
+      Measured on the same three poses: the cheaper edit graph kept the head,
+      the stroke and the colour and lost the proportions, the scale, and one
+      pose's legs. Qwen-Image-Edit kept all of them. Describing a character in
+      words instead of attaching a picture does not hold past the third frame.
+    </p>
+  </div>
+
+  <div class="rule">
+    <div class="tag">R3 · a diagram is not an edit</div>
+    <h3>A shot with no character in it must not carry the reference</h3>
+    <p class="cost">
+      Two diagram beats came back with the character standing in front of the
+      waves, twice, past a prompt saying "a diagram with no people in it at
+      all" and a negative naming person, figure and face. An attached identity
+      reference is not a suggestion. Character-free beats are text-to-image
+      shots with no reference attached.
+    </p>
+  </div>
+
+  <div class="rule">
+    <div class="tag">R4 · no generated words</div>
+    <h3>Every word on screen is composited afterwards</h3>
+    <p class="cost">
+      Four episodes, the same failure: newsprint reading <em>NEAYII STR</em>, a
+      headline reading <em>erdsys KEPT vepist alejr</em>. Negative prompts
+      naming legible text, headlines, mastheads and lettering do not stop it —
+      there is no negative prompt for "spell correctly". Remove the surface
+      from the frame, and put the words in at the edit.
+    </p>
+  </div>
+
+  <div class="rule">
+    <div class="tag">R5 · stills, not clips</div>
+    <h3>Motion comes from the edit, not from a video model</h3>
+    <p class="cost">
+      Image-to-video redrew a clean still and wrote a headline on it; abandoned
+      its start frame entirely on another shot; and returned three consecutive
+      opening clips at 0.33 mean luma change with every sample near-static. A
+      stick figure animated this way loses its limbs. Push-ins and pans in the
+      editor do the work at no risk.
+    </p>
+  </div>
+
+  <div class="rule">
+    <div class="tag">R6 · the master sets the shape</div>
+    <h3>Author the master at the channel's aspect ratio</h3>
+    <p class="cost">
+      The edit graph takes its output size from the reference image, not from
+      the project canvas. A square master makes square shots however the
+      project is configured. A landscape channel needs a landscape master.
+    </p>
+  </div>
+
+  <div class="rule">
+    <div class="tag">R7 · medium before anatomy</div>
+    <h3>Ask for the body in the medium that draws it</h3>
+    <p class="cost">
+      Asked for a single-line stick torso in a soft cartoon hand, the model
+      drew a pear — twice, past a negative naming filled body, wide body and
+      thick torso. Asked for the same figure in plain ink it drew a true stick
+      figure immediately. Choose the medium that makes the shape natural, then
+      let colour live in the scene instead of the character.
+    </p>
+  </div>
+
+  <div class="rule">
+    <div class="tag">R8 · generate small, deliver large</div>
+    <h3>Generation size and delivery size are different decisions</h3>
+    <p class="cost">
+      The same still took four and a half minutes at 1080×1920 and about one
+      minute at 576×1024. Generate at the smaller canvas the graphs were
+      measured at; scale up when the film is assembled.
+    </p>
+  </div>
+
+  <h2>Which graph for which job</h2>
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>Job</th><th>Graph</th><th>Per image</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td>Master, backgrounds, diagrams</td><td>Z-Image Turbo T2I</td><td class="num">~20 s</td><td>No reference. Clean flat output, holds a pure background.</td></tr>
+        <tr><td>Every shot with the character</td><td>Qwen-Image-Edit 2511 · Lightning 4-step</td><td class="num">~36 s</td><td>Master attached. The production workhorse.</td></tr>
+        <tr><td>Canonical views kept for the channel's life</td><td>Qwen-Image-Edit 2511 · 40 step</td><td class="num">~170 s</td><td>Cleaner. Worth the wait once, not per episode.</td></tr>
+        <tr><td>Anything moving</td><td>—</td><td class="num">—</td><td>See R5. Do it in the edit.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2>The open problem</h2>
+  <div class="open">
+    <h3>The narration is the weak half of every episode</h3>
+    <p>
+      The pictures are ready to be a house style. The audio is not, and the
+      reason is structural rather than a bad voice setting.
+    </p>
+    <p>
+      Each caption is synthesised on its own and dropped into a slot the
+      picture already decided. Nothing carries across a sentence boundary: no
+      phrasing over a full thought, no breath before a turn, no sentence that
+      is allowed to run half a second long because it means something. The
+      hosted narrator was also measured reading between 52 and 179 words per
+      minute for the same line on different attempts, so the slot and the
+      reading are never quite the same length. What comes out is legible and
+      mechanical.
+    </p>
+    <p>
+      Two smaller faults sit beside it: the render provenance records nothing
+      about which narrator spoke or what it cost, so the only way to tell a paid
+      read from the free one afterwards was the file size; and the caption track
+      is generated from the same per-shot lines, so it inherits the same
+      chopping.
+    </p>
+    <h3 style="font-size:16px; margin-top:20px;">In order of how much they would fix</h3>
+    <ul>
+      <li>
+        <strong>Cut the picture to the audio, not the audio to the picture.</strong>
+        Write the whole script, have it read as one continuous take, then set
+        each shot's duration from where its sentence actually falls. This is how
+        the reference channels are made and it removes the mechanical pacing at
+        the root. It needs one new step in the pipeline: measure the narration,
+        then write the shot durations from it.
+      </li>
+      <li>
+        <strong>Try a voice built for the language.</strong> The current hosted
+        voice takes a direction and reads Thai adequately, not well. Worth
+        comparing against a provider whose Thai is a first-class voice rather
+        than a multilingual fallback — and worth trying English narration, where
+        the same provider is noticeably stronger.
+      </li>
+      <li>
+        <strong>Record a human read for the pilot.</strong> Five minutes of
+        script is twenty minutes of recording. For deciding whether the format
+        works at all, a real voice removes the one variable that is currently
+        hiding the answer.
+      </li>
+      <li>
+        <strong>Record the voice in the provenance.</strong> Provider, voice,
+        model, characters and cost belong in the render sidecar beside the
+        picture's lineage. Small, and it makes the comparison above measurable.
+      </li>
+    </ul>
+    <p style="margin-top:14px; margin-bottom:0;">
+      Burned-in subtitles are optional and currently carry the same chopping as
+      the audio. Until the pacing is fixed, an episode reads better with clean
+      pictures and no burned captions than with both.
+    </p>
+  </div>
+
+  <h2>What has not been tried</h2>
+  <ul>
+    <li>A LoRA trained on the approved character. Worth considering only after a curated pose library exists and the edit graph still cannot hold something specific.</li>
+    <li>Cutaway inserts of props with no character, which R3 makes cheap and which would break up long stretches of one figure on one ground.</li>
+    <li>Music. Every episode so far is narration and silence.</li>
+  </ul>
+
+  <footer>
+    Measured on one workstation: RTX 5080, ComfyUI 0.34.0, Z-Image Turbo and
+    Qwen-Image-Edit 2511 with the Lightning 4-step LoRA. Timings will move on
+    other hardware; the rules will not.
+  </footer>
+</div>
