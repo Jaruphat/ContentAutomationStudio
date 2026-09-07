@@ -70,6 +70,12 @@ PHASES = {
     "stick-cut": "approves the drawings and cuts",
     "stick-thai": "tells the same story in Thai",
     "stick-render-thai": "renders the Thai version",
+    # ก้าง EP001, produced from the shot script.
+    "ep1-master": "draws the master this episode",
+    "ep1-type": "types the sixteen beats",
+    "ep1-draw": "draws the sixteen beats",
+    "ep1-diagrams": "takes the character out",
+    "ep1-render": "cuts and renders the episode",
 }
 
 
