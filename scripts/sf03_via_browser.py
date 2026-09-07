@@ -81,6 +81,11 @@ PHASES = {
     "ep2-type": "types the fifty-four beats",
     "ep2-draw": "draws the fifty-four beats",
     "ep2-render": "cuts and renders the five minutes",
+    # FLINT EP001, one minute, vertical.
+    "flint-setup": "sets Flint up",
+    "flint-type": "types the fifteen beats",
+    "flint-draw": "draws Flint's minute",
+    "flint-render": "cuts and renders Flint's minute",
 }
 
 
