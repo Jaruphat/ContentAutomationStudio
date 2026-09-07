@@ -86,6 +86,11 @@ PHASES = {
     "flint-type": "types the fifteen beats",
     "flint-draw": "draws Flint's minute",
     "flint-render": "cuts and renders Flint's minute",
+    # MELLO EP001, two minutes, 16:9.
+    "mello-setup": "sets Mello up",
+    "mello-type": "types the twenty-four beats",
+    "mello-draw": "draws Mello's two minutes",
+    "mello-render": "cuts and renders Mello's two minutes",
 }
 
 
