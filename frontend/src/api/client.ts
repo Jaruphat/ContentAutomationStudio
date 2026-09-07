@@ -622,6 +622,21 @@ export const timeline = {
   /** `voiceProvider: "openai"` is metered, so it carries its own explicit
    *  confirmation - the backend refuses without one. Blank instructions fall
    *  back to the channel's voice direction. */
+  /**
+   * One line in a voice, so it can be heard before a film commits to it.
+   *
+   * Returns the audio itself rather than a URL: it is a few seconds of WAV
+   * that nothing needs to keep, and a stored file would need cleaning up.
+   */
+  previewVoice: (projectId: string, voice: string, instructions = "") =>
+    http
+      .post<ArrayBuffer>(
+        `/projects/${projectId}/narration/preview`,
+        { voice, instructions, confirm_paid_generation: true },
+        { responseType: "arraybuffer" },
+      )
+      .then((r) => new Blob([r.data], { type: "audio/wav" })),
+
   render: (
     projectId: string,
     narrate = false,

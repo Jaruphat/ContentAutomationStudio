@@ -5,12 +5,13 @@ Timeline router - Timeline manifest, auto-build, and render plan.
 import os
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models import Project, TimelineItem
 from app.schemas import (
+    NarrationPreviewRequest,
     RenderedFilm,
     RenderPlan,
     RenderRequest,
@@ -29,6 +30,21 @@ from app.services import (
 )
 
 router = APIRouter(prefix="/api/projects/{project_id}", tags=["timeline"])
+
+
+def _first_line(db: Session, project_id: str) -> str:
+    """The film's opening spoken line, so a voice is judged on its own script."""
+    from app.models import Scene, Shot
+    from app.services.subtitle_service import DIALOGUE_FIELD
+
+    shot = (
+        db.query(Shot)
+        .join(Scene, Shot.scene_id == Scene.id)
+        .filter(Scene.project_id == project_id)
+        .order_by(Scene.order, Shot.order)
+        .first()
+    )
+    return str(getattr(shot, DIALOGUE_FIELD, "") or "").strip() if shot else ""
 
 
 def _get_project_or_404(db: Session, project_id: str) -> Project:
@@ -184,6 +200,100 @@ def generate_render_plan(project_id: str, db: Session = Depends(get_db)):
         warnings=plan["warnings"],
         warning_metadata=plan["warning_metadata"],
         delivery_validation=plan["delivery_validation"],
+    )
+
+
+#: A preview is for hearing a voice, not for getting a script read cheaply.
+#: Long enough to judge timbre and pace, short enough that clicking it a dozen
+#: times while choosing costs almost nothing.
+PREVIEW_MAX_CHARS = 240
+
+#: Said when a project has no dialogue yet - a voice can still be auditioned
+#: before a word of the film is written.
+PREVIEW_FALLBACK = (
+    "This is how the narrator sounds. Rice, salt, and somebody's hands."
+)
+
+
+@router.post("/narration/preview")
+def preview_narration(
+    project_id: str,
+    payload: NarrationPreviewRequest | None = None,
+    db: Session = Depends(get_db),
+):
+    """Speak one line in a voice, so it can be heard before a film commits.
+
+    The alternative is what actually happened: an episode re-read, re-cut and
+    re-rendered twice to find out that the voice chosen from a list of names
+    was barely different from the one before it.
+
+    Everything that shapes a render's narration shapes this too - the voice,
+    and the channel's direction, which is what carries age and energy - so what
+    is auditioned is what the film would get.
+    """
+    project = _get_project_or_404(db, project_id)
+    payload = payload or NarrationPreviewRequest()
+
+    if not payload.confirm_paid_generation:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "The hosted voice is metered. Re-send with "
+                "confirm_paid_generation set to true to authorise it."
+            ),
+        )
+
+    from app.services.openai_voice import DEFAULT_VOICE, OpenAIVoice
+
+    instructions = payload.instructions.strip()
+    if not instructions and project.channel_id:
+        channel = channels.get_channel(db, project.channel_id)
+        instructions = (channel.voice_direction or "").strip() if channel else ""
+
+    text = payload.text.strip() or _first_line(db, project_id) or PREVIEW_FALLBACK
+    text = text[:PREVIEW_MAX_CHARS]
+
+    voice = OpenAIVoice(
+        voice=payload.voice.strip() or DEFAULT_VOICE, instructions=instructions
+    )
+    if not voice.configured:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "OPENAI_API_KEY is not set on this machine, so the hosted "
+                "voice cannot be used. Add it to the local .env and restart "
+                "the backend."
+            ),
+        )
+
+    import tempfile
+
+    from app.services.narration import NarrationError
+
+    handle, path = tempfile.mkstemp(suffix=".wav")
+    os.close(handle)
+    try:
+        voice.speak(text, path)
+        with open(path, "rb") as audio:
+            data = audio.read()
+    except NarrationError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    finally:
+        try:
+            os.remove(path)
+        except OSError:
+            pass
+
+    return Response(
+        content=data,
+        media_type="audio/wav",
+        # The line and the voice, so a listener can tell two previews apart
+        # without playing them again.
+        headers={
+            "X-Narration-Voice": voice.voice,
+            "X-Narration-Characters": str(len(text)),
+            "Cache-Control": "no-store",
+        },
     )
 
 

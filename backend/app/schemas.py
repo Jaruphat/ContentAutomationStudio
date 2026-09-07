@@ -1768,6 +1768,29 @@ class RenderRequest(BaseModel):
     confirm_paid_generation: bool = False
 
 
+class NarrationPreviewRequest(BaseModel):
+    """Body for auditioning a narrator before committing a whole film to it.
+
+    Choosing a voice from a list of names is choosing blind. The first episode
+    to change voices was re-read, re-cut and re-rendered twice before anybody
+    could hear whether the new one was any better - about twenty minutes and a
+    metered synthesis of the entire script, to answer a question one sentence
+    would have answered.
+    """
+
+    model_config = {"extra": "forbid"}
+
+    #: Blank means the provider's default, the same as a render.
+    voice: str = ""
+    #: Blank falls back to the channel's voice direction, the same as a render,
+    #: so what is auditioned is what the film would get.
+    instructions: str = ""
+    #: Blank uses the film's own opening line. A preview is for hearing the
+    #: voice, so the server caps it rather than trusting the caller.
+    text: str = ""
+    confirm_paid_generation: bool = False
+
+
 class RenderedFilm(BaseModel):
     """The finished film for a project, as far as the page needs to play it.
 

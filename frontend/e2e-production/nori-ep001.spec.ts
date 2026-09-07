@@ -430,6 +430,27 @@ const MEASURED_HOLDS = [
   3.5, 4, 5, 5.5, 8, 3, 7.5, 4,
 ];
 
+/**
+ * Save a channel, and do not believe it until it has been read back.
+ *
+ * The save is a request and the page shows no success state, so clicking it
+ * and navigating on the next line leaves the request in flight - it can be
+ * cancelled by the navigation and lost. That is not hypothetical: NORI EP001
+ * was re-read in a new voice with the old direction still on the channel,
+ * because the direction never reached the server, and the film that came back
+ * sounded almost unchanged.
+ */
+async function saveChannel(page: Page, card: Locator) {
+  const direction = await card.getByLabel("Voice direction").inputValue();
+  await card.getByRole("button", { name: "Save channel bibles" }).click();
+  await page.reload();
+  await expect(
+    page.getByRole("article").filter({
+      has: page.getByRole("heading", { name: CHANNEL, exact: true }),
+    }).first().getByLabel("Voice direction"),
+  ).toHaveValue(direction, { timeout: 30_000 });
+}
+
 async function stage(page: Page, name: string) {
   await page
     .getByRole("navigation", { name: "Production stages" })
@@ -573,7 +594,7 @@ test("sets the Nori channel up", async ({ page }) => {
   await card.getByLabel("Resolution").fill(DELIVERY);
   await card.getByLabel("FPS").fill("30");
   await card.getByLabel("Length (sec)").fill(String(Math.round(TOTAL_SEC)));
-  await card.getByRole("button", { name: "Save channel bibles" }).click();
+  await saveChannel(page, card);
 
   // The premise board on the same card has a Premise field of its own.
   const episodes = card.locator("section").filter({
@@ -937,7 +958,7 @@ test("re-reads the film in a younger voice", async ({ page }) => {
     has: page.getByRole("heading", { name: CHANNEL, exact: true }),
   }).first();
   await card.getByLabel("Voice direction").fill(VOICE_DIRECTION);
-  await card.getByRole("button", { name: "Save channel bibles" }).click();
+  await saveChannel(page, card);
 
   await page.goto("/story");
   await page.getByRole("combobox", { name: "Switch project" })

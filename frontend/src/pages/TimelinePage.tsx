@@ -21,6 +21,7 @@ import {
   Clapperboard,
   CheckCircle2,
   XCircle,
+  Volume2,
 } from "lucide-react";
 import api, { toAIError } from "../api/client";
 import {
@@ -518,6 +519,24 @@ export default function TimelinePage() {
   // The render has always taken a voice name and the page never sent one, so
   // every episode was read by the default whatever was on screen.
   const [voice, setVoice] = useState<NarrationVoice>(DEFAULT_NARRATION_VOICE);
+  // Choosing from a list of names is choosing blind. This episode was re-read,
+  // re-cut and re-rendered twice before anyone could hear that the new voice
+  // was barely different from the old one.
+  const auditionRef = useRef<HTMLAudioElement | null>(null);
+  const audition = useMutation({
+    mutationFn: async (name: NarrationVoice) => {
+      const clip = await api.timeline.previewVoice(
+        currentProjectId as string,
+        name,
+      );
+      auditionRef.current?.pause();
+      const player = new Audio(URL.createObjectURL(clip));
+      auditionRef.current = player;
+      // The object URL is only needed until the clip has been decoded.
+      player.addEventListener("ended", () => URL.revokeObjectURL(player.src));
+      await player.play();
+    },
+  });
   // Asked on load, so a film rendered in a previous session is on screen
   // rather than living only in the response that produced it.
   const filmQ = useQuery({
@@ -694,6 +713,22 @@ export default function TimelinePage() {
               ))}
             </select>
           )}
+          {narrate && voiceProvider === "openai" && (
+            <button
+              type="button"
+              onClick={() => audition.mutate(voice)}
+              disabled={audition.isPending || !currentProjectId}
+              title="Read one line of this film in this voice, with the channel's direction, so you can hear it before rendering"
+              className="flex h-8 items-center gap-1.5 rounded-md border border-zinc-700 px-2.5 text-xs font-medium text-zinc-300 hover:bg-zinc-800 disabled:opacity-50"
+            >
+              {audition.isPending ? (
+                <Loader2 size={12} className="animate-spin" />
+              ) : (
+                <Volume2 size={12} />
+              )}
+              Hear it
+            </button>
+          )}
           <button
             onClick={() => renderMut.mutate(currentProjectId)}
             disabled={renderMut.isPending || items.length === 0}
@@ -713,6 +748,8 @@ export default function TimelinePage() {
           </button>
         </div>
       </div>
+
+      <ActionError label="Preview voice" error={audition.error} />
 
       {timelineQ.data && (
         <AspectOverrideBanner
