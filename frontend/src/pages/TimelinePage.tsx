@@ -23,6 +23,12 @@ import {
   XCircle,
 } from "lucide-react";
 import api, { toAIError } from "../api/client";
+import {
+  DEFAULT_NARRATION_VOICE,
+  NARRATION_VOICES,
+  resolveNarrationVoice,
+  type NarrationVoice,
+} from "../narrationVoices";
 import ActionError from "../components/ActionError";
 import AspectOverrideBanner from "../components/AspectOverrideBanner";
 import SoundCueList from "../components/SoundCueList";
@@ -509,6 +515,9 @@ export default function TimelinePage() {
   // metered and takes the channel's reading direction. Defaulting to the free
   // one keeps an overnight render from quietly spending.
   const [voiceProvider, setVoiceProvider] = useState<"system" | "openai">("system");
+  // The render has always taken a voice name and the page never sent one, so
+  // every episode was read by the default whatever was on screen.
+  const [voice, setVoice] = useState<NarrationVoice>(DEFAULT_NARRATION_VOICE);
   // Asked on load, so a film rendered in a previous session is on screen
   // rather than living only in the response that produced it.
   const filmQ = useQuery({
@@ -519,7 +528,12 @@ export default function TimelinePage() {
 
   const renderMut = useMutation({
     mutationFn: (projectId: string) =>
-      api.timeline.render(projectId, narrate, voiceProvider),
+      api.timeline.render(
+        projectId,
+        narrate,
+        voiceProvider,
+        voiceProvider === "openai" ? voice : "",
+      ),
     onSuccess: (data, projectId) => {
       if (currentProjectRef.current === projectId) {
         setScopedRenderResult({ projectId, data });
@@ -663,6 +677,21 @@ export default function TimelinePage() {
             >
               <option value="system">System voice (free)</option>
               <option value="openai">OpenAI voice (metered)</option>
+            </select>
+          )}
+          {narrate && voiceProvider === "openai" && (
+            <select
+              aria-label="Narrator voice"
+              value={voice}
+              onChange={(e) => setVoice(resolveNarrationVoice(e.target.value))}
+              title="Which of the provider's voices reads the film. How it reads - age, energy, pace - comes from the channel's voice direction."
+              className="h-8 rounded-md border border-zinc-700 bg-zinc-900 px-2 text-xs text-zinc-300"
+            >
+              {NARRATION_VOICES.map((name) => (
+                <option key={name} value={name}>
+                  {name}
+                </option>
+              ))}
             </select>
           )}
           <button
