@@ -91,6 +91,11 @@ PHASES = {
     "mello-type": "types the twenty-four beats",
     "mello-draw": "draws Mello's two minutes",
     "mello-render": "cuts and renders Mello's two minutes",
+    # NORI EP001, nine minutes, 16:9, narrated and captioned in English.
+    "nori-setup": "sets the Nori channel up",
+    "nori-type": "types the seventy-nine beats",
+    "nori-draw": "draws Nori's history",
+    "nori-render": "cuts and renders Nori's history",
 }
 
 
