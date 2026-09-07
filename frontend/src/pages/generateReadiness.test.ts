@@ -47,22 +47,30 @@ describe("What stops a run", () => {
     expect(canGenerate(broken)).toBe(false);
   });
 
-  it("counts a shot that is both approved and stale", () => {
-    // Two issues on one shot: the status is skippable, the staleness is not,
-    // and the run would be refused for it.
+  it("runs a shot that was rewritten after it was drawn", () => {
+    // How a bad frame is fixed: approve the rest, rewrite the one that
+    // failed, generate again. The rewrite makes it stale, and stale is the
+    // reason to run rather than a reason to refuse - an episode with
+    // sixty-seven approved frames and twelve rewritten ones could not press
+    // Generate at all while this counted as a blocker.
     const both = {
       ...approved,
       issues: [
         {
           shot_id: "s1", scene_id: "sc1", shot_order: 1,
+          issues: ["Shot status is 'Approved', expected Draft, Failed, Ready"],
+        },
+        {
+          shot_id: "s2", scene_id: "sc1", shot_order: 2,
           issues: [
-            "Shot status is 'Approved', expected Draft, Failed, Ready",
             "Shot is stale: its generated take predates the current content revision",
+            "Shot status is 'NeedsReview', expected Draft, Failed, Ready",
           ],
         },
       ],
     } as unknown as PreflightResult;
-    expect(canGenerate(both)).toBe(false);
+    expect(blockingIssues(both)).toEqual([]);
+    expect(canGenerate(both)).toBe(true);
   });
 
   it("is ready when preflight says every shot is", () => {

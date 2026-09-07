@@ -95,6 +95,12 @@ PHASES = {
     "nori-setup": "sets the Nori channel up",
     "nori-type": "types the seventy-nine beats",
     "nori-draw": "draws Nori's history",
+    "nori-rework": "re-draws the twelve frames that failed",
+    "nori-regen": "re-runs the twelve reworked frames",
+    "nori-rework2": "re-draws the five frames that failed twice",
+    "nori-rework3": "re-draws the two frames that failed three times",
+    "nori-rework4": "re-draws the last two frames without the handover",
+    "nori-rework5": "moves the last two frames onto the plain backdrop",
     "nori-render": "cuts and renders Nori's history",
 }
 

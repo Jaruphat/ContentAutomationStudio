@@ -320,6 +320,77 @@ const BEATS: Beat[] = [
 
 const TOTAL_SEC = BEATS.reduce((sum, beat) => sum + holdSeconds(beat.t), 0);
 
+/**
+ * The frames the first pass got wrong, and what was wrong with them.
+ *
+ * Two failures, both of them the film's own doing rather than bad luck.
+ *
+ * Naming a plain rice ball as a prop makes a second Nori. He *is* a rice ball,
+ * so "a white rice ball on a board" beside an attached identity reference is
+ * read as another one of him; five frames came back with twins. Every prop
+ * rice ball is now spelled out as having no face, no limbs and no scarf, and
+ * every one of these prompts says how many characters are allowed in frame.
+ *
+ * And the two character-free plates came back with a human hand reaching into
+ * them, past a negative naming person, figure and fingers. Refusing people in
+ * the negative is not enough; the frame has to be described as empty.
+ */
+const REWORK: { n: number; d: string; plate?: true }[] = [
+  { n: 3,
+    d: "Nori standing alone and small at the bottom of a wide empty warm frame, looking up into the huge open space above him. Exactly ONE character in the entire frame and nothing else." },
+  { n: 4,
+    d: "Medium view of Nori standing on a plain warm backdrop, head tilted down, both mitten hands resting on the wide dark green nori band across his front. Exactly ONE character in the frame." },
+  { n: 6, plate: true,
+    d: "A wide misty river valley at dawn, terraced flooded paddies stepping down the hillside, low cloud and still water. The frame is completely empty: no hands, no arms, no tools and nothing alive anywhere in it." },
+  { n: 13,
+    d: "Medium view of Nori standing on a plain warm backdrop with his two rounded mitten hands cupped together and empty in front of him, warm light from the side. Exactly ONE character in the frame." },
+  { n: 27,
+    d: "Nori standing on a plain warm backdrop holding a soft red cord in both mitten hands and pulling a simple knot tight, looking down at it. Exactly ONE character in the frame and no other hands." },
+  { n: 38,
+    d: "Nori sitting upright on a flat rock at a bend in a stony road, seen from the side, untying the cord of the small cloth pouch on his lap. Exactly ONE character in the frame." },
+  { n: 42,
+    d: "Nori sitting upright on a wooden step outside a warmly lit doorway at night, holding a small plain white rice lump that has no face and no limbs in both mitten hands. Exactly ONE character in the frame." },
+  { n: 44,
+    d: "Nori standing on a plain warm backdrop at night, holding out a small plain white rice lump that has no face and no limbs toward the edge of the frame with both mitten hands. Exactly ONE character in the frame." },
+  { n: 55, plate: true,
+    d: "A wooden papermaking screen resting across the edge of a wooden vat, a thin even layer of pale pulp draining across it, water running off into the vat, warm workshop light. The frame is completely empty: no hands, no arms and no people anywhere in it." },
+  { n: 59,
+    d: "Nori standing at a wooden board and folding a dark green seaweed sheet around a small plain white triangular rice ball that has no face, no limbs and no scarf. Exactly ONE character in the frame." },
+  { n: 68,
+    d: "Nori standing on a plain warm backdrop holding a plain blank white wrapper open in both mitten hands, so a crisp dark green sheet folds down onto a small faceless white rice ball on the board in front of him. Nothing on his head. Exactly ONE character in the frame." },
+  { n: 72,
+    d: "Nori standing in profile on a plain warm backdrop next to a small plain white triangular rice ball with no face and no limbs on a low wooden stand, the two shapes matching. Exactly ONE character in the frame." },
+];
+
+/**
+ * The five the second pass still got wrong, and why.
+ *
+ * Two of them are the character-free plates. A papermaking vat and a terraced
+ * valley both came back twice with human hands reaching into them, past a
+ * negative naming person, figure and fingers and a description that said the
+ * frame was empty. A workshop is a place where hands work; asking a model for
+ * one and refusing the hands is asking it to draw the exception. Both are now
+ * Nori's shots - he does the thing himself - which is also better film.
+ *
+ * The other three came back with a large disembodied wooden arm entering
+ * frame. All three prompts had made *hands* the subject ("close view of two
+ * mitten hands..."). Naming a body part as the subject gets a body part, cut
+ * off at the frame edge. They are rewritten as whole-body shots of him doing
+ * the thing.
+ */
+const SECOND_PASS: { n: number; d: string; toCharacter?: true }[] = [
+  { n: 6, toCharacter: true,
+    d: "Nori standing on a green hillside at dawn looking out over a wide misty river valley of terraced flooded paddies stepping down toward the water, low cloud and still water below him. Exactly ONE character in the frame." },
+  { n: 44,
+    d: "Nori standing on a plain warm backdrop at night, leaning forward and offering a small plain white rice lump that has no face and no limbs, held out toward the viewer. Exactly ONE character and no other arms anywhere in the frame." },
+  { n: 55, toCharacter: true,
+    d: "Nori standing at the edge of a wooden vat and lifting a wooden papermaking screen out of it, a thin even layer of pale pulp draining across the screen and water running back into the vat, warm workshop light. Exactly ONE character and no other arms anywhere in the frame." },
+  { n: 59,
+    d: "Nori standing at a wooden board and leaning over it, wrapping a dark green seaweed sheet around a small plain white triangular rice ball that has no face, no limbs and no scarf. Exactly ONE character and no other arms anywhere in the frame." },
+  { n: 68,
+    d: "Nori standing on a plain warm backdrop holding up one plain white triangular rice ball wrapped in a crisp dark green seaweed sheet, a thin clear plastic film peeled back and hanging from it. Nothing on his head, no flat white panels and no signs anywhere. Exactly ONE character in the frame." },
+];
+
 async function stage(page: Page, name: string) {
   await page
     .getByRole("navigation", { name: "Production stages" })
@@ -339,6 +410,69 @@ async function selectShot(page: Page, row: Locator) {
     }
   }
   throw new Error("The inspector never followed the row that was clicked.");
+}
+
+/**
+ * Reject what a shot produced, rewrite it, and re-make it.
+ *
+ * Regenerate is driven from the take rather than the Generate page: the
+ * project-wide sweep only picks up Draft, Ready and Failed shots, and a shot
+ * whose only take was rejected sits in NeedsReview on the backend running
+ * here. The list is re-opened for every frame because regenerating navigates
+ * to that run's own review, where the other takes are not.
+ */
+async function redraw(
+  page: Page,
+  items: { n: number; d: string; negative?: string; toCharacter?: true }[],
+) {
+  const cardFor = (n: number) =>
+    page.getByRole("button", { name: /^Select take / })
+      .filter({ hasText: new RegExp(`Shot ${n}\\b`) }).first();
+
+  for (const item of items) {
+    await page.goto("/review");
+    await expect(cardFor(item.n)).toBeVisible({ timeout: 30_000 });
+    const reject = cardFor(item.n)
+      .getByRole("button", { name: "Reject", exact: true });
+    if (await reject.count()) {
+      await reject.click();
+      await expect(reject).toHaveCount(0, { timeout: 30_000 });
+    }
+  }
+
+  await stage(page, "Storyboard");
+  const rows = page.locator("tbody").first().locator("tr");
+  await expect(rows).toHaveCount(BEATS.length, { timeout: 60_000 });
+  for (const item of items) {
+    const row = rows.nth(item.n - 1);
+    await row.getByRole("button", { name: /^Edit shot / }).click();
+    await page.getByLabel("Image prompt").fill(IDENTITY + item.d + STYLE);
+    await page.getByLabel("Shot negative prompt").fill(item.negative ?? NEGATIVE);
+    if (item.toCharacter) {
+      // It stops being a plate, so it needs the edit graph and the master.
+      await page.getByLabel("Shot workflow").selectOption({
+        label: "Qwen-Image-Edit 2511 Lightning 4-step (1 ref)",
+      });
+      const attach = page.getByRole("combobox", { name: "Attach reference" });
+      const options = await attach.locator("option").allTextContents();
+      const master = options.find((text) => text.includes(MASTER_SHEET));
+      if (master) await attach.selectOption({ label: master });
+    }
+    await page.getByRole("button", { name: "Save", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Save", exact: true }))
+      .toHaveCount(0);
+  }
+
+  for (const item of items) {
+    await page.goto("/review");
+    await expect(cardFor(item.n)).toBeVisible({ timeout: 30_000 });
+    const again = cardFor(item.n)
+      .getByRole("button", { name: "Regenerate", exact: true });
+    await again.click();
+    // The click has to reach the server before the next one: a shot that
+    // already has a job in flight is refused a second.
+    await expect(again).toBeEnabled({ timeout: 120_000 });
+  }
 }
 
 test("sets the Nori channel up", async ({ page }) => {
@@ -520,6 +654,163 @@ test("draws Nori's history", async ({ page }) => {
   await generate.click();
   await expect(generate).toBeDisabled({ timeout: 30_000 });
   await expect(generate).toBeEnabled({ timeout: 300_000 });
+});
+
+test("re-draws the twelve frames that failed", async ({ page }) => {
+  test.setTimeout(90 * 60_000);
+  await page.goto("/story");
+  await page.getByRole("combobox", { name: "Switch project" })
+    .selectOption({ label: EPISODE });
+
+  // Reject the bad takes first, then approve the rest: an approved shot is not
+  // eligible for generation, so the run that follows re-makes these twelve and
+  // leaves the sixty-seven that were right alone.
+  await stage(page, "Review");
+  for (const item of REWORK) {
+    const card = page.getByRole("button", { name: /^Select take / })
+      .filter({ hasText: new RegExp(`Shot ${item.n}\\b`) }).first();
+    await expect(card).toBeVisible({ timeout: 30_000 });
+    const reject = card.getByRole("button", { name: "Reject", exact: true });
+    // Re-runnable: a take already rejected has no button left to press.
+    if (await reject.count()) {
+      await reject.click();
+      await expect(reject).toHaveCount(0, { timeout: 30_000 });
+    }
+  }
+  const batch = page.getByRole("button", { name: /^Approve all \d+ pending/ });
+  if (await batch.count()) {
+    await batch.click();
+    await expect(batch).toHaveCount(0, { timeout: 120_000 });
+  }
+
+  await stage(page, "Storyboard");
+  const rows = page.locator("tbody").first().locator("tr");
+  await expect(rows).toHaveCount(BEATS.length, { timeout: 60_000 });
+  for (const item of REWORK) {
+    const row = rows.nth(item.n - 1);
+    await row.getByRole("button", { name: /^Edit shot / }).click();
+    await page.getByLabel("Image prompt").fill(
+      item.plate ? item.d + STYLE_PLATE : IDENTITY + item.d + STYLE,
+    );
+    await page.getByRole("button", { name: "Save", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Save", exact: true }))
+      .toHaveCount(0);
+  }
+
+});
+
+test("re-runs the twelve reworked frames", async ({ page }) => {
+  test.setTimeout(60 * 60_000);
+  await page.goto("/story");
+  await page.getByRole("combobox", { name: "Switch project" })
+    .selectOption({ label: EPISODE });
+
+  // Regenerate from the take rather than a project-wide Generate. The sweep
+  // only picks up Draft, Ready and Failed shots, and the backend running here
+  // predates the fix that frees a shot whose every take was rejected - so
+  // these twelve sit in NeedsReview and the sweep steps straight over them.
+  // Regenerate takes the shot by name, with the prompt as it now reads.
+  for (const item of REWORK) {
+    // Back to the unfiltered list each time: regenerating sends the page to
+    // that run's own review, where the other seventy-eight takes are not.
+    await page.goto("/review");
+    const cards = page.getByRole("button", { name: /^Select take / });
+    await expect(cards.first()).toBeVisible({ timeout: 30_000 });
+    const card = cards
+      .filter({ hasText: new RegExp(`Shot ${item.n}\\b`) }).first();
+    await expect(card).toBeVisible({ timeout: 30_000 });
+    const again = card.getByRole("button", { name: "Regenerate", exact: true });
+    await again.click();
+    // The click has to have reached the server before the next one: a shot
+    // that already has a job in flight is refused a second.
+    await expect(again).toBeEnabled({ timeout: 120_000 });
+  }
+});
+
+test("re-draws the five frames that failed twice", async ({ page }) => {
+  test.setTimeout(90 * 60_000);
+  await page.goto("/story");
+  await page.getByRole("combobox", { name: "Switch project" })
+    .selectOption({ label: EPISODE });
+  await redraw(page, SECOND_PASS);
+});
+
+/**
+ * Two frames survived both passes with a large wooden arm reaching in from
+ * off-screen. Both prompts still had him reaching or offering, and a reaching
+ * character is drawn as an arm entering frame. Standing beside the thing, with
+ * the extra limb refused by name, is what finally got rid of it.
+ */
+const THIRD_PASS = [
+  { n: 44,
+    d: "Nori standing beside a low wooden bench outside a warmly lit doorway at night, a small plain white rice lump that has no face and no limbs resting on the bench beside him. Exactly ONE character, and no arms in the frame other than his own two short wooden ones.",
+    negative: "disembodied arm, giant arm, extra arm, extra limb, mannequin arm, "
+      + "wooden arm entering the frame, floating hand, " + NEGATIVE },
+  { n: 59,
+    d: "Nori standing at a wooden board on which a flat dark green seaweed sheet lies, with a small plain white triangular rice ball that has no face and no limbs resting in the middle of the sheet, warm kitchen light. Exactly ONE character, and no arms in the frame other than his own two short wooden ones.",
+    negative: "disembodied arm, giant arm, extra arm, extra limb, mannequin arm, "
+      + "wooden arm entering the frame, floating hand, " + NEGATIVE },
+];
+
+test("re-draws the two frames that failed three times", async ({ page }) => {
+  test.setTimeout(90 * 60_000);
+  await page.goto("/story");
+  await page.getByRole("combobox", { name: "Switch project" })
+    .selectOption({ label: EPISODE });
+  await redraw(page, THIRD_PASS);
+});
+
+/**
+ * And a fourth pass, because the third made it worse: naming "disembodied
+ * arm" in the negative did not remove the arm, it grew a whole person to
+ * attach it to. Both beats are about handing something over, and every way of
+ * drawing that reads as a human.
+ *
+ * So neither shot depicts the handing any more. The line says it; the picture
+ * only has to hold him. Both are now the composition every other frame in the
+ * film uses and none of them failed at - one character, one object, nothing
+ * else - and the negative refuses people rather than arms.
+ */
+const FOURTH_PASS = [
+  { n: 44,
+    d: "Nori standing alone outside a warmly lit wooden doorway at night, looking slightly off to one side, a single small plain white rice lump with no face and no limbs on the ground beside his boots. Exactly ONE character in the frame and nothing else.",
+    negative: "human, person, people, hand, hands, glove, sleeve, arm, "
+      + "wrist, " + NEGATIVE },
+  { n: 59,
+    d: "Nori standing alone at a wooden board in a warm kitchen, one flat dark green seaweed sheet lying on the board in front of him. Exactly ONE character in the frame and nothing else.",
+    negative: "human, person, people, hand, hands, glove, sleeve, arm, "
+      + "wrist, " + NEGATIVE },
+];
+
+test("re-draws the last two frames without the handover", async ({ page }) => {
+  test.setTimeout(90 * 60_000);
+  await page.goto("/story");
+  await page.getByRole("combobox", { name: "Switch project" })
+    .selectOption({ label: EPISODE });
+  await redraw(page, FOURTH_PASS);
+});
+
+/**
+ * Fifth and last pass on the same two frames. The stray limb only ever
+ * appeared where he stood at a surface or in a doorway - a board, a bench, a
+ * threshold - and never once on the plain backdrop that fifteen other frames
+ * in this film use. So both beats move to the plain backdrop. The line does
+ * the work either way, and a frame that is right beats a frame that is
+ * literal.
+ */
+const FIFTH_PASS = [
+  { n: 44,
+    d: "Nori standing alone in the middle of a plain warm off-white backdrop at night, lit warmly from one side, one small plain white rice lump with no face and no limbs resting on the ground beside his boots. Exactly ONE character in the frame and nothing else." },
+  { n: 59,
+    d: "Nori standing alone in the middle of a plain warm off-white backdrop, holding one flat dark green seaweed sheet up in front of himself with both mitten hands. Exactly ONE character in the frame and nothing else." },
+];
+
+test("moves the last two frames onto the plain backdrop", async ({ page }) => {
+  test.setTimeout(90 * 60_000);
+  await page.goto("/story");
+  await page.getByRole("combobox", { name: "Switch project" })
+    .selectOption({ label: EPISODE });
+  await redraw(page, FIFTH_PASS);
 });
 
 test("cuts and renders Nori's history", async ({ page }) => {
