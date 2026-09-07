@@ -107,11 +107,22 @@ const NEGATIVE_PLATE =
   "person, people, character, figure, face, mascot, onigiri, rice ball, "
   + "animal, " + NEGATIVE;
 
+/**
+ * Nori tells his own story, so he should not sound like a documentary about
+ * himself. The first cut was read by the provider's default - a deep male
+ * narrator - because the render has always taken a voice name and the page
+ * never sent one.
+ *
+ * The direction carries the age more than the voice name does: the same voice
+ * reads as a narrator or as a small character depending on what it is told.
+ */
+const NARRATOR_VOICE = "ash";
+
 const VOICE_DIRECTION =
-  "A calm, warm male documentary narrator reading English at about 140 words "
-  + "per minute. Unhurried and level; never bright, never salesy. Let each "
-  + "sentence finish and land before the next one begins. Slightly warmer and "
-  + "slower on the closing lines.";
+  "Speak as a small, cheerful young character telling his own story. Light "
+  + "and bright, a little curious, warm and friendly. Unhurried and never "
+  + "breathless; let each sentence finish and land before the next one "
+  + "begins. Slightly warmer and slower on the closing lines.";
 
 /**
  * How long a shot is held: as long as its line takes to say, plus air.
@@ -869,6 +880,7 @@ test("cuts and renders Nori's history", async ({ page }) => {
   await page.getByText("Narrate", { exact: true }).click();
   await page.getByRole("combobox").filter({ hasText: "OpenAI voice" }).first()
     .selectOption("openai");
+  await page.getByLabel("Narrator voice").selectOption(NARRATOR_VOICE);
   const render = page.getByRole("button", { name: "Render Review" });
   await render.click();
   await expect(render).toBeDisabled({ timeout: 30_000 });
@@ -908,6 +920,86 @@ test("re-times the cut to the narration and renders again", async ({ page }) => 
   await page.getByText("Narrate", { exact: true }).click();
   await page.getByRole("combobox").filter({ hasText: "OpenAI voice" }).first()
     .selectOption("openai");
+  await page.getByLabel("Narrator voice").selectOption(NARRATOR_VOICE);
+  const render = page.getByRole("button", { name: "Render Review" });
+  await render.click();
+  await expect(render).toBeDisabled({ timeout: 30_000 });
+  await expect(render).toBeEnabled({ timeout: 60 * 60_000 });
+});
+
+test("re-reads the film in a younger voice", async ({ page }) => {
+  test.setTimeout(120 * 60_000);
+  await page.goto("/channel");
+  await expect(
+    page.getByRole("article").first().or(page.getByText("No channels yet")),
+  ).toBeVisible({ timeout: 30_000 });
+  const card = page.getByRole("article").filter({
+    has: page.getByRole("heading", { name: CHANNEL, exact: true }),
+  }).first();
+  await card.getByLabel("Voice direction").fill(VOICE_DIRECTION);
+  await card.getByRole("button", { name: "Save channel bibles" }).click();
+
+  await page.goto("/story");
+  await page.getByRole("combobox", { name: "Switch project" })
+    .selectOption({ label: EPISODE });
+  await stage(page, "Timeline");
+  await expect(page.getByText(new RegExp(`${BEATS.length} items`)))
+    .toBeVisible({ timeout: 60_000 });
+
+  await page.getByText("Narrate", { exact: true }).click();
+  await page.getByRole("combobox").filter({ hasText: "OpenAI voice" }).first()
+    .selectOption("openai");
+  await page.getByLabel("Narrator voice").selectOption(NARRATOR_VOICE);
+  const render = page.getByRole("button", { name: "Render Review" });
+  await render.click();
+  await expect(render).toBeDisabled({ timeout: 30_000 });
+  await expect(render).toBeEnabled({ timeout: 60 * 60_000 });
+});
+
+/**
+ * The younger voice reads slower than the one the cut was timed to - about
+ * twenty per cent - and the fifteen per cent headroom absorbed nearly all of
+ * it: no line overran, and the film came out tighter than before (82% speech,
+ * a second of air after each line, against 72% and a second and a half).
+ *
+ * Eight shots did land with no air at all: the word ends and the picture cuts
+ * on the same frame, which reads as clipped even when nothing is lost. Only
+ * those eight are lengthened, to a full second. Re-timing all seventy-nine
+ * from this read would have added a minute back for no reason.
+ */
+const TIGHT_CUTS: Record<number, number> = {
+  7: 8.5, 12: 3.5, 29: 5.5, 30: 4.0, 40: 3.5, 45: 5.5, 55: 4.0, 72: 4.5,
+};
+
+test("gives the eight tight cuts room to breathe", async ({ page }) => {
+  test.setTimeout(120 * 60_000);
+  await page.goto("/story");
+  await page.getByRole("combobox", { name: "Switch project" })
+    .selectOption({ label: EPISODE });
+  await stage(page, "Timeline");
+  await expect(page.getByText(new RegExp(`${BEATS.length} items`)))
+    .toBeVisible({ timeout: 60_000 });
+
+  for (const [clip, hold] of Object.entries(TIGHT_CUTS)) {
+    const index = Number(clip);
+    const from = page.getByLabel(`Clip ${index} starts at`);
+    const to = page.getByLabel(`Clip ${index} ends at`);
+    await from.fill("0");
+    await from.blur();
+    await to.fill(hold.toFixed(1));
+    await to.blur();
+    const row = page
+      .locator("div")
+      .filter({ has: page.getByLabel(`Clip ${index} starts at`) })
+      .filter({ has: page.getByLabel(`Move clip ${index} earlier`) })
+      .last();
+    await expect(row).toContainText(`${hold.toFixed(1)}s`, { timeout: 30_000 });
+  }
+
+  await page.getByText("Narrate", { exact: true }).click();
+  await page.getByRole("combobox").filter({ hasText: "OpenAI voice" }).first()
+    .selectOption("openai");
+  await page.getByLabel("Narrator voice").selectOption(NARRATOR_VOICE);
   const render = page.getByRole("button", { name: "Render Review" });
   await render.click();
   await expect(render).toBeDisabled({ timeout: 30_000 });
