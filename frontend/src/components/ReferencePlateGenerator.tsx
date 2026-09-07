@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Sparkles } from "lucide-react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import api, { toAIError } from "../api/client";
 import type { ReferenceSheet, Workflow } from "../types";
 
@@ -16,7 +16,28 @@ import type { ReferenceSheet, Workflow } from "../types";
  * The seed is offered because a plate is a thing you re-make until it is
  * right, and re-making it with a different seed changes the place rather than
  * the picture of it.
+ *
+ * The size is offered for a harder-won reason. An edit workflow takes its
+ * output size from the reference image it is handed, not from the project, so
+ * a square canonical image quietly makes every shot in a widescreen film
+ * square. Two episodes were produced that way and cropped at the render. The
+ * default here is therefore the project's own delivery resolution.
  */
+
+/** ``"1024x576"`` to a size, or ``null`` if it is not one a sampler can use. */
+export function parsePlateSize(
+  text: string,
+): { width: number; height: number } | null {
+  const match = /^\s*(\d{2,5})\s*[x×]\s*(\d{2,5})\s*$/i.exec(text);
+  if (!match) return null;
+  const width = Number(match[1]);
+  const height = Number(match[2]);
+  // Latent diffusion works in eight-pixel blocks; anything else is rounded
+  // by the sampler and comes back a size nobody asked for.
+  if (width % 8 !== 0 || height % 8 !== 0) return null;
+  return { width, height };
+}
+
 export default function ReferencePlateGenerator({
   projectId,
   sheet,
@@ -30,7 +51,15 @@ export default function ReferencePlateGenerator({
   const [prompt, setPrompt] = useState(sheet.canonical_description ?? "");
   const [workflowId, setWorkflowId] = useState("");
   const [seed, setSeed] = useState("");
+  const [size, setSize] = useState("");
   const qc = useQueryClient();
+
+  const project = useQuery({
+    queryKey: ["project", projectId],
+    queryFn: () => api.projects.get(projectId),
+  });
+  const deliverySize = project.data?.target_resolution?.trim() || "1024x1024";
+  const plateSize = parsePlateSize(size.trim() || deliverySize);
 
   const generate = useMutation({
     mutationFn: () =>
@@ -39,6 +68,8 @@ export default function ReferencePlateGenerator({
         negative_prompt: sheet.negative_tokens ?? "",
         workflow_id: workflowId || undefined,
         seed: seed.trim() === "" ? undefined : Number(seed),
+        width: plateSize?.width,
+        height: plateSize?.height,
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["references", projectId] });
@@ -93,6 +124,16 @@ export default function ReferencePlateGenerator({
           </select>
         </label>
         <label className="block w-28 text-xs text-zinc-400">
+          Size
+          <input
+            aria-label="Plate size"
+            value={size}
+            onChange={(e) => setSize(e.target.value)}
+            placeholder={deliverySize}
+            className="mt-1 w-full rounded border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-xs text-zinc-100"
+          />
+        </label>
+        <label className="block w-28 text-xs text-zinc-400">
           Seed
           <input
             aria-label="Plate seed"
@@ -106,11 +147,18 @@ export default function ReferencePlateGenerator({
       <p className="text-[11px] text-zinc-400">
         The negative tokens on this sheet are sent with it. Nothing is replaced:
         a generated plate is added to the sheet beside whatever it already has.
+        The size defaults to this project's delivery resolution, because an edit
+        workflow gives every shot the shape of the image it is handed.
       </p>
+      {!plateSize && (
+        <p role="alert" className="text-[11px] text-amber-300">
+          Give the size as width×height in multiples of eight, like {deliverySize}.
+        </p>
+      )}
       <div className="flex gap-2">
         <button
           type="button"
-          disabled={!prompt.trim() || !seedValid || generate.isPending}
+          disabled={!prompt.trim() || !seedValid || !plateSize || generate.isPending}
           onClick={() => generate.mutate()}
           className="rounded bg-indigo-600 px-3 py-1 text-xs text-white disabled:opacity-50"
         >
