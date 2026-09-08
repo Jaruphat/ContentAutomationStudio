@@ -4,7 +4,9 @@ import {
   GPU_SECONDS_PER_FRAME,
   estimateClipMinutes,
   humaniseMinutes,
+  pickClipWorkflows,
 } from "./MotionPage";
+import type { Workflow } from "../types";
 
 /**
  * A page that lets you queue twenty-eight clips without saying that it is
@@ -39,5 +41,55 @@ describe("humaniseMinutes", () => {
     expect(humaniseMinutes(18)).toBe("18 m");
     expect(humaniseMinutes(145)).toBe("2 h 25 m");
     expect(humaniseMinutes(120)).toBe("2 h");
+  });
+});
+
+describe("pickClipWorkflows", () => {
+  const wf = (over: Partial<Workflow>): Workflow =>
+    ({
+      id: "x", name: "x", purpose: "image-to-video", source_json_path: "",
+      source_format: "api", sha256_hash: "", version: "1",
+      required_models: [], required_custom_nodes: [],
+      parameter_mapping: { referenceImage: { nodeId: "1", field: "image" } },
+      output_mapping: [], tested_comfyui_version: "",
+      created_at: "", updated_at: "", ...over,
+    }) as Workflow;
+
+  it("offers only graphs that can be sent a start frame", () => {
+    // A UI export has no parameter mapping, so it cannot be handed the
+    // picture: offering it is offering a button that fails.
+    const { options } = pickClipWorkflows(
+      [
+        wf({ id: "api", name: "H3 I2V (API)" }),
+        wf({ id: "ui", name: "H3 I2V (UI)", parameter_mapping: {} }),
+        wf({ id: "img", name: "Z-Image", purpose: "image" }),
+      ],
+      "",
+    );
+    expect(options.map((option) => option.id)).toEqual(["api"]);
+  });
+
+  it("starts on a usable graph when the project names no default", () => {
+    // "Project default" that resolves to nothing is a first press that could
+    // only fail.
+    const { selected } = pickClipWorkflows([wf({ id: "api" })], "");
+    expect(selected).toBe("api");
+  });
+
+  it("keeps the project's own default when it can be used", () => {
+    const { selected } = pickClipWorkflows(
+      [wf({ id: "a" }), wf({ id: "b" })],
+      "b",
+    );
+    expect(selected).toBe("b");
+  });
+
+  it("selects nothing when nothing can run", () => {
+    const { options, selected } = pickClipWorkflows(
+      [wf({ id: "ui", parameter_mapping: {} })],
+      "ui",
+    );
+    expect(options).toEqual([]);
+    expect(selected).toBe("");
   });
 });

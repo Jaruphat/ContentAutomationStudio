@@ -920,6 +920,7 @@ const api = {
   shotRoute,
   workflows,
   generation,
+  motion,
   review,
   timeline,
   subtitles,

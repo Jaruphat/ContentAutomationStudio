@@ -56,6 +56,30 @@ export function humaniseMinutes(minutes: number): string {
   return rest ? `${hours} h ${rest} m` : `${hours} h`;
 }
 
+/**
+ * The graphs that can actually make a clip, and which one to start on.
+ *
+ * Two of the registered image-to-video workflows are UI exports with no
+ * parameter mapping: they cannot be sent a start frame, so offering them is
+ * offering a button that fails. And a project with no default video workflow
+ * left the picker on "Project default", which resolves to nothing and refuses
+ * the request - a first press that could only fail.
+ */
+export function pickClipWorkflows(
+  workflows: Workflow[],
+  projectDefaultId: string,
+): { options: Workflow[]; selected: string } {
+  const options = workflows.filter(
+    (workflow) =>
+      workflow.purpose === "image-to-video"
+      && Boolean((workflow.parameter_mapping ?? {}).referenceImage),
+  );
+  const preferred = options.some((workflow) => workflow.id === projectDefaultId)
+    ? projectDefaultId
+    : options[0]?.id ?? "";
+  return { options, selected: preferred };
+}
+
 function CandidateRow({
   projectId,
   candidate,
@@ -151,7 +175,6 @@ function CandidateRow({
                   onChange={(event) => setWorkflowId(event.target.value)}
                   className="mt-1 w-full rounded border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-xs text-zinc-100"
                 >
-                  <option value="">Project default</option>
                   {videoWorkflows.map((workflow) => (
                     <option key={workflow.id} value={workflow.id}>
                       {workflow.name}
@@ -203,12 +226,13 @@ export default function MotionPage() {
     enabled: Boolean(currentProjectId),
   });
 
-  const videoWorkflows = useMemo(
+  const { options: videoWorkflows, selected: defaultWorkflowId } = useMemo(
     () =>
-      (workflowsQ.data ?? []).filter(
-        (workflow) => workflow.purpose === "image-to-video",
+      pickClipWorkflows(
+        workflowsQ.data ?? [],
+        projectQ.data?.default_video_workflow_id ?? "",
       ),
-    [workflowsQ.data],
+    [workflowsQ.data, projectQ.data?.default_video_workflow_id],
   );
 
   const rows = candidatesQ.data ?? [];
@@ -249,6 +273,14 @@ export default function MotionPage() {
         approved.
       </p>
 
+      {videoWorkflows.length === 0 && (
+        <p role="alert" className="text-xs text-amber-300">
+          No image-to-video workflow is registered with a start-frame input, so
+          nothing here can be animated yet. Import one under Workflows and map
+          its reference image.
+        </p>
+      )}
+
       {waiting.length > 0 && (
         <p className="text-xs text-amber-300/80">
           Animating all {waiting.length} would be roughly{" "}
@@ -277,11 +309,11 @@ export default function MotionPage() {
       <div className="space-y-3">
         {rows.map((candidate) => (
           <CandidateRow
-            key={candidate.take_id}
+            key={`${candidate.take_id}:${defaultWorkflowId}`}
             projectId={currentProjectId}
             candidate={candidate}
             videoWorkflows={videoWorkflows}
-            defaultWorkflowId={projectQ.data?.default_video_workflow_id ?? ""}
+            defaultWorkflowId={defaultWorkflowId}
           />
         ))}
       </div>
