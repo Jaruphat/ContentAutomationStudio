@@ -339,6 +339,31 @@ function promptFor(beat: Beat): string {
   return IDENTITY + beat.d + (beat.props ? PROPS_HAVE_NO_FACE : "") + STYLE;
 }
 
+/**
+ * What the first pass got wrong.
+ *
+ * Two grew a second Mello - one at the foot of the tall plant, and, worst of
+ * all, the closing shot, where two of him walked into the sunset together. The
+ * prop rule stops a marshmallow becoming a twin; it does not stop a wide empty
+ * landscape from being filled with company, so those say how many characters
+ * the frame may hold.
+ *
+ * The other three asked for a thing stretching or being held and got the thing
+ * beside him at the wrong scale instead. They name the board and the size.
+ */
+const REWORK: { n: number; d: string; props?: true }[] = [
+  { n: 10,
+    d: "Mello standing very small at the foot of one tall plant with pale pink flowers, looking up the length of its stem. Exactly ONE character in the entire frame and nothing else alive in it." },
+  { n: 16,
+    d: "Close view of one thick pale root cut into two halves lying on a dark wooden board, a single clear glistening thread of gel stretching between the two cut faces. Mello standing behind the board looking down at it. Exactly ONE character in the frame." },
+  { n: 70, props: true,
+    d: "Mello standing on a plain warm backdrop holding up one small plain white cylinder about the size of his own mitten hand, in both hands, close to his face." },
+  { n: 75, props: true,
+    d: "Close view of one toasted golden block pulled into two halves on a wooden board with a soft molten white thread stretching between them, Mello standing behind the board looking at it." },
+  { n: 83,
+    d: "Wide golden hour view of Mello walking away from us along the edge of the misty marsh toward the low sun, seen from behind, small in a big warm landscape. Exactly ONE character in the entire frame and nobody walking with him." },
+];
+
 async function stage(page: Page, name: string) {
   await page
     .getByRole("navigation", { name: "Production stages" })
@@ -599,6 +624,41 @@ test("draws Mello's history", async ({ page }) => {
   await stage(page, "Generate");
   await page.getByRole("button", { name: "Run preflight" }).click();
   await expect(page.getByText(/shot\(s\) ready/)).toBeVisible({ timeout: 60_000 });
+  const generate = page.getByTestId("generate-button");
+  await expect(generate).toBeEnabled({ timeout: 30_000 });
+  await generate.click();
+  await expect(generate).toBeDisabled({ timeout: 30_000 });
+  await expect(generate).toBeEnabled({ timeout: 300_000 });
+});
+
+test("re-draws the Mello frames that failed", async ({ page }) => {
+  test.setTimeout(90 * 60_000);
+  await page.goto("/story");
+  await page.getByRole("combobox", { name: "Switch project" })
+    .selectOption({ label: EPISODE });
+  await redraw(page, REWORK);
+});
+
+/**
+ * Five shots this episode never had a problem with, rejected by accident.
+ *
+ * A --grep for "re-draws the five frames that failed" matched a test of the
+ * same shape in another episode's spec, which ran against whichever project
+ * was selected and threw away Mello's shots 6, 44, 55, 59 and 68 before
+ * failing on the shot count. Their prompts were never touched, so they only
+ * need making again. Both tests are named for their episode now.
+ */
+test("re-runs the Mello frames a stray grep rejected", async ({ page }) => {
+  test.setTimeout(60 * 60_000);
+  await page.goto("/story");
+  await page.getByRole("combobox", { name: "Switch project" })
+    .selectOption({ label: EPISODE });
+  await stage(page, "Generate");
+  await page.getByRole("button", { name: "Run preflight" }).click();
+  await expect(page.getByText(/shot\(s\) ready/)).toBeVisible({ timeout: 60_000 });
+  // Only Draft, Ready and Failed shots are eligible, and a shot whose every
+  // take was rejected is Ready - so this picks up exactly those five and
+  // steps over the seventy-eight that are waiting on review.
   const generate = page.getByTestId("generate-button");
   await expect(generate).toBeEnabled({ timeout: 30_000 });
   await generate.click();

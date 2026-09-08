@@ -106,6 +106,8 @@ PHASES = {
     "mello2-setup": "sets the Mello channel up",
     "mello2-type": "types the eighty-three beats",
     "mello2-draw": "draws Mello's history",
+    "mello2-rework": "re-draws the Mello frames that failed",
+    "mello2-repair": "re-runs the Mello frames a stray grep rejected",
     "mello2-render": "cuts and renders Mello's history",
     "nori-retime": "re-times the cut to the narration",
     "nori-voice": "re-reads the film in a younger voice",
