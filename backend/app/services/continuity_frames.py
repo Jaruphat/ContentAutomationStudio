@@ -375,10 +375,8 @@ def get_frame(db: Session, take_id: str) -> ContinuityFrame | None:
 def candidates(db: Session, project_id: str, shot: Any) -> list[ContinuityFrame]:
     """Every frame in this project that could seed ``shot``, newest last.
 
-    A shot's own *video* frame is excluded, because a clip that starts on a
-    frame cut from itself is a loop. Its own approved *still* is not: animating
-    an approved picture is the ordinary way a moving episode is made, and the
-    still is a start frame, not a previous shot.
+    The shot's own frames are excluded: a shot cannot continue from itself, and
+    offering that choice would only make it possible to build a loop.
     """
     query = (
         db.query(ContinuityFrame)
@@ -386,10 +384,7 @@ def candidates(db: Session, project_id: str, shot: Any) -> list[ContinuityFrame]
         .order_by(ContinuityFrame.created_at)
     )
     shot_id = getattr(shot, "id", None) if shot is not None else None
-    return [
-        frame for frame in query.all()
-        if frame.shot_id != shot_id or frame.selection == SELECTION_SOURCE_IMAGE
-    ]
+    return [frame for frame in query.all() if frame.shot_id != shot_id]
 
 
 def candidate_takes(db: Session, project_id: str, shot: Any) -> list[Take]:
@@ -397,20 +392,14 @@ def candidate_takes(db: Session, project_id: str, shot: Any) -> list[Take]:
     from app.models import Scene, Shot
 
     shot_id = getattr(shot, "id", None) if shot is not None else None
-    takes = (
+    return (
         db.query(Take)
         .join(Shot, Take.shot_id == Shot.id)
         .join(Scene, Shot.scene_id == Scene.id)
-        .filter(Scene.project_id == project_id)
+        .filter(Scene.project_id == project_id, Take.shot_id != shot_id)
         .order_by(Take.created_at)
         .all()
     )
-    # Its own still stays: animating an approved picture is how a moving
-    # episode is made. Its own clip does not - that would be a loop.
-    return [
-        take for take in takes
-        if take.shot_id != shot_id or not is_video(take)
-    ]
 
 
 def bind_source(
@@ -427,11 +416,10 @@ def bind_source(
         raise ContinuityFrameError(
             "That take does not exist in this project.", "take_not_found"
         )
-    if take.shot_id == shot.id and is_video(take):
-        # Its own still is a start frame; its own clip would be a loop.
+    if take.shot_id == shot.id:
         raise ContinuityFrameError(
-            "A shot cannot continue from its own clip. Choose the take of the "
-            "shot that comes before it, or its own approved still.",
+            "A shot cannot continue from its own take. Choose a take from the "
+            "shot that comes before it.",
             "self_continuity",
         )
     if (take.review_status or "") != "Approved":

@@ -280,49 +280,6 @@ def test_a_shot_cannot_be_seeded_by_its_own_take(
     assert exc.value.code == "self_continuity"
 
 
-def test_a_shot_can_start_from_its_own_approved_still(
-    db_session: Session, sample_project: Project, sample_shot: Shot, tmp_path,
-    png_bytes,
-):
-    """Animating an approved picture is how a moving episode is made.
-
-    A clip that begins on a frame cut from its own clip is a loop, and stays
-    refused. A clip that begins on its own approved still is not a loop - the
-    still is a start frame, and the shot that carries it is the shot the clip
-    replaces. Refusing it forced a moving episode to be built as two shots per
-    beat, one of them held out of the cut.
-    """
-    take = _approved_current_image_take(
-        db_session, sample_shot, os.path.join(str(tmp_path), "still.png"),
-        png_bytes(96, 64),
-    )
-    continuity_frames.extract_frame(db_session, take)
-
-    continuity_frames.bind_source(
-        db_session, sample_project.id, sample_shot, take.id
-    )
-
-    assert sample_shot.continuity_source_take_id == take.id
-    assert take in continuity_frames.candidate_takes(
-        db_session, sample_project.id, sample_shot
-    )
-
-
-def test_a_shot_cannot_start_from_its_own_clip(
-    db_session: Session, sample_project: Project, sample_shot: Shot, video_take
-):
-    """The loop the rule was written for is still refused."""
-    continuity_frames.extract_frame(db_session, video_take)
-    with pytest.raises(continuity_frames.ContinuityFrameError) as exc:
-        continuity_frames.bind_source(
-            db_session, sample_project.id, sample_shot, video_take.id
-        )
-    assert exc.value.code == "self_continuity"
-    assert video_take not in continuity_frames.candidate_takes(
-        db_session, sample_project.id, sample_shot
-    )
-
-
 def test_a_take_from_another_project_cannot_seed_this_shot(
     db_session: Session, sample_scene: Scene, video_take
 ):
