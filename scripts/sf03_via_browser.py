@@ -102,6 +102,11 @@ PHASES = {
     "nori-rework4": "re-draws the last two frames without the handover",
     "nori-rework5": "moves the last two frames onto the plain backdrop",
     "nori-render": "cuts and renders Nori's history",
+    # MELLO EP002, ten minutes, 16:9, English.
+    "mello2-setup": "sets the Mello channel up",
+    "mello2-type": "types the eighty-three beats",
+    "mello2-draw": "draws Mello's history",
+    "mello2-render": "cuts and renders Mello's history",
     "nori-retime": "re-times the cut to the narration",
     "nori-voice": "re-reads the film in a younger voice",
     "nori-breathe": "gives the tight cuts room to breathe",
