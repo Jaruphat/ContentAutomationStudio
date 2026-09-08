@@ -431,6 +431,73 @@ test("draws the twenty-eight start frames", async ({ page }) => {
   await expect(generate).toBeEnabled({ timeout: 300_000 });
 });
 
+/**
+ * What the first pass of stills got wrong.
+ *
+ * Two grew a second Mello, one of them the closing shot - the same frame that
+ * did it in EP002, and for the same reason: a wide empty landscape with one
+ * small figure in it invites company unless the count is stated.
+ *
+ * And the confectionery shop came back with a lettered sign over the window.
+ * The rule has never changed - the model cannot spell, and a negative naming
+ * text does not stop it - so the surface has to go, not the words on it.
+ */
+const REWORK: { n: number; d: string; props?: true }[] = [
+  { n: 15,
+    d: "Mello standing on a wet cobbled street at dusk in front of a small shop window glowing with warm light, the window holding trays of pale sweets. The building has no sign, no board and no lettering of any kind anywhere on it. Exactly ONE character in the frame." },
+  { n: 24,
+    d: "Mello standing beside a cream-coloured machine as a long soft white rope comes out of a nozzle onto a moving belt, watching it travel away. Exactly ONE character in the entire frame and nobody standing with him." },
+  { n: 28,
+    d: "Wide golden hour view of Mello walking away from us along the edge of the misty marsh toward the low sun, seen from behind, small in a big warm landscape. Exactly ONE character in the entire frame and nobody walking with him." },
+];
+
+test("re-draws the stills that failed", async ({ page }) => {
+  test.setTimeout(90 * 60_000);
+  await page.goto("/story");
+  await page.getByRole("combobox", { name: "Switch project" })
+    .selectOption({ label: EPISODE });
+
+  const cardFor = (n: number) =>
+    page.getByRole("button", { name: /^Select take / })
+      .filter({ hasText: new RegExp(`Shot ${n}\\b`) }).first();
+
+  // Rejecting frees the shot: with no take left standing it is Ready, and
+  // Ready is what a project-wide generate picks up.
+  for (const item of REWORK) {
+    await page.goto("/review");
+    await expect(cardFor(item.n)).toBeVisible({ timeout: 30_000 });
+    const reject = cardFor(item.n)
+      .getByRole("button", { name: "Reject", exact: true });
+    if (await reject.count()) {
+      await reject.click();
+      await expect(reject).toHaveCount(0, { timeout: 30_000 });
+    }
+  }
+
+  await stage(page, "Storyboard");
+  const rows = page.locator("tbody").first().locator("tr");
+  await expect(rows).toHaveCount(BEATS.length, { timeout: 60_000 });
+  for (const item of REWORK) {
+    const row = rows.nth(item.n - 1);
+    await row.getByRole("button", { name: /^Edit shot / }).click();
+    await page.getByLabel("Image prompt").fill(
+      IDENTITY + item.d + (item.props ? PROPS_HAVE_NO_FACE : "") + STYLE,
+    );
+    await page.getByRole("button", { name: "Save", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Save", exact: true }))
+      .toHaveCount(0);
+  }
+
+  await stage(page, "Generate");
+  await page.getByRole("button", { name: "Run preflight" }).click();
+  await expect(page.getByText(/shot\(s\) ready/)).toBeVisible({ timeout: 60_000 });
+  const generate = page.getByTestId("generate-button");
+  await expect(generate).toBeEnabled({ timeout: 30_000 });
+  await generate.click();
+  await expect(generate).toBeDisabled({ timeout: 30_000 });
+  await expect(generate).toBeEnabled({ timeout: 300_000 });
+});
+
 test("approves the start frames", async ({ page }) => {
   test.setTimeout(60 * 60_000);
   await page.goto("/story");
@@ -516,6 +583,69 @@ test("generates the twenty-eight clips", async ({ page }) => {
   await page.goto("/story");
   await page.getByRole("combobox", { name: "Switch project" })
     .selectOption({ label: EPISODE });
+  await stage(page, "Generate");
+  await page.getByRole("button", { name: "Run preflight" }).click();
+  await expect(page.getByText(/shot\(s\) ready/)).toBeVisible({ timeout: 60_000 });
+  const generate = page.getByTestId("generate-button");
+  await expect(generate).toBeEnabled({ timeout: 30_000 });
+  await generate.click();
+  await expect(generate).toBeDisabled({ timeout: 30_000 });
+  await expect(generate).toBeEnabled({ timeout: 600_000 });
+});
+
+/**
+ * The clips that failed, and the one fault they share.
+ *
+ * Image-to-video drifts toward macro food photography. Left to itself it
+ * pushes in until the character is out of frame and what is left is a glossy
+ * close-up of a sweet on a board - in one case with a human hand and a knife
+ * in it, in another with lettered shop signs the still never had.
+ *
+ * The remedy is the same as everywhere else in this project: say what the
+ * camera does, positively. "The camera stays wide and keeps his whole body in
+ * frame" works; naming the close-up as forbidden would not.
+ */
+const CLIP_REWORK: { beat: number; m: string }[] = [
+  { beat: 15,
+    m: "He walks steadily toward the camera along the wet cobbles until he fills the middle of the frame, and the street and the shop behind him fall softly out of focus. The camera stays wide and keeps his whole body in frame for the whole shot." },
+];
+
+test("re-draws the clips that lost the character", async ({ page }) => {
+  test.setTimeout(120 * 60_000);
+  await page.goto("/story");
+  await page.getByRole("combobox", { name: "Switch project" })
+    .selectOption({ label: EPISODE });
+
+  const cardFor = (n: number) =>
+    page.getByRole("button", { name: /^Select take / })
+      .filter({ hasText: new RegExp(`Shot ${n}\\b`) }).first();
+
+  for (const item of CLIP_REWORK) {
+    const shotNumber = BEATS.length + item.beat;
+    await page.goto("/review");
+    await expect(cardFor(shotNumber)).toBeVisible({ timeout: 30_000 });
+    const reject = cardFor(shotNumber)
+      .getByRole("button", { name: "Reject", exact: true });
+    if (await reject.count()) {
+      await reject.click();
+      await expect(reject).toHaveCount(0, { timeout: 30_000 });
+    }
+  }
+
+  await stage(page, "Storyboard");
+  const rows = page.locator("tbody").first().locator("tr");
+  await expect(rows).toHaveCount(BEATS.length * 2, { timeout: 60_000 });
+  for (const item of CLIP_REWORK) {
+    const row = rows.nth(BEATS.length + item.beat - 1);
+    await row.getByRole("button", { name: /^Edit shot / }).click();
+    await page.getByLabel("Video prompt").fill(
+      motionPrompt({ ...BEATS[item.beat - 1], m: item.m }),
+    );
+    await page.getByRole("button", { name: "Save", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Save", exact: true }))
+      .toHaveCount(0);
+  }
+
   await stage(page, "Generate");
   await page.getByRole("button", { name: "Run preflight" }).click();
   await expect(page.getByText(/shot\(s\) ready/)).toBeVisible({ timeout: 60_000 });
