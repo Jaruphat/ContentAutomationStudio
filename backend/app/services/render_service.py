@@ -461,7 +461,12 @@ def write_render_provenance(
 
 
 def render_review_video(
-    db: Session, project_id: str, *, narrate: bool = False, voice: Any = None
+    db: Session,
+    project_id: str,
+    *,
+    narrate: bool = False,
+    voice: Any = None,
+    narration_only: bool = False,
 ) -> dict[str, Any]:
     """Assemble the approved takes on the timeline into a review MP4.
 
@@ -469,6 +474,12 @@ def render_review_video(
     takes' own audio, so a narrated short comes out of the app complete rather
     than needing a voice muxed onto it afterwards. ``voice`` overrides the
     platform speech engine, which is how this is tested without one.
+
+    ``narration_only`` drops what the takes came with. A video model generates
+    its own soundtrack along with the picture - room tone, footsteps, invented
+    speech - and ducking that under a narrator leaves two soundtracks arguing.
+    For a narrated film the takes' audio is usually not wanted at all, and
+    muting twenty-eight shots one at a time to say so is not a setting.
     """
     project = db.query(Project).filter(Project.id == project_id).first()
     if project is None:
@@ -611,6 +622,9 @@ def render_review_video(
     # the loop so the report can be built from the same values the segments
     # were made with, instead of from a second read of the same rows.
     shot_audio = _shot_audio_direction(db, sources)
+    if narration_only:
+        # Every shot, whatever it asked for: the request is about the film.
+        shot_audio = [(True, gain) for _muted, gain in shot_audio]
     muted_shots = [
         take.shot_id for index, (_item, take) in enumerate(sources)
         if shot_audio[index][0]
@@ -876,6 +890,13 @@ def render_review_video(
         except Exception as exc:  # a voice engine is not worth losing a render
             warnings.append(f"Narration could not be produced: {exc}")
         narration_report = narration.describe(track)
+        narration_report["voice"] = {
+            "provider": "openai" if getattr(voice, "model", "") not in ("", "system") else "system",
+            "model": getattr(voice, "model", "system"),
+            "name": getattr(voice, "voice", "system"),
+            "instructions": getattr(voice, "instructions", ""),
+            "usage": dict(getattr(voice, "usage", {}) or {}),
+        }
         if track is not None:
             narrated = os.path.join(out_dir, "review.narrated.mp4")
             if keep_audio:

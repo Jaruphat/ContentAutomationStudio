@@ -519,6 +519,11 @@ export default function TimelinePage() {
   // The render has always taken a voice name and the page never sent one, so
   // every episode was read by the default whatever was on screen.
   const [voice, setVoice] = useState<NarrationVoice>(DEFAULT_NARRATION_VOICE);
+  // A video model writes its own soundtrack along with the picture - room
+  // tone, footsteps, invented speech - and ducking that under a narrator
+  // leaves two soundtracks arguing. On by default with narration, because a
+  // narrated film almost never wants what the takes came with.
+  const [narrationOnly, setNarrationOnly] = useState(true);
   // Choosing from a list of names is choosing blind. This episode was re-read,
   // re-cut and re-rendered twice before anyone could hear that the new voice
   // was barely different from the old one.
@@ -552,6 +557,7 @@ export default function TimelinePage() {
         narrate,
         voiceProvider,
         voiceProvider === "openai" ? voice : "",
+        narrate && narrationOnly,
       ),
     onSuccess: (data, projectId) => {
       if (currentProjectRef.current === projectId) {
@@ -712,6 +718,19 @@ export default function TimelinePage() {
                 </option>
               ))}
             </select>
+          )}
+          {narrate && (
+            <label
+              title="Drop the audio the takes came with and keep only the narration"
+              className="flex items-center gap-1.5 text-xs text-zinc-400"
+            >
+              <input
+                type="checkbox"
+                checked={narrationOnly}
+                onChange={(event) => setNarrationOnly(event.target.checked)}
+              />
+              Voice only
+            </label>
           )}
           {narrate && voiceProvider === "openai" && (
             <button

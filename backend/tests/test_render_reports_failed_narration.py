@@ -18,6 +18,7 @@ rather than a defect, so the delivery still passed its own validation.
 """
 
 import json
+import os
 
 from app.services import narration, render_service
 
@@ -168,3 +169,49 @@ def test_the_record_says_how_long_each_line_took(
     # An overrun is a real defect: the next line starts on time regardless, so
     # the two are mixed on top of each other.
     assert any("run past the shot" in w for w in record["warnings"])
+
+
+def test_narration_only_drops_the_takes_own_audio(
+    db_session, sample_project, sample_shot, tmp_path, synthesise_clip
+):
+    """A video model writes a soundtrack whether or not anybody wanted one.
+
+    Ducking it under a narrator leaves two soundtracks arguing, and muting
+    every shot one at a time to say "just the voice" is not a setting.
+    """
+    from app.models import Take
+
+    path = synthesise_clip(
+        os.path.join(str(tmp_path), "clip.mp4"),
+        with_audio=True, duration=2.0, frame_rate=24.0,
+        width=320, height=180, moving=True,
+    )
+    sample_shot.dialogue = "I am a marshmallow."
+    db_session.add(sample_shot)
+    db_session.commit()
+    add_approved_take_on_timeline(
+        db_session, sample_project.id, sample_shot.id, path, duration=2.0,
+    )
+
+    kept = render_service.render_review_video(
+        db_session, sample_project.id, narrate=True, voice=_SilentVoice(),
+    )
+    # Read now: both renders write the same sidecar path for this project.
+    with open(kept["provenance_path"], encoding="utf-8") as handle:
+        before = json.load(handle)
+
+    dropped = render_service.render_review_video(
+        db_session, sample_project.id, narrate=True, voice=_SilentVoice(),
+        narration_only=True,
+    )
+
+    assert kept["rendered"] and dropped["rendered"]
+    with open(dropped["provenance_path"], encoding="utf-8") as handle:
+        record = json.load(handle)
+    # Recorded, not only done: a delivered file has to be able to say that its
+    # source audio was dropped on purpose.
+    assert record["render_settings"]["audio"]["direction"]["muted_shots"] == [
+        sample_shot.id
+    ]
+
+    assert before["render_settings"]["audio"]["direction"]["muted_shots"] == []

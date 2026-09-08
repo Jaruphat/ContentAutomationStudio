@@ -351,6 +351,7 @@ def render_review(
             db, project_id,
             narrate=bool(payload and payload.narrate),
             voice=voice,
+            narration_only=bool(payload and payload.narration_only),
         )
     except timeline_service.StaleTimelineError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc

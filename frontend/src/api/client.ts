@@ -665,12 +665,14 @@ export const timeline = {
     narrate = false,
     voiceProvider: "system" | "openai" = "system",
     voice = "",
+    narrationOnly = false,
   ) =>
     http
       .post<RenderResult>(`/projects/${projectId}/render`, {
         narrate,
         voice_provider: voiceProvider,
         voice,
+        narration_only: narrationOnly,
         confirm_paid_generation: voiceProvider === "openai",
       })
       .then((r) => r.data),

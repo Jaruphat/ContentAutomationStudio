@@ -1437,6 +1437,9 @@ class WorkflowResponse(BaseModel):
     validation_status: str
     created_at: datetime
     updated_at: datetime
+    preview_take_id: str | None = None
+    preview_url: str = ""
+    preview_status: str = ""
 
     _coerce_workflow_rate = field_validator("frame_rate", mode="before")(
         _coerce_added_column(0.0)
@@ -1765,6 +1768,10 @@ class RenderRequest(BaseModel):
     #: How the narrator should read. Left blank, the channel's own voice
     #: direction is used - which is the reason a channel carries one.
     voice_instructions: str = ""
+    #: Drop what the takes came with and keep only the narration. A video
+    #: model generates its own soundtrack along with the picture, and ducking
+    #: that under a narrator leaves two soundtracks arguing.
+    narration_only: bool = False
     confirm_paid_generation: bool = False
 
 
