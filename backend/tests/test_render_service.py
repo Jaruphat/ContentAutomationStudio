@@ -971,7 +971,13 @@ class TestProvenanceSidecar:
             "pipeline_pass": True,
             "delivery_spec_pass": False,
         }
-        assert record["warnings"][0]["message"] == (
+        # The sidecar's warnings are now everything the render had to say
+        # about itself, as the strings the render collected; the structured
+        # aspect overrides keep their own key rather than being mixed in.
+        assert record["warnings"] == [
+            "E2E Override · Aspect mismatch accepted · user-approved test override"
+        ]
+        assert record["warning_metadata"][0]["message"] == (
             "E2E Override · Aspect mismatch accepted · user-approved test override"
         )
         assert record["segments"][0]["take"]["lineage"] == take.lineage

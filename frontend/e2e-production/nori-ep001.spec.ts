@@ -116,7 +116,7 @@ const NEGATIVE_PLATE =
  * The direction carries the age more than the voice name does: the same voice
  * reads as a narrator or as a small character depending on what it is told.
  */
-const NARRATOR_VOICE = "ash";
+const NARRATOR_VOICE = "sage";
 
 const VOICE_DIRECTION =
   "Speak as a small, cheerful young character telling his own story. Light "
@@ -431,18 +431,30 @@ const MEASURED_HOLDS = [
 ];
 
 /**
- * Save a channel, and do not believe it until it has been read back.
+ * Save a channel, wait for the server to have it, then prove it.
  *
- * The save is a request and the page shows no success state, so clicking it
- * and navigating on the next line leaves the request in flight - it can be
- * cancelled by the navigation and lost. That is not hypothetical: NORI EP001
- * was re-read in a new voice with the old direction still on the channel,
- * because the direction never reached the server, and the film that came back
- * sounded almost unchanged.
+ * The save is a request, and the page had no success state to wait on, so
+ * clicking it and navigating on the next line left the request in flight where
+ * the navigation could cancel it. NORI EP001 was re-read in a new voice with
+ * the old direction still on the channel for exactly this reason, and the film
+ * that came back sounded almost unchanged.
+ *
+ * Waiting for the response is the fix; reloading first was the same bug again,
+ * which is how long it took to see it. The read-back stays because a save that
+ * answered 200 and stored nothing would still be a lie.
  */
 async function saveChannel(page: Page, card: Locator) {
   const direction = await card.getByLabel("Voice direction").inputValue();
-  await card.getByRole("button", { name: "Save channel bibles" }).click();
+  await Promise.all([
+    page.waitForResponse(
+      (response) =>
+        response.request().method() === "PUT"
+        && response.url().includes("/channels/")
+        && response.status() === 200,
+      { timeout: 30_000 },
+    ),
+    card.getByRole("button", { name: "Save channel bibles" }).click(),
+  ]);
   await page.reload();
   await expect(
     page.getByRole("article").filter({

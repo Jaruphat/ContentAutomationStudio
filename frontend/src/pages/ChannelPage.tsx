@@ -239,15 +239,26 @@ function ChannelEditor({ channel }: { channel: Channel }) {
         />
       </div>
 
-      <button
-        type="button"
-        onClick={() => save.mutate()}
-        disabled={save.isPending || !form.name.trim()}
-        className="flex items-center gap-1 rounded bg-zinc-700 px-3 py-1.5 text-xs text-white disabled:opacity-50"
-      >
-        {save.isPending ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
-        Save channel bibles
-      </button>
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => save.mutate()}
+          disabled={save.isPending || !form.name.trim()}
+          className="flex items-center gap-1 rounded bg-zinc-700 px-3 py-1.5 text-xs text-white disabled:opacity-50"
+        >
+          {save.isPending ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
+          Save channel bibles
+        </button>
+        {/* A save with no answer is a save you cannot trust. Clicking this and
+            leaving the page immediately used to cancel the request in flight,
+            and nothing on screen ever said so - an episode was narrated with
+            the wrong direction because of it. */}
+        {save.isSuccess && !save.isPending && (
+          <span role="status" className="text-[11px] text-emerald-400">
+            Saved
+          </span>
+        )}
+      </div>
       <ActionError label="Save channel" error={save.error} />
 
       {/* A channel that was tried once and abandoned otherwise stays in the

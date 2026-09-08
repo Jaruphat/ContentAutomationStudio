@@ -351,6 +351,8 @@ def write_render_provenance(
     output_path: str,
     render_settings: dict[str, Any],
     container_tags: dict[str, Any] | None = None,
+    warnings: list[str] | None = None,
+    pipeline_pass: bool = True,
 ) -> str:
     """
     Write the sidecar recording what went into the review video.
@@ -359,6 +361,12 @@ def write_render_provenance(
     the record: which take, job, workflow snapshot, seed and prompt produced
     each segment. It sits next to the video under the project's export
     directory and is never muxed into it.
+
+    ``warnings`` is everything the render has to say about itself, not only the
+    aspect overrides it used to carry. A render whose every narration line was
+    refused for want of credit wrote a silent film and a sidecar that said
+    nothing was wrong - the record has to be able to report a bad render, or it
+    is not a record.
 
     Returns the sidecar path, or '' when it could not be written - a provenance
     failure must not fail an otherwise good render.
@@ -403,10 +411,17 @@ def write_render_provenance(
             ),
         },
         "render_settings": render_settings,
-        "warnings": override_warnings,
+        # Strings, because that is what the render collected; the structured
+        # aspect overrides keep their own key rather than being mixed in.
+        "warnings": list(
+            warnings
+            if warnings is not None
+            else [warning["message"] for warning in override_warnings]
+        ),
+        "warning_metadata": override_warnings,
         "delivery_validation": {
-            "pipeline_pass": True,
-            "delivery_spec_pass": not override_warnings,
+            "pipeline_pass": pipeline_pass,
+            "delivery_spec_pass": not override_warnings and pipeline_pass,
         },
         "segments": [
             _segment_provenance(db, index, item, take)
@@ -1127,6 +1142,24 @@ def render_review_video(
     # delivery: a waiver explains a failure, it does not erase the others.
     material_warnings: list[str] = []
 
+    # A narration that was asked for and did not arrive is a defect in this
+    # delivery, not a note about it. Every line of one episode was refused for
+    # want of credit; the render wrote a silent film and reported success.
+    if narrate and narration_report.get("failures"):
+        failed = len(narration_report["failures"])
+        message = (
+            f"{failed} narration line(s) could not be spoken, so the film is "
+            f"missing narration it was rendered to carry."
+        )
+        if message not in warnings:
+            warnings.append(message)
+        material_warnings.append(message)
+    elif narrate and not narration_report.get("present"):
+        message = "Narration was requested but no narration track was produced."
+        if message not in warnings:
+            warnings.append(message)
+        material_warnings.append(message)
+
     probe = probe_media(output_path)
     expected = float(manifest.get("total_duration_sec") or 0.0)
     actual = probe.get("duration_sec", 0.0)
@@ -1201,8 +1234,14 @@ def render_review_video(
             },
             "container_metadata_stripped": True,
             "subtitles": subtitle_record,
+            # Which lines were spoken, which were refused, and by what - the
+            # only place after the fact that says whether a film was read by a
+            # paid voice or a free one, and whether it was read at all.
+            "narration": narration_report,
         },
         container_tags=container_tags,
+        warnings=warnings,
+        pipeline_pass=not material_warnings,
     )
     if not provenance_path:
         _discard_delivery(output_path)
