@@ -198,7 +198,14 @@ def start_episode(db: Session, channel: Channel, data: dict[str, Any]) -> Projec
             # was in `medium` once, which the compiler prepends to every
             # prompt, and the channel's name got printed onto a prop.
             label=f"{channel.name} house look",
-            medium="live-action documentary photography",
+            # Left empty on purpose. `medium` is prepended to every prompt, so
+            # a hardcoded one is a second art direction argued into every shot
+            # of every channel: three episodes of a soft 3D cartoon were
+            # generated with "live-action documentary photography" in front of
+            # their own visual bible, and the clips kept drifting toward glossy
+            # macro food photography. The channel's visual bible already says
+            # what the medium is.
+            medium="",
             visual_keywords=channel.visual_style or "",
             camera_language=channel.camera_language or "",
             negative_constraints=channel.negative_prompt or "",

@@ -54,14 +54,23 @@ def test_the_style_still_says_which_channel_it_came_from(db_session):
     assert "ODDVERSE" in (style.label or "")
 
 
-def test_the_medium_says_what_medium_the_pictures_are_in(db_session):
+def test_the_channel_does_not_invent_a_medium_for_its_episodes(db_session):
+    """`medium` is prepended to every prompt, so a hardcoded one is a second
+    art direction argued into every shot of every channel.
+
+    Three episodes of a soft 3D cartoon were generated with "live-action
+    documentary photography" in front of their own visual bible, because the
+    phrase was hardcoded here for the one live-action channel that existed when
+    this was written. The clips kept drifting toward glossy macro food
+    photography. The channel's visual bible already says what the medium is.
+    """
     channel = _channel(db_session)
 
     project = channels.start_episode(db_session, channel, {"title": "Episode"})
 
     style = db_session.query(Style).filter(Style.project_id == project.id).one()
-    assert style.medium
-    assert "house look" not in style.medium
+    assert style.medium == ""
+    assert style.visual_keywords == channel.visual_style
 
 
 def test_a_label_a_person_typed_is_still_kept_out_of_the_prompt(
