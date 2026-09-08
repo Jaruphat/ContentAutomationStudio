@@ -3,10 +3,24 @@ import { expect, test, type Locator, type Page } from "@playwright/test";
 /**
  * MELLO EP003 — "Marshmallow, Moving", 16:9, English, every shot a clip.
  *
- * The same history as EP002, cut to three minutes, and animated: each shot is
- * drawn as a still, approved, then handed to image-to-video as its own start
- * frame. It exists to answer one question - whether generated motion is usable
- * for this channel - against an episode of the same story that is not moving.
+ * The same history as EP002, cut to three minutes, and animated. It exists to
+ * answer one question - whether generated motion is usable for this channel -
+ * against an episode of the same story that does not move.
+ *
+ * Each beat is two shots. The first draws the picture and is held out of the
+ * cut; the second is the clip, and continues from the first. They cannot be
+ * one shot: turning a shot into an image-to-video shot changes its mode, its
+ * workflow and its prompt, which moves its content revision, so a frame
+ * captured from its own still is out of date the moment it is bound. A still
+ * and the clip made from it belong to different shots, and include_in_cut is
+ * what keeps the still off the timeline.
+ *
+ * They are also made in two passes, and that is not tidiness either. Generate
+ * runs over every eligible shot in the project, so a clip shot that exists
+ * before its still has been drawn is a shot with no prompt and no workflow,
+ * and preflight refuses the whole run for it. The stills are drawn and
+ * approved first - which makes them ineligible - and only then do the clips
+ * exist to be the only thing left to run.
  *
  * Two measurements decided the shape of it, both taken before a word was
  * written.
@@ -250,6 +264,27 @@ async function selectShot(page: Page, row: Locator) {
   throw new Error("The inspector never followed the row that was clicked.");
 }
 
+/**
+ * Click a row and wait for the inspector to actually be showing that shot.
+ *
+ * Waiting for the spoken line to be *empty* only detects a change while the
+ * shots are being typed and have no dialogue yet. On a second pass every shot
+ * has a line, so the wait has to be for this shot's own line.
+ */
+async function selectShotWithLine(page: Page, row: Locator, line: string) {
+  const field = page.getByLabel("Spoken line");
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    await row.click();
+    try {
+      await expect(field).toHaveValue(line, { timeout: 4000 });
+      return;
+    } catch {
+      // Still showing another shot.
+    }
+  }
+  throw new Error(`The inspector never followed the row for: ${line}`);
+}
+
 async function openChannel(page: Page): Promise<Locator> {
   const expander = page.getByRole("button", { name: `Expand ${CHANNEL}` });
   if (await expander.count()) await expander.first().click();
@@ -340,22 +375,18 @@ test("sets the moving episode up", async ({ page }) => {
 });
 
 test("types the twenty-eight moving beats in", async ({ page }) => {
-  test.setTimeout(60 * 60_000);
+  test.setTimeout(90 * 60_000);
   await page.goto("/story");
   await page.getByRole("combobox", { name: "Switch project" })
     .selectOption({ label: EPISODE });
   await stage(page, "Storyboard");
 
   await page.getByRole("button", { name: "Add Scene" }).click();
-  // Named, not matched by prefix: a re-run after a failure part way through
-  // leaves a scene behind, and two of them make the prefix ambiguous.
   await page.getByRole("button", { name: "Edit scene 1", exact: true }).click();
   await page.getByLabel("Scene title").fill("Marshmallow, moving");
   await page.getByLabel("Scene planned duration in seconds")
     .fill(String(Math.round(TOTAL_SEC)));
   await page.getByRole("button", { name: "Save scene" }).click();
-  // The episode title contains the scene title, so the project switcher's
-  // hidden <option> matches it too. The scene's own row is the evidence.
   await expect(page.getByRole("button", { name: /^Scene 1/ }))
     .toBeVisible({ timeout: 30_000 });
 
@@ -366,15 +397,13 @@ test("types the twenty-eight moving beats in", async ({ page }) => {
     const row = rows.nth(index);
     await row.getByRole("button", { name: /^Edit shot / }).click();
 
-    await page.getByLabel("Shot subject").fill(beat.d.slice(0, 56));
-    await page.getByLabel("Planned duration in seconds")
-      .fill(holdSeconds(beat.t).toFixed(1));
+    await page.getByLabel("Shot subject").fill(`STILL ${index + 1}`);
+    await page.getByLabel("Planned duration in seconds").fill("3.0");
     await page.getByLabel("Image prompt").fill(stillPrompt(beat));
-    // The video prompt is written in the animate pass, not here: the field
-    // only exists where a clip is made, which is deliberate - on a still it
-    // would be a prompt that reaches nothing.
     await page.getByLabel("Shot negative prompt").fill(NEGATIVE);
     await page.getByLabel("Shot workflow").selectOption({ label: IMAGE_WORKFLOW });
+    // It exists to be drawn and handed on, never to be seen in the film.
+    await page.getByLabel("Include this shot in the cut").uncheck();
 
     const attach = page.getByRole("combobox", { name: "Attach reference" });
     const options = await attach.locator("option").allTextContents();
@@ -384,11 +413,6 @@ test("types the twenty-eight moving beats in", async ({ page }) => {
     await page.getByRole("button", { name: "Save", exact: true }).click();
     await expect(page.getByRole("button", { name: "Save", exact: true }))
       .toHaveCount(0);
-
-    await selectShot(page, row);
-    await page.getByLabel("Spoken line").fill(beat.t);
-    await page.getByRole("button", { name: "Save captions" }).click();
-    await expect(page.getByText("Saved. Render again")).toBeVisible();
   }
 });
 
@@ -430,7 +454,7 @@ test("approves the start frames", async ({ page }) => {
 });
 
 test("hands each approved still to image-to-video", async ({ page }) => {
-  test.setTimeout(90 * 60_000);
+  test.setTimeout(120 * 60_000);
   await page.goto("/story");
   await page.getByRole("combobox", { name: "Switch project" })
     .selectOption({ label: EPISODE });
@@ -438,35 +462,52 @@ test("hands each approved still to image-to-video", async ({ page }) => {
   const rows = page.locator("tbody").first().locator("tr");
   await expect(rows).toHaveCount(BEATS.length, { timeout: 60_000 });
 
-  for (let index = 0; index < BEATS.length; index += 1) {
-    const row = rows.nth(index);
-    await selectShot(page, row);
+  for (const [index, beat] of BEATS.entries()) {
+    const position = BEATS.length + index;
+    await page.getByRole("button", { name: "Add Shot" }).first().click();
+    await expect(rows).toHaveCount(position + 1);
+    const row = rows.nth(position);
+    await row.getByRole("button", { name: /^Edit shot / }).click();
 
-    // Bind this shot's own approved still as the frame the clip starts on.
-    // Nothing is chained automatically, and that is the point: the picture a
-    // clip begins from is a decision, not an inference from shot order.
+    await page.getByLabel("Shot subject").fill(`CLIP ${index + 1}`);
+    await page.getByLabel("Planned duration in seconds")
+      .fill(holdSeconds(beat.t).toFixed(1));
+    await page.getByLabel("Generation mode").selectOption("image-to-video");
+    await page.getByLabel("Shot workflow").selectOption({ label: VIDEO_WORKFLOW });
+    await page.getByLabel("Video prompt").fill(motionPrompt(beat));
+    await page.getByLabel("Shot negative prompt").fill(NEGATIVE);
+
+    // The picture it starts on. Nothing is chained automatically, and that is
+    // the point: the frame a clip begins from is a decision, not an inference
+    // from shot order.
     const picker = page.getByLabel("Choose an approved scene image take");
     await expect(picker).toBeVisible({ timeout: 30_000 });
-    const own = (await picker.locator("option").allTextContents())
-      .find((text) => text.includes(`Shot ${index + 1} `)
-        || text.includes(`Shot ${index + 1}·`)
-        || text.includes(`Shot ${index + 1}·`));
-    await picker.selectOption(own ? { label: own } : { index: 1 });
-    await page.getByRole("button", { name: "Use approved scene image as start frame" })
-      .click();
+    const options = await picker.locator("option").allTextContents();
+    const own = options.find((text) => text.includes(`Shot ${index + 1} `));
+    expect(own, `no approved still offered for beat ${index + 1}`).toBeTruthy();
+    await picker.selectOption({ label: own as string });
+    await Promise.all([
+      page.waitForResponse(
+        (response) =>
+          response.request().method() === "POST"
+          && response.url().includes("continuity"),
+        { timeout: 60_000 },
+      ).catch(() => null),
+      page.getByRole("button", { name: "Use approved scene image as start frame" })
+        .click(),
+    ]);
     await expect(page.getByText(/Exact approved scene image/))
       .toBeVisible({ timeout: 60_000 });
 
-    // Only now does it become a video shot: changing the mode first would
-    // make the still it is about to start from a take of the wrong kind.
-    await row.getByRole("button", { name: /^Edit shot / }).click();
-    await page.getByLabel("Generation mode").selectOption("image-to-video");
-    await page.getByLabel("Shot workflow").selectOption({ label: VIDEO_WORKFLOW });
-    // The video prompt field appears with the mode that uses it.
-    await page.getByLabel("Video prompt").fill(motionPrompt(BEATS[index]));
     await page.getByRole("button", { name: "Save", exact: true }).click();
     await expect(page.getByRole("button", { name: "Save", exact: true }))
       .toHaveCount(0);
+
+    // The line belongs to the clip: the clip is what the cut carries.
+    await selectShotWithLine(page, row, "");
+    await page.getByLabel("Spoken line").fill(beat.t);
+    await page.getByRole("button", { name: "Save captions" }).click();
+    await expect(page.getByText("Saved. Render again")).toBeVisible();
   }
 });
 
