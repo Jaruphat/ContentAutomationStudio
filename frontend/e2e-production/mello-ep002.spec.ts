@@ -364,6 +364,27 @@ const REWORK: { n: number; d: string; props?: true }[] = [
     d: "Wide golden hour view of Mello walking away from us along the edge of the misty marsh toward the low sun, seen from behind, small in a big warm landscape. Exactly ONE character in the entire frame and nobody walking with him." },
 ];
 
+/**
+ * The holds, taken from the narration the render measured.
+ *
+ * Planning at 125 words per minute rather than the rate the narrator is asked
+ * for was worth it: seven lines ran past their shot instead of the forty-one
+ * the previous episode produced, and none by more than 1.1s. These are each
+ * line's measured length plus twelve per cent and nine tenths of a second of
+ * air, which takes it to zero.
+ *
+ * Applied to the timeline, not the shots: a still does not change because it
+ * is held longer, but planned duration is part of what decides whether a
+ * shot's picture is current.
+ */
+const MEASURED_HOLDS = [
+  3.5, 8.5, 8.5, 7.5, 5.5, 7, 7, 2.5, 8, 7.5, 7.5, 7.5, 8, 4.5, 6.5, 8, 7,
+  7, 8.5, 7.5, 4.5, 7.5, 8.5, 6.5, 9, 10, 4.5, 7, 7.5, 9, 6.5, 11.5, 5, 6,
+  8.5, 6.5, 9.5, 7, 8, 3.5, 8.5, 8, 7.5, 6.5, 5.5, 4.5, 6.5, 8, 7.5, 6.5,
+  4.5, 8.5, 6.5, 7, 6.5, 8, 6, 7, 5.5, 6.5, 7.5, 6.5, 7, 8.5, 6.5, 6, 7.5,
+  6, 8, 4, 4, 7, 7, 6, 9, 7.5, 6.5, 7.5, 8.5, 9, 5.5, 7.5, 7,
+];
+
 async function stage(page: Page, name: string) {
   await page
     .getByRole("navigation", { name: "Production stages" })
@@ -673,6 +694,11 @@ test("cuts and renders Mello's history", async ({ page }) => {
     .selectOption({ label: EPISODE });
 
   await stage(page, "Review");
+  // Counting the approve controls before the takes have rendered reads zero,
+  // and the cut is then built from nothing - which is exactly what happened.
+  await expect(page.getByRole("button", { name: /^Select take / }).first())
+    .toBeVisible({ timeout: 60_000 });
+
   const batch = page.getByRole("button", { name: /^Approve all \d+ pending/ });
   if (await batch.count()) {
     await batch.click();
@@ -683,6 +709,7 @@ test("cuts and renders Mello's history", async ({ page }) => {
     await approve.first().click();
     await expect(approve).toHaveCount(count - 1, { timeout: 30_000 });
   }
+  await expect(approve).toHaveCount(0, { timeout: 60_000 });
 
   await stage(page, "Timeline");
   await page.getByRole("button", { name: "Build Timeline" }).click();
@@ -694,6 +721,87 @@ test("cuts and renders Mello's history", async ({ page }) => {
   await page.getByRole("button", { name: /Save settings/ }).click();
   await expect(page.getByText(/Saved|saved/).first()).toBeVisible({ timeout: 30_000 });
 
+  await page.getByText("Narrate", { exact: true }).click();
+  await page.getByRole("combobox").filter({ hasText: "OpenAI voice" }).first()
+    .selectOption("openai");
+  await page.getByLabel("Narrator voice").selectOption(NARRATOR_VOICE);
+  const render = page.getByRole("button", { name: "Render Review" });
+  await render.click();
+  await expect(render).toBeDisabled({ timeout: 30_000 });
+  await expect(render).toBeEnabled({ timeout: 60 * 60_000 });
+});
+
+test("re-times Mello's cut to the narration", async ({ page }) => {
+  test.setTimeout(120 * 60_000);
+  await page.goto("/story");
+  await page.getByRole("combobox", { name: "Switch project" })
+    .selectOption({ label: EPISODE });
+  await stage(page, "Timeline");
+  await expect(page.getByText(new RegExp(`${BEATS.length} items`)))
+    .toBeVisible({ timeout: 60_000 });
+
+  /**
+   * Set one clip's span.
+   *
+   * The out point is set before the in point on purpose. A clip's length is
+   * the distance between them, and the build writes them as positions on the
+   * timeline - so zeroing the in point first makes the length the whole
+   * remaining film for as long as it takes the next edit to land. One of those
+   * intermediate states survived a run and left a nine-minute cut claiming to
+   * be twenty-six. Setting the out point first makes the intermediate state
+   * zero instead, which is harmless.
+   */
+  const setSpan = async (clip: number, hold: number) => {
+    const from = page.getByLabel(`Clip ${clip} starts at`);
+    const to = page.getByLabel(`Clip ${clip} ends at`);
+    const commit = async (field: Locator) =>
+      Promise.all([
+        page.waitForResponse(
+          (response) =>
+            response.request().method() === "PUT"
+            && response.url().includes("/timeline"),
+          { timeout: 20_000 },
+        ).catch(() => null),
+        field.blur(),
+      ]);
+    await to.fill(hold.toFixed(1));
+    await commit(to);
+    await from.fill("0");
+    await commit(from);
+  };
+
+  for (const [index, hold] of MEASURED_HOLDS.entries()) {
+    await setSpan(index + 1, hold);
+  }
+
+  // Then check the server's own copy rather than the page's, and repair what
+  // did not land. An edit that silently failed is a cut that does not match
+  // the narration it was measured from.
+  const project = (await (await page.request.get("/api/projects")).json())
+    .find((entry: { title: string }) => entry.title === EPISODE);
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    const manifest = await (
+      await page.request.get(`/api/projects/${project.id}/timeline`)
+    ).json();
+    const wrong = manifest.items
+      .map((item: { order: number; duration_sec: number }, i: number) => ({
+        clip: i + 1,
+        want: MEASURED_HOLDS[i],
+        got: Number(item.duration_sec),
+      }))
+      .filter((row: { want: number; got: number }) => Math.abs(row.want - row.got) > 0.05);
+    if (wrong.length === 0) break;
+    for (const row of wrong) await setSpan(row.clip, row.want);
+    expect(attempt).toBeLessThan(3);
+  }
+
+  const total = MEASURED_HOLDS.reduce((sum, hold) => sum + hold, 0);
+  const settled = await (
+    await page.request.get(`/api/projects/${project.id}/timeline`)
+  ).json();
+  expect(Math.abs(settled.total_duration_sec - total)).toBeLessThan(0.5);
+
+  await page.reload();
   await page.getByText("Narrate", { exact: true }).click();
   await page.getByRole("combobox").filter({ hasText: "OpenAI voice" }).first()
     .selectOption("openai");

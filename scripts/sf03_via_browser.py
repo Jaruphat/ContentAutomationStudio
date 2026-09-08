@@ -109,6 +109,7 @@ PHASES = {
     "mello2-rework": "re-draws the Mello frames that failed",
     "mello2-repair": "re-runs the Mello frames a stray grep rejected",
     "mello2-render": "cuts and renders Mello's history",
+    "mello2-retime": "re-times Mello's cut to the narration",
     "nori-retime": "re-times the cut to the narration",
     "nori-voice": "re-reads the film in a younger voice",
     "nori-breathe": "gives the tight cuts room to breathe",
