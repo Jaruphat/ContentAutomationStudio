@@ -403,31 +403,32 @@ const SECOND_PASS: { n: number; d: string; toCharacter?: true }[] = [
 ];
 
 /**
- * The holds, re-derived from the narration that was actually recorded.
+ * The holds, taken from the narration the render actually recorded.
  *
- * The first cut planned every shot at 135 words per minute plus air. The
- * hosted narrator read the same script at 194 - it does not take the pace it
- * is given - so nothing overran, but forty-three per cent of a nine-minute
- * film was silence: about three seconds of nothing after every sentence.
+ * Not estimated. The render now measures every line against the room it was
+ * given, and the first read by this narrator spoke 485s of audio into 457s of
+ * picture - forty-one lines running past their shot by up to 2.3s. Lines are
+ * mixed at their own cue start, so each of those played on top of the line
+ * after it: two voices at once, which no amount of planning had caught because
+ * nothing outside the log reported it.
  *
- * These are the measured length of each line in that render, plus fifteen per
- * cent (the same voice does not read the same line at the same speed twice)
- * and nine tenths of a second of air, floored at two and a half seconds.
- * Runtime falls from 9:17 to 7:19 and the silence with it.
+ * These are each line's measured length plus twelve per cent (the same voice
+ * does not read the same line twice at the same speed) and nine tenths of a
+ * second of air. The film gets longer because this narrator reads at about 128
+ * words per minute, not the 194 the cut had been built around. A longer film
+ * that can be heard beats a shorter one talking over itself.
  *
- * They are applied to the timeline rather than to the shots. A still does not
+ * They are applied to the timeline rather than to the shots: a still does not
  * change because it is held longer, but a shot's planned duration is part of
- * what decides whether its picture is current - so re-timing through the shots
+ * what decides whether its picture is current, so re-timing through the shots
  * would mark all seventy-nine stale and ask for the film to be drawn again.
- * Where a clip starts and stops is an editing decision, and the timeline is
- * where editing decisions belong.
  */
 const MEASURED_HOLDS = [
-  2.5, 8, 7.5, 6.5, 3.5, 3.5, 7.5, 6, 6.5, 5.5, 8, 2.5, 6, 5.5, 7.5, 4.5,
-  6, 8, 7.5, 6, 5, 4.5, 6.5, 6, 3.5, 4.5, 7, 6.5, 4.5, 3.5, 4.5, 7, 4,
-  5.5, 5, 5, 4.5, 4, 5, 2.5, 6.5, 7.5, 4.5, 5.5, 4.5, 4, 8, 6, 6, 5, 5.5,
-  7, 6, 5, 3, 9.5, 5, 4, 4, 6.5, 4, 6, 7.5, 6.5, 5, 7, 7.5, 7.5, 8, 4, 6,
-  3.5, 4, 5, 5.5, 8, 3, 7.5, 4,
+  3, 12, 11, 9.5, 6, 4.5, 11, 8.5, 8.5, 8, 10.5, 5.5, 8, 8.5, 9.5, 7, 7,
+  10, 9, 7.5, 7, 6, 10.5, 8.5, 5, 5, 9.5, 8.5, 6, 5.5, 6.5, 11, 5.5, 8,
+  6.5, 8, 7, 7, 7.5, 5, 8.5, 10, 6, 9, 6.5, 5.5, 10, 9, 8, 7, 8, 10.5, 8,
+  8, 4.5, 11, 8, 5.5, 6.5, 9.5, 6.5, 7, 8.5, 9, 6.5, 7.5, 12, 9, 10.5, 5,
+  7.5, 4.5, 6.5, 7, 8.5, 11, 4, 10.5, 5,
 ];
 
 /**
