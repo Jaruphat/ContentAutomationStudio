@@ -77,6 +77,12 @@ class NarrationTrack:
     overrun_sec: list[float] = field(default_factory=list)
     #: Lines the speech engine refused. One bad line costs that line only.
     failures: list[str] = field(default_factory=list)
+    #: How long each line actually took, against the room it was given, in
+    #: program order. Planning a cut from an estimate and then never measuring
+    #: it is how thirty-eight lines of one episode came to overlap the line
+    #: after them: a hosted narrator does not read at the rate it is asked to,
+    #: so the only honest length is the one that came back.
+    lines: list[dict[str, Any]] = field(default_factory=list)
 
 
 class NarrationError(RuntimeError):
@@ -227,10 +233,15 @@ def build_track(
     overruns: list[str] = []
     overrun_sec: list[float] = []
     failures: list[str] = []
+    measured: list[dict[str, Any]] = []
 
     with tempfile.TemporaryDirectory(prefix="cas-narration-") as work_dir:
-        for index, cue in enumerate(speakable):
-            text = cue.text.strip()
+        # Numbered against the whole cue list, not the speakable subset, so a
+        # measurement names the timeline position an editor would go and change.
+        for index, cue in enumerate(cues):
+            text = (cue.text or "").strip()
+            if not text:
+                continue
             clip_path = os.path.join(work_dir, f"line-{index:03d}.wav")
             try:
                 spoken_sec = voice.speak(text, clip_path)
@@ -241,6 +252,11 @@ def build_track(
                 continue
 
             available = max(0.0, cue.end_sec - cue.start_sec)
+            measured.append({
+                "order": index + 1,
+                "spoken_sec": round(spoken_sec, 2),
+                "available_sec": round(available, 2),
+            })
             if spoken_sec > available + 0.25:
                 overruns.append(text)
                 overrun_sec.append(round(spoken_sec - available, 2))
@@ -269,6 +285,7 @@ def build_track(
         overruns=overruns,
         overrun_sec=overrun_sec,
         failures=failures,
+        lines=measured,
     )
 
 
@@ -306,5 +323,9 @@ def describe(track: NarrationTrack | None) -> dict[str, Any]:
         "present": True,
         "duration_sec": round(track.duration_sec, 3),
         "overruns": track.overruns,
+        "overrun_sec": track.overrun_sec,
         "failures": track.failures,
+        # What each line actually took, so the next cut can be made from the
+        # read rather than from an estimate of it.
+        "lines": track.lines,
     }

@@ -1000,11 +1000,15 @@ test("re-reads the film in a younger voice", async ({ page }) => {
  * those eight are lengthened, to a full second. Re-timing all seventy-nine
  * from this read would have added a minute back for no reason.
  */
+/* Measured against the sage read. Every change of narrator moves this set:
+   the previous voice left eight shots with no air and this one leaves ten, in
+   different places. It is measured after each render, never guessed. */
 const TIGHT_CUTS: Record<number, number> = {
-  7: 8.5, 12: 3.5, 29: 5.5, 30: 4.0, 40: 3.5, 45: 5.5, 55: 4.0, 72: 4.5,
+  8: 7.0, 31: 5.5, 34: 6.5, 35: 6.0, 47: 9.0,
+  58: 5.0, 59: 5.0, 61: 5.0, 68: 8.5, 75: 6.5,
 };
 
-test("gives the eight tight cuts room to breathe", async ({ page }) => {
+test("gives the tight cuts room to breathe", async ({ page }) => {
   test.setTimeout(120 * 60_000);
   await page.goto("/story");
   await page.getByRole("combobox", { name: "Switch project" })

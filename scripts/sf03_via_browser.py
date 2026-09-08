@@ -104,7 +104,7 @@ PHASES = {
     "nori-render": "cuts and renders Nori's history",
     "nori-retime": "re-times the cut to the narration",
     "nori-voice": "re-reads the film in a younger voice",
-    "nori-breathe": "gives the eight tight cuts room to breathe",
+    "nori-breathe": "gives the tight cuts room to breathe",
 }
 
 

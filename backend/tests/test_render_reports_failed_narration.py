@@ -125,3 +125,46 @@ def test_a_clean_render_still_passes(
     assert result["rendered"] is True
     assert record["warnings"] == []
     assert record["delivery_validation"]["pipeline_pass"] is True
+
+
+class _PacedVoice:
+    """Reads at a fixed rate, so a line's length is known in advance."""
+
+    def __init__(self, seconds: float):
+        self.seconds = seconds
+
+    def speak(self, text: str, out_path: str) -> float:
+        import wave
+
+        frames = int(narration.SAMPLE_RATE * self.seconds)
+        with wave.open(out_path, "wb") as handle:
+            handle.setnchannels(1)
+            handle.setsampwidth(2)
+            handle.setframerate(narration.SAMPLE_RATE)
+            handle.writeframes(b"\x01\x00" * frames)
+        return self.seconds
+
+
+def test_the_record_says_how_long_each_line_took(
+    db_session, sample_project, sample_shot, tmp_path
+):
+    # The shot is held four seconds; the narrator takes six. Planning a cut
+    # from an estimate and never measuring it is how thirty-eight lines of one
+    # episode came to overlap the line after them.
+    _one_shot_film(db_session, sample_project, sample_shot, tmp_path)
+
+    result = render_service.render_review_video(
+        db_session, sample_project.id, narrate=True, voice=_PacedVoice(6.0)
+    )
+
+    with open(result["provenance_path"], encoding="utf-8") as handle:
+        record = json.load(handle)
+
+    spoken = record["render_settings"]["narration"]
+    assert spoken["lines"] == [
+        {"order": 1, "spoken_sec": 6.0, "available_sec": 4.0}
+    ]
+    assert spoken["overrun_sec"] == [2.0]
+    # An overrun is a real defect: the next line starts on time regardless, so
+    # the two are mixed on top of each other.
+    assert any("run past the shot" in w for w in record["warnings"])
