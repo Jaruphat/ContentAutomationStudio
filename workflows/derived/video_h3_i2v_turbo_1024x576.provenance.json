@@ -1,0 +1,17 @@
+{
+ "derived_from": "c72f759e-592c-4999-b28a-063ba421c451_H3_I2V_probe_turbo_576x1024.json",
+ "why": "The registered turbo image-to-video graph is hard-wired to 576x1024. Its ResolutionSelector node is not what the H3 node reads - setting the selector to 16:9 and running it still returned a portrait clip - so the width and height on MiniMaxH3ImageToVideo itself are what decide the frame, and they are set to the landscape delivery here.",
+ "changes": {
+  "105:104.width": 1024,
+  "105:104.height": 576,
+  "115.aspect_ratio": "16:9 (Widescreen)"
+ },
+ "measured": {
+  "probe": "one 124-frame clip from an approved Mello still",
+  "seconds_per_clip": 230.1,
+  "clip_seconds": 5.17,
+  "gpu_seconds_per_film_second": 44.5,
+  "character_survived": true,
+  "notes": "The character kept its body, face, scarf, backpack and limbs for the whole clip, which image-to-video had destroyed on the ink stick figure. It ignored every instruction about what not to do - told to stay seated it stood up and walked - so motion has to be written as what happens, never as what must not."
+ }
+}
