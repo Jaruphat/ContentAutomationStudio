@@ -22,6 +22,8 @@ from app.models import (
     Take,
     Workflow,
 )
+from pydantic import BaseModel
+
 from app.schemas import (
     GenerateRequest,
     GenerationEstimate,
@@ -29,6 +31,7 @@ from app.schemas import (
     GenerationRunSummary,
     PreflightResult,
     QueueStatus,
+    ShotResponse,
 )
 from app.services import (
     continuity,
@@ -36,6 +39,7 @@ from app.services import (
     generation_runs,
     job_payload,
     dialogue_fit,
+    motion,
     media_providers,
     motion_direction,
     prompt_context,
@@ -1024,3 +1028,81 @@ def resume_queue(project_id: str, db: Session = Depends(get_db)):
     db.commit()
     queue_manager.resume(project_id)
     return queue_manager.get_queue_status(project_id)
+
+
+# ---------------------------------------------------------------------------
+# Motion - approved stills, animated
+# ---------------------------------------------------------------------------
+
+class MotionCandidate(BaseModel):
+    """One approved still, and whether it is moving yet."""
+
+    shot_id: str
+    scene_id: str
+    shot_order: int
+    shot_label: str
+    subject: str
+    dialogue: str
+    planned_duration_sec: float
+    take_id: str
+    take_url: str
+    in_cut: bool
+    clip_shot_id: str | None
+    clip_status: str
+
+
+class MotionClipRequest(BaseModel):
+    """Animate one approved still."""
+
+    model_config = {"extra": "forbid"}
+
+    take_id: str
+    #: What happens in the clip. Written as a thing that happens: the model
+    #: does not take instructions about what not to do.
+    video_prompt: str
+    #: Seconds. This is the frame count as much as the hold, so it is what the
+    #: clip costs to generate.
+    duration_sec: float = 0.0
+    workflow_id: str = ""
+
+
+@router.get(
+    "/api/projects/{project_id}/motion",
+    response_model=list[MotionCandidate],
+    tags=["generation"],
+)
+def list_motion_candidates(project_id: str, db: Session = Depends(get_db)):
+    """Every approved still in this project, in the order the film reads."""
+    _get_project_or_404(db, project_id)
+    return [MotionCandidate(**row) for row in motion.candidates(db, project_id)]
+
+
+@router.post(
+    "/api/projects/{project_id}/motion/clips",
+    response_model=ShotResponse,
+    status_code=201,
+    tags=["generation"],
+)
+def create_motion_clip(
+    project_id: str,
+    payload: MotionClipRequest,
+    db: Session = Depends(get_db),
+):
+    """Make the clip that animates an approved still, and wire it up.
+
+    One request, because the parts a user would otherwise have to do by hand -
+    a second shot, the still taken off the cut, the start frame captured and
+    bound - are bookkeeping, not decisions.
+    """
+    project = _get_project_or_404(db, project_id)
+    workflow_id = payload.workflow_id or (project.default_video_workflow_id or "")
+    try:
+        clip = motion.create_clip(
+            db, project_id, payload.take_id,
+            video_prompt=payload.video_prompt,
+            duration_sec=payload.duration_sec,
+            workflow_id=workflow_id,
+        )
+    except motion.MotionError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return clip

@@ -5,6 +5,7 @@
 
 import axios from "axios";
 import type {
+  MotionCandidate,
   BatchReviewResult,
   ChannelAnalytics,
   Premise,
@@ -411,6 +412,28 @@ export const workflows = {
 };
 
 // ── Generation ───────────────────────────────────────────────────────────
+
+export const motion = {
+  /** Every approved still in the project, and whether it is moving yet. */
+  candidates: (projectId: string) =>
+    http
+      .get<MotionCandidate[]>(`/projects/${projectId}/motion`)
+      .then((r) => r.data),
+
+  /** Make the clip that animates one approved still, and wire it up. */
+  animate: (
+    projectId: string,
+    body: {
+      take_id: string;
+      video_prompt: string;
+      duration_sec: number;
+      workflow_id?: string;
+    },
+  ) =>
+    http
+      .post<Shot>(`/projects/${projectId}/motion/clips`, body)
+      .then((r) => r.data),
+};
 
 export const generation = {
   preflight: (projectId: string) =>
@@ -910,3 +933,22 @@ const api = {
 };
 
 export default api;
+
+
+export interface ProductionRun {
+  id: string; project_id: string; status: string; stage: string; error: string;
+  cancel_requested: boolean; created_at: string; updated_at: string;
+  settings: { concept: string; title: string; shot_count: number; duration_sec: number; narrate: boolean };
+  result: { rendered?: boolean; duration_sec?: number; warnings?: string[]; human_reviewed?: boolean };
+}
+export interface ProductionReadiness {
+  ready: boolean; blockers: string[]; text_provider: string; voice_configured: boolean;
+  workflows: { id: string; name: string; purpose: string }[]; stages: string[];
+}
+export const production = {
+  readiness: () => http.get<ProductionReadiness>("/production/readiness").then(r => r.data),
+  list: () => http.get<ProductionRun[]>("/production").then(r => r.data),
+  start: (data: Record<string, unknown>) => http.post<ProductionRun>("/production", data).then(r => r.data),
+  cancel: (id: string) => http.post<ProductionRun>(`/production/${id}/cancel`).then(r => r.data),
+  resume: (id: string) => http.post<ProductionRun>(`/production/${id}/resume`).then(r => r.data),
+};

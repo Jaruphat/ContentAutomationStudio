@@ -379,6 +379,9 @@ export interface Shot {
 export type WorkflowSourceFormat = "api" | "ui" | "unknown";
 
 export interface Workflow {
+  preview_take_id?: string;
+  preview_url?: string;
+  preview_status?: string;
   id: string;
   name: string;
   purpose: WorkflowPurpose;
@@ -1261,4 +1264,20 @@ export interface ChannelAnalytics {
   }[]>;
   winner: Record<string, unknown>;
   winner_by_hook: Record<string, unknown>;
+}
+
+/** One approved still on the Motion stage, and whether it is moving yet. */
+export interface MotionCandidate {
+  shot_id: string;
+  scene_id: string;
+  shot_order: number;
+  shot_label: string;
+  subject: string;
+  dialogue: string;
+  planned_duration_sec: number;
+  take_id: string;
+  take_url: string;
+  in_cut: boolean;
+  clip_shot_id: string | null;
+  clip_status: string;
 }

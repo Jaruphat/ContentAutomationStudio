@@ -15,6 +15,7 @@ import {
   LayoutGrid,
   Zap,
   CheckCircle,
+  Clapperboard,
   Film,
   Download,
   Settings2,
@@ -22,7 +23,7 @@ import {
   Sun,
   Moon,
   PanelRight,
-  Radio,
+  Sparkles,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useTheme, type ThemePreference } from "../theme";
@@ -35,11 +36,12 @@ interface Stage {
 }
 
 const stages: Stage[] = [
-  { label: "Channel", path: "/channel", icon: Radio },
+  { label: "Create", path: "/create", icon: Sparkles },
   { label: "Story", path: "/story", icon: BookOpen },
   { label: "Storyboard", path: "/storyboard", icon: LayoutGrid },
   { label: "Generate", path: "/generate", icon: Zap },
   { label: "Review", path: "/review", icon: CheckCircle },
+  { label: "Motion", path: "/motion", icon: Clapperboard },
   { label: "Timeline", path: "/timeline", icon: Film },
   { label: "Export", path: "/export", icon: Download },
   { label: "Workflows", path: "/workflows", icon: Settings2 },
@@ -135,10 +137,10 @@ export default function StageRail({
     return (
       <nav
         aria-label="Production stages"
-        className="flex shrink-0 items-stretch border-t border-zinc-800 bg-zinc-950 select-none"
+        className="flex shrink-0 items-stretch overflow-x-auto border-t border-zinc-800 bg-zinc-950 select-none"
       >
         {stages.map((s) => {
-          const active = location.pathname.startsWith(s.path);
+          const active = location.pathname === s.path;
           const Icon = s.icon;
 
           return (
@@ -147,7 +149,7 @@ export default function StageRail({
               onClick={() => navigate(s.path)}
               aria-current={active ? "page" : undefined}
               title={s.label}
-              className={`flex min-w-0 flex-1 flex-col items-center justify-center gap-1 px-0.5 py-2 transition-colors ${
+              className={`flex min-w-[64px] flex-1 flex-col items-center justify-center gap-1 px-0.5 py-2 transition-colors ${
                 active ? "text-indigo-400" : "text-zinc-400 active:bg-zinc-800/60"
               }`}
               /* 52px keeps the tap target above the 44px minimum on a 390px
@@ -176,7 +178,7 @@ export default function StageRail({
 
       <div className="flex flex-1 flex-col gap-1 self-stretch">
         {stages.map((s) => {
-          const active = location.pathname.startsWith(s.path);
+          const active = location.pathname === s.path;
           const Icon = s.icon;
 
           return (
