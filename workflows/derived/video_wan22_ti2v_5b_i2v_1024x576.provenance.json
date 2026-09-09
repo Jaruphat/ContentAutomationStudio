@@ -1,0 +1,43 @@
+{
+ "model": "Wan 2.2 TI2V 5B",
+ "files": {
+  "diffusion_models": "wan2.2_ti2v_5B_fp16.safetensors (9.31 GB)",
+  "text_encoders": "umt5_xxl_fp8_e4m3fn_scaled.safetensors (6.27 GB)",
+  "vae": "wan2.2_vae.safetensors (1.31 GB)",
+  "source": "Comfy-Org/Wan_2.2_ComfyUI_Repackaged, split_files/"
+ },
+ "why": "MiniMax H3 generates a soundtrack alongside the picture - it loads a video VAE and an audio VAE and decodes both - and this pipeline throws that audio away, because a narrated film is rendered voice only. Every second of it was wasted GPU. Wan makes picture alone.",
+ "measured": {
+  "machine": "RTX 5080, ComfyUI 0.34.0",
+  "same_start_frame_as_h3_probe": true,
+  "size": "1024x576",
+  "h3_turbo_8_step": {
+   "frames": 124,
+   "seconds": 225,
+   "per_frame": 1.78
+  },
+  "wan_20_step": {
+   "frames": 121,
+   "seconds": 160.2,
+   "per_frame": 1.32
+  },
+  "wan_10_step": {
+   "frames": 121,
+   "seconds": 90.1,
+   "per_frame": 0.74
+  },
+  "wan_6_step": {
+   "frames": 121,
+   "seconds": 70.1,
+   "per_frame": 0.58
+  },
+  "notes": "The character held its body, face, scarf, backpack and limbs at every step count. More than that, Wan obeyed the direction H3 ignored: told to stay seated it stayed seated, where H3 on the same frame stood the character up and walked him at the camera. Ten steps is indistinguishable from twenty here; six is slightly flatter in the face and still usable."
+ },
+ "settings": {
+  "sampler": "uni_pc",
+  "scheduler": "simple",
+  "cfg": 5.0,
+  "shift": 8.0,
+  "fps": 24
+ }
+}
