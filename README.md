@@ -27,7 +27,7 @@ git clone <this repo> && cd ContentAutomationStudio
 cp .env.example .env                 # defaults are fine; nothing needs filling in
 
 cd backend
-python -m venv .venv && .venv\Scriptsctivate   # Linux/macOS: source .venv/bin/activate
+python -m venv .venv && .venv\Scripts\activate   # Linux/macOS: source .venv/bin/activate
 pip install -r requirements.txt
 python -m uvicorn app.main:app --host 127.0.0.1 --port 8001
 
