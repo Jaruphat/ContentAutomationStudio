@@ -179,8 +179,6 @@ def test_narration_only_drops_the_takes_own_audio(
     Ducking it under a narrator leaves two soundtracks arguing, and muting
     every shot one at a time to say "just the voice" is not a setting.
     """
-    from app.models import Take
-
     path = synthesise_clip(
         os.path.join(str(tmp_path), "clip.mp4"),
         with_audio=True, duration=2.0, frame_rate=24.0,

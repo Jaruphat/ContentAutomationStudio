@@ -250,20 +250,6 @@ async function stage(page: Page, name: string) {
     .click();
 }
 
-async function selectShot(page: Page, row: Locator) {
-  const line = page.getByLabel("Spoken line");
-  for (let attempt = 0; attempt < 5; attempt += 1) {
-    await row.click();
-    try {
-      await expect(line).toHaveValue("", { timeout: 4000 });
-      return;
-    } catch {
-      // Still showing the shot before this one.
-    }
-  }
-  throw new Error("The inspector never followed the row that was clicked.");
-}
-
 /**
  * Click a row and wait for the inspector to actually be showing that shot.
  *

@@ -16,7 +16,7 @@ import uuid
 
 import pytest
 
-from app.models import Scene, Shot, Take
+from app.models import Take
 from app.services import continuity_frames, motion, revisions
 
 

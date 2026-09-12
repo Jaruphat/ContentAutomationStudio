@@ -890,13 +890,17 @@ def render_review_video(
         except Exception as exc:  # a voice engine is not worth losing a render
             warnings.append(f"Narration could not be produced: {exc}")
         narration_report = narration.describe(track)
-        narration_report["voice"] = {
-            "provider": "openai" if getattr(voice, "model", "") not in ("", "system") else "system",
-            "model": getattr(voice, "model", "system"),
-            "name": getattr(voice, "voice", "system"),
-            "instructions": getattr(voice, "instructions", ""),
-            "usage": dict(getattr(voice, "usage", {}) or {}),
-        }
+        # Who read the film is provenance only if the film was read. A project
+        # with no dialogue reports "no narration", not the voice it would have
+        # used if there had been any.
+        if narration_report.get("present"):
+            narration_report["voice"] = {
+                "provider": "openai" if getattr(voice, "model", "") not in ("", "system") else "system",
+                "model": getattr(voice, "model", "system"),
+                "name": getattr(voice, "voice", "system"),
+                "instructions": getattr(voice, "instructions", ""),
+                "usage": dict(getattr(voice, "usage", {}) or {}),
+            }
         if track is not None:
             narrated = os.path.join(out_dir, "review.narrated.mp4")
             if keep_audio:
