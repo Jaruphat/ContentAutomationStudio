@@ -20,6 +20,34 @@ Implementation checks and the YouTube pilot: [production report](docs/PRODUCTION
 
 ---
 
+## What it makes
+
+![Two consecutive shots from MELLO EP003: the same marshmallow character, drawn separately for each shot, animated from its own approved still](docs/media/marshmallow-moving.gif)
+
+Six seconds spanning one cut. The two shots were drawn independently and
+animated separately, and the character holds its shape, colours, scarf and
+backpack across the join -- which is the problem this application exists to
+solve. Subtitles are burned in by the render.
+
+Five films have been produced end to end with it:
+
+| Film | Length | Made of |
+|------|--------|---------|
+| MELLO EP003 — Marshmallow, Moving | 3:19 | stills animated into clips, narrated, subtitled |
+| NORI EP001 — The Rice Ball Is Older Than The Bowl | 10:13 | 79 narrated lines over reference-conditioned stills |
+| MELLO EP002 — The Name That Outlived The Plant | 9:38 | one character, one world, narrated throughout |
+| The Boy Who Swept the Sky | 3:04 | vertical 576x1024 |
+| The Cartographer of Small Things | 3:04 | the first full pass through the pipeline |
+
+The films themselves are attached to the
+[releases](../../releases) rather than committed, so cloning this
+repository does not drag a hundred megabytes of video with it. A frame-by-frame
+[contact sheet](docs/release_evidence/2026-09-05/short-film/contact-sheet.png)
+and the measurements behind each run are under
+[docs/release_evidence/](docs/release_evidence/).
+
+---
+
 ## Quick start
 
 ```bash
