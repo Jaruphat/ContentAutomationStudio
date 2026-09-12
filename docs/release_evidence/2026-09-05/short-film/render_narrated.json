@@ -1,7 +1,7 @@
 {
   "project_id": "cb5ffdc1-c54e-4d22-adfa-aa82ba26664b",
   "rendered": true,
-  "output_path": "C:\\Users\\jongp\\Desktop\\Thinkpad_and_PC_Sync\\ContentAutomationStudio\\backend\\data\\exports\\cb5ffdc1-c54e-4d22-adfa-aa82ba26664b\\review.mp4",
+  "output_path": "<REPO>\\backend\\data\\exports\\cb5ffdc1-c54e-4d22-adfa-aa82ba26664b\\review.mp4",
   "reason": "",
   "warnings": [
     "Audio could not reach -16 LUFS without exceeding the true-peak ceiling; measured -16.69 LUFS and -0.22 dBTP."
@@ -20,7 +20,7 @@
     "overruns": [],
     "failures": []
   },
-  "provenance_path": "C:\\Users\\jongp\\Desktop\\Thinkpad_and_PC_Sync\\ContentAutomationStudio\\backend\\data\\exports\\cb5ffdc1-c54e-4d22-adfa-aa82ba26664b\\review.provenance.json",
+  "provenance_path": "<REPO>\\backend\\data\\exports\\cb5ffdc1-c54e-4d22-adfa-aa82ba26664b\\review.provenance.json",
   "embedded_metadata_keys": [],
   "metadata_status": "clean",
   "warning_metadata": [],

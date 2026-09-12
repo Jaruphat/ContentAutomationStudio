@@ -10,7 +10,7 @@
     "aspect_ratio": "16:9"
   },
   "output": {
-    "path": "C:\\Users\\jongp\\Desktop\\Thinkpad_and_PC_Sync\\ContentAutomationStudio\\backend\\data\\exports\\2b04f988-cab0-4973-b570-3e3d76aae215\\review.mp4",
+    "path": "<REPO>\\backend\\data\\exports\\2b04f988-cab0-4973-b570-3e3d76aae215\\review.mp4",
     "filename": "review.mp4",
     "sha256": "fa74e743cef1e2ad1dc98df1f07d40ff53e05ec1adab521267c4845740d75033",
     "size_bytes": 483407,
@@ -62,7 +62,7 @@
       "duration_sec": 5.167,
       "take": {
         "id": "1296ab3e-a0d0-425c-968c-36843585d572",
-        "source_path": "C:\\Users\\jongp\\Desktop\\Thinkpad_and_PC_Sync\\ContentAutomationStudio\\backend\\data\\generated\\cbf580d1-4471-4fe5-a2d9-28fac8a3ec88_2b04f988_def687d6_00001_.mp4",
+        "source_path": "<REPO>\\backend\\data\\generated\\cbf580d1-4471-4fe5-a2d9-28fac8a3ec88_2b04f988_def687d6_00001_.mp4",
         "source_sha256": "1a881c2202530005422ad059cc9be8b8d6ea4ac43c16024f12a36d6a883f2d7d",
         "probe": {
           "width": 864,
@@ -95,7 +95,7 @@
         "seed": 42,
         "comfyui_prompt_id": "cbf580d1-4471-4fe5-a2d9-28fac8a3ec88",
         "attempts": 1,
-        "workflow_snapshot_path": "C:\\Users\\jongp\\Desktop\\Thinkpad_and_PC_Sync\\ContentAutomationStudio\\backend\\data\\snapshots\\90cca932-062a-436d-a2a0-7858257aa666.json",
+        "workflow_snapshot_path": "<REPO>\\backend\\data\\snapshots\\90cca932-062a-436d-a2a0-7858257aa666.json",
         "workflow_sha256": "06392e8508554ce7b9cbefc8ae1ebc59e12e7019c3d04d372ad11a4864030088"
       },
       "workflow": {

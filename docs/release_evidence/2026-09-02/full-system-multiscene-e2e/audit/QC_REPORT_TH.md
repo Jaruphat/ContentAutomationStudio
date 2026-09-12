@@ -95,22 +95,22 @@
 ## คำสั่งหลักที่ใช้ (exact)
 
 ```bash
-sha256sum "C:/Users/jongp/Desktop/Thinkpad_and_PC_Sync/ContentAutomationStudio/backend/data/exports/5df52248-ce4b-4a76-8c81-a436b21b6b46/review.mp4" "C:/Users/jongp/Desktop/Thinkpad_and_PC_Sync/ContentAutomationStudio/backend/data/generated/e909fb3a-00b8-490b-aaa0-a9bab4f8873a_5df52248_add1126f_00001_.png" "C:/Users/jongp/Desktop/Thinkpad_and_PC_Sync/ContentAutomationStudio/backend/data/generated/87f6aff0-a2ef-46e9-8956-7418d9fa26a0_5df52248_9b56cb9b_00001_.mp4" "C:/Users/jongp/Desktop/Thinkpad_and_PC_Sync/ContentAutomationStudio/backend/data/generated/32c1fc90-9a42-426a-97cc-9f205a1897e1_5df52248_fef81802_00002_.png" "C:/Users/jongp/Desktop/Thinkpad_and_PC_Sync/ContentAutomationStudio/backend/data/generated/9dd9a330-2ff8-4c91-93c3-2b1e76a08e54_5df52248_fef81802_00001_.png"
+sha256sum "<REPO>/backend/data/exports/5df52248-ce4b-4a76-8c81-a436b21b6b46/review.mp4" "<REPO>/backend/data/generated/e909fb3a-00b8-490b-aaa0-a9bab4f8873a_5df52248_add1126f_00001_.png" "<REPO>/backend/data/generated/87f6aff0-a2ef-46e9-8956-7418d9fa26a0_5df52248_9b56cb9b_00001_.mp4" "<REPO>/backend/data/generated/32c1fc90-9a42-426a-97cc-9f205a1897e1_5df52248_fef81802_00002_.png" "<REPO>/backend/data/generated/9dd9a330-2ff8-4c91-93c3-2b1e76a08e54_5df52248_fef81802_00001_.png"
 
-ffprobe -v error -show_format -show_streams -show_programs -show_chapters -print_format json "C:/Users/jongp/Desktop/Thinkpad_and_PC_Sync/ContentAutomationStudio/backend/data/exports/5df52248-ce4b-4a76-8c81-a436b21b6b46/review.mp4"
+ffprobe -v error -show_format -show_streams -show_programs -show_chapters -print_format json "<REPO>/backend/data/exports/5df52248-ce4b-4a76-8c81-a436b21b6b46/review.mp4"
 
 ffprobe -v error -count_frames -count_packets -show_entries format=duration,size,bit_rate:stream=index,codec_name,codec_type,width,height,pix_fmt,r_frame_rate,avg_frame_rate,start_time,duration,nb_frames,nb_read_frames,nb_read_packets,sample_rate,channels,channel_layout -of default=noprint_wrappers=1 "<review-or-segment-path>"
 
-ffmpeg -v error -xerror -i "C:/Users/jongp/Desktop/Thinkpad_and_PC_Sync/ContentAutomationStudio/backend/data/exports/5df52248-ce4b-4a76-8c81-a436b21b6b46/review.mp4" -map 0 -f null -
+ffmpeg -v error -xerror -i "<REPO>/backend/data/exports/5df52248-ce4b-4a76-8c81-a436b21b6b46/review.mp4" -map 0 -f null -
 
-ffmpeg -hide_banner -nostats -i "C:/Users/jongp/Desktop/Thinkpad_and_PC_Sync/ContentAutomationStudio/backend/data/exports/5df52248-ce4b-4a76-8c81-a436b21b6b46/review.mp4" -af loudnorm=I=-16:TP=-1.5:LRA=11:print_format=json -f null -
+ffmpeg -hide_banner -nostats -i "<REPO>/backend/data/exports/5df52248-ce4b-4a76-8c81-a436b21b6b46/review.mp4" -af loudnorm=I=-16:TP=-1.5:LRA=11:print_format=json -f null -
 
-ffmpeg -hide_banner -nostats -i "C:/Users/jongp/Desktop/Thinkpad_and_PC_Sync/ContentAutomationStudio/backend/data/exports/5df52248-ce4b-4a76-8c81-a436b21b6b46/review.mp4" -af "silencedetect=noise=-50dB:d=0.25,astats=metadata=1:reset=0" -f null -
+ffmpeg -hide_banner -nostats -i "<REPO>/backend/data/exports/5df52248-ce4b-4a76-8c81-a436b21b6b46/review.mp4" -af "silencedetect=noise=-50dB:d=0.25,astats=metadata=1:reset=0" -f null -
 
-ffmpeg -hide_banner -nostats -i "C:/Users/jongp/Desktop/Thinkpad_and_PC_Sync/ContentAutomationStudio/backend/data/exports/5df52248-ce4b-4a76-8c81-a436b21b6b46/review.mp4" -vf "blackdetect=d=0.04:pix_th=0.10,freezedetect=n=-50dB:d=0.20" -an -f null -
+ffmpeg -hide_banner -nostats -i "<REPO>/backend/data/exports/5df52248-ce4b-4a76-8c81-a436b21b6b46/review.mp4" -vf "blackdetect=d=0.04:pix_th=0.10,freezedetect=n=-50dB:d=0.20" -an -f null -
 
-python "C:/Users/jongp/Desktop/Thinkpad_and_PC_Sync/ContentAutomationStudio/docs/release_evidence/2026-09-02/full-system-multiscene-e2e/audit/qc_visual_analysis.py"
-python "C:/Users/jongp/Desktop/Thinkpad_and_PC_Sync/ContentAutomationStudio/docs/release_evidence/2026-09-02/full-system-multiscene-e2e/audit/qc_technical_analysis.py"
+python "<REPO>/docs/release_evidence/2026-09-02/full-system-multiscene-e2e/audit/qc_visual_analysis.py"
+python "<REPO>/docs/release_evidence/2026-09-02/full-system-multiscene-e2e/audit/qc_technical_analysis.py"
 ```
 
 หมายเหตุ: คำสั่งเต็มพร้อม path/redirect และ stdout/stderr จริงอยู่ในไฟล์หลักฐานหมายเลข `00–19`; scripts บันทึก exact ffmpeg/ffprobe subprocess arguments และสร้างหลักฐานเฉพาะใต้โฟลเดอร์ audit นี้เท่านั้น

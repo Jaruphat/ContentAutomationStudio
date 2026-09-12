@@ -10,7 +10,7 @@
     "aspect_ratio": "9:5"
   },
   "output": {
-    "path": "C:\\Users\\jongp\\Desktop\\Thinkpad_and_PC_Sync\\ContentAutomationStudio\\backend\\data\\exports\\db99b7fe-73a9-41ed-9922-018043fdbd12\\review.mp4",
+    "path": "<REPO>\\backend\\data\\exports\\db99b7fe-73a9-41ed-9922-018043fdbd12\\review.mp4",
     "filename": "review.mp4",
     "sha256": "fc16ac7ad5d0e795377b6c74dd0abdc0cbb44bff2aeb5712fdd1b91d3cc43590",
     "size_bytes": 165924,
@@ -66,7 +66,7 @@
       "duration_sec": 3.0,
       "take": {
         "id": "6f28de40-2732-4fce-b6b4-8d4fe85deb38",
-        "source_path": "C:\\Users\\jongp\\Desktop\\Thinkpad_and_PC_Sync\\ContentAutomationStudio\\backend\\data\\generated\\c98a79f0-8478-4486-9415-c27c6c5a0a77_db99b7fe_0a68764d_00001.png",
+        "source_path": "<REPO>\\backend\\data\\generated\\c98a79f0-8478-4486-9415-c27c6c5a0a77_db99b7fe_0a68764d_00001.png",
         "source_sha256": "aab3744800d78f329a135c24f5988b9af7586d9851596bdbc279b202dba7edeb",
         "probe": {
           "width": 864,
@@ -97,7 +97,7 @@
         "seed": 42,
         "comfyui_prompt_id": "c98a79f0-8478-4486-9415-c27c6c5a0a77",
         "attempts": 1,
-        "workflow_snapshot_path": "C:\\Users\\jongp\\Desktop\\Thinkpad_and_PC_Sync\\ContentAutomationStudio\\backend\\data\\snapshots\\c59813fd-5999-4e88-9a35-24986d855915.json",
+        "workflow_snapshot_path": "<REPO>\\backend\\data\\snapshots\\c59813fd-5999-4e88-9a35-24986d855915.json",
         "workflow_sha256": "05d08b4b3485b4d8d20a5b575a492686efbf74cf7688a0d28e438ca604751a54"
       },
       "workflow": {
@@ -115,7 +115,7 @@
       "duration_sec": 3.0,
       "take": {
         "id": "2ff0eb61-c047-4ff9-95ee-8ab5190dc265",
-        "source_path": "C:\\Users\\jongp\\Desktop\\Thinkpad_and_PC_Sync\\ContentAutomationStudio\\backend\\data\\generated\\c2d05f05-d681-4a90-97da-b41518df3b5f_db99b7fe_804aece3_00002.png",
+        "source_path": "<REPO>\\backend\\data\\generated\\c2d05f05-d681-4a90-97da-b41518df3b5f_db99b7fe_804aece3_00002.png",
         "source_sha256": "b3d16e0eba583c47219db38226b0de7b3683c9ab42ab3008ab69f98dc519b00d",
         "probe": {
           "width": 864,
@@ -146,7 +146,7 @@
         "seed": 2088741429,
         "comfyui_prompt_id": "c2d05f05-d681-4a90-97da-b41518df3b5f",
         "attempts": 1,
-        "workflow_snapshot_path": "C:\\Users\\jongp\\Desktop\\Thinkpad_and_PC_Sync\\ContentAutomationStudio\\backend\\data\\snapshots\\b2c141ce-286c-4d99-9e2c-c741f8b937ab.json",
+        "workflow_snapshot_path": "<REPO>\\backend\\data\\snapshots\\b2c141ce-286c-4d99-9e2c-c741f8b937ab.json",
         "workflow_sha256": "05d08b4b3485b4d8d20a5b575a492686efbf74cf7688a0d28e438ca604751a54"
       },
       "workflow": {
@@ -164,7 +164,7 @@
       "duration_sec": 3.0,
       "take": {
         "id": "8871cb3c-1e09-40da-9be8-2ffa53eab83e",
-        "source_path": "C:\\Users\\jongp\\Desktop\\Thinkpad_and_PC_Sync\\ContentAutomationStudio\\backend\\data\\generated\\2bc16b95-833c-49a1-b690-3d70dfabc703_db99b7fe_03c0e7e1_00001.png",
+        "source_path": "<REPO>\\backend\\data\\generated\\2bc16b95-833c-49a1-b690-3d70dfabc703_db99b7fe_03c0e7e1_00001.png",
         "source_sha256": "4085a36f27f4907ea70e2ea211a5ab746a3d799088059a9af44be44165c22417",
         "probe": {
           "width": 864,
@@ -195,7 +195,7 @@
         "seed": 42,
         "comfyui_prompt_id": "2bc16b95-833c-49a1-b690-3d70dfabc703",
         "attempts": 1,
-        "workflow_snapshot_path": "C:\\Users\\jongp\\Desktop\\Thinkpad_and_PC_Sync\\ContentAutomationStudio\\backend\\data\\snapshots\\9d1bcc74-bd0e-4ebd-b2be-682e565cf1bd.json",
+        "workflow_snapshot_path": "<REPO>\\backend\\data\\snapshots\\9d1bcc74-bd0e-4ebd-b2be-682e565cf1bd.json",
         "workflow_sha256": "05d08b4b3485b4d8d20a5b575a492686efbf74cf7688a0d28e438ca604751a54"
       },
       "workflow": {

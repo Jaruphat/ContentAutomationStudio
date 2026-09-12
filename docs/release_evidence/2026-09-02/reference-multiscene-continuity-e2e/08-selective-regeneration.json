@@ -36,7 +36,7 @@
   "render": {
     "project_id": "db99b7fe-73a9-41ed-9922-018043fdbd12",
     "rendered": true,
-    "output_path": "C:\\Users\\jongp\\Desktop\\Thinkpad_and_PC_Sync\\ContentAutomationStudio\\backend\\data\\exports\\db99b7fe-73a9-41ed-9922-018043fdbd12\\review.mp4",
+    "output_path": "<REPO>\\backend\\data\\exports\\db99b7fe-73a9-41ed-9922-018043fdbd12\\review.mp4",
     "reason": "",
     "warnings": [],
     "segment_count": 3,
@@ -47,7 +47,7 @@
     "size_bytes": 165924,
     "has_audio": false,
     "audio_codec": "",
-    "provenance_path": "C:\\Users\\jongp\\Desktop\\Thinkpad_and_PC_Sync\\ContentAutomationStudio\\backend\\data\\exports\\db99b7fe-73a9-41ed-9922-018043fdbd12\\review.provenance.json",
+    "provenance_path": "<REPO>\\backend\\data\\exports\\db99b7fe-73a9-41ed-9922-018043fdbd12\\review.provenance.json",
     "embedded_metadata_keys": []
   },
   "updated_shot": {

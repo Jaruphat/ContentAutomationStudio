@@ -4,7 +4,7 @@ from pathlib import Path
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
-ROOT = Path(r"C:\Users\jongp\Desktop\Thinkpad_and_PC_Sync\ContentAutomationStudio")
+ROOT = Path(r"<REPO>")
 AUDIT = ROOT / r"docs\release_evidence\2026-09-02\full-system-multiscene-e2e\audit"
 FRAMES = AUDIT / "frames"
 FRAMES.mkdir(parents=True, exist_ok=True)

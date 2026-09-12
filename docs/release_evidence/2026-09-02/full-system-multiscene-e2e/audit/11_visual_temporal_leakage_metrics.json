@@ -1,10 +1,10 @@
 {
   "files_created": [
-    "C:\\Users\\jongp\\Desktop\\Thinkpad_and_PC_Sync\\ContentAutomationStudio\\docs\\release_evidence\\2026-09-02\\full-system-multiscene-e2e\\audit\\07_storyboard_to_render_contact_sheet.png",
-    "C:\\Users\\jongp\\Desktop\\Thinkpad_and_PC_Sync\\ContentAutomationStudio\\docs\\release_evidence\\2026-09-02\\full-system-multiscene-e2e\\audit\\08_segment_boundaries_contact_sheet.png",
-    "C:\\Users\\jongp\\Desktop\\Thinkpad_and_PC_Sync\\ContentAutomationStudio\\docs\\release_evidence\\2026-09-02\\full-system-multiscene-e2e\\audit\\09_t2v_multiframe_contact_sheet.png",
-    "C:\\Users\\jongp\\Desktop\\Thinkpad_and_PC_Sync\\ContentAutomationStudio\\docs\\release_evidence\\2026-09-02\\full-system-multiscene-e2e\\audit\\10_segment3_take_verification.png",
-    "C:\\Users\\jongp\\Desktop\\Thinkpad_and_PC_Sync\\ContentAutomationStudio\\docs\\release_evidence\\2026-09-02\\full-system-multiscene-e2e\\audit\\frames"
+    "<REPO>\\docs\\release_evidence\\2026-09-02\\full-system-multiscene-e2e\\audit\\07_storyboard_to_render_contact_sheet.png",
+    "<REPO>\\docs\\release_evidence\\2026-09-02\\full-system-multiscene-e2e\\audit\\08_segment_boundaries_contact_sheet.png",
+    "<REPO>\\docs\\release_evidence\\2026-09-02\\full-system-multiscene-e2e\\audit\\09_t2v_multiframe_contact_sheet.png",
+    "<REPO>\\docs\\release_evidence\\2026-09-02\\full-system-multiscene-e2e\\audit\\10_segment3_take_verification.png",
+    "<REPO>\\docs\\release_evidence\\2026-09-02\\full-system-multiscene-e2e\\audit\\frames"
   ],
   "source_render_similarity": {
     "render_s1_vs_approved_source": {

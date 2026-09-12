@@ -2,8 +2,50 @@
 
 A local-first application for AI-assisted storyboard creation, image/video generation via ComfyUI workflows, and automated video editing. Content Automation Studio turns a creative brief or plot into structured scenes, shots, compiled prompts, generation jobs, reviewed takes, a Timeline Manifest, and an automated review render.
 
+**[คู่มือเริ่มต้นภาษาไทย →](README.th.md)**
+
+It is built for someone who already has a GPU and a working ComfyUI, and wants
+a place to keep a story, its characters and its shots so that generating a few
+hundred frames stays organised. It was developed against an RTX 5080 (16 GB)
+and ComfyUI 0.34.0 on Windows, and every timing in this file was measured on
+that machine.
+
+Nothing is required to try it. With no API key and no ComfyUI running, the
+studio starts on deterministic mock providers: every page works, shots
+generate placeholder images, and the render produces a plan. Point it at a real
+ComfyUI when you want real frames.
+
 Current product scope: [PRD v0.4](docs/PRD_Content_Automation_Studio_v0.4.md).
 Implementation checks and the YouTube pilot: [production report](docs/PRODUCTION_RELIABILITY_2026-09-05.md).
+
+---
+
+## Quick start
+
+```bash
+git clone <this repo> && cd ContentAutomationStudio
+cp .env.example .env                 # defaults are fine; nothing needs filling in
+
+cd backend
+python -m venv .venv && .venv\Scriptsctivate   # Linux/macOS: source .venv/bin/activate
+pip install -r requirements.txt
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8001
+
+# in a second terminal
+cd frontend && npm install && npm run dev
+```
+
+Open <http://localhost:5173>. After that first install, `start-dev.bat` starts
+both services and opens the browser in one double-click; it checks for the
+virtualenv and `node_modules` and tells you what is missing rather than
+installing anything itself.
+
+That is the whole install. The sections below cover what to change when you
+want it driving your own ComfyUI: [which models](#models-this-was-built-against),
+[what to put in `.env`](#configuration), and
+[registering your first workflow](#3-register-a-workflow-before-anything-else),
+which is the one step a fresh install cannot skip -- a shot has nothing to
+generate with until a graph is mapped.
 
 ---
 
@@ -51,6 +93,89 @@ Implementation checks and the YouTube pilot: [production report](docs/PRODUCTION
 | Node.js       | 18+      | Required for frontend                    |
 | npm           | 9+       | Comes with Node.js                       |
 | FFmpeg        | Optional | Enables the review render and MP4 mock takes; without it those steps report why they were skipped |
+| ComfyUI       | Optional | 0.34.0 or newer, for real generation. Without it the mock provider stands in |
+| GPU           | Optional | 16 GB was enough for everything below, one pipeline resident at a time |
+
+---
+
+## Models this was built against
+
+None of these ship with the repo and none of them are required to start it.
+They are what the workflows under `workflows/derived/` load, so this is the
+shopping list for making the mock provider real. Sizes are the files on disk
+here; folders are relative to your ComfyUI `models/` directory.
+
+**If you are starting from nothing, download the first two groups.** Z-Image
+draws the stills and Wan animates them, which is a whole film, for about 30 GB.
+
+### Stills: Z-Image Turbo — about 20 s per 1080p still
+
+| File | Size | Folder |
+|------|------|--------|
+| `z_image_turbo_int8_convrot.safetensors` | 5.8 GB | `diffusion_models/` |
+| `qwen_3_4b.safetensors` | 7.5 GB | `text_encoders/` |
+| `ae.safetensors` | 0.3 GB | `vae/` |
+
+### Motion: Wan 2.2 TI2V 5B — about 0.74 s per frame at 10 steps
+
+From [Comfy-Org/Wan_2.2_ComfyUI_Repackaged](https://huggingface.co/Comfy-Org/Wan_2.2_ComfyUI_Repackaged),
+under `split_files/`.
+
+| File | Size | Folder |
+|------|------|--------|
+| `wan2.2_ti2v_5B_fp16.safetensors` | 9.3 GB | `diffusion_models/` |
+| `umt5_xxl_fp8_e4m3fn_scaled.safetensors` | 6.3 GB | `text_encoders/` |
+| `wan2.2_vae.safetensors` | 1.3 GB | `vae/` |
+
+Measured against MiniMax H3 on the same start frame, same size, same machine:
+H3 turbo at 8 steps took 1.78 s per frame, Wan at 10 steps took 0.74 s — about
+2.4x faster. Ten steps was indistinguishable from twenty here. Wan also makes
+picture alone, where H3 loads a second VAE and decodes a soundtrack this
+pipeline throws away, since a narrated film is rendered voice-only.
+
+Wan also took direction H3 ignored: told to stay seated, it stayed seated,
+where H3 on the same frame stood the character up and walked him at the camera.
+
+### Keeping a character the same: Qwen-Image-Edit 2511 Lightning — about 36 s
+
+A reference-conditioned edit, used to draw the same character in a new shot
+from an approved master image. Needs ComfyUI-GGUF for the `.gguf` loader.
+
+| File | Size | Folder |
+|------|------|--------|
+| `qwen-image-edit-2511-Q4_K_M.gguf` | 12.3 GB | `unet/` |
+| `Qwen-Image-Edit-2511-Lightning-4steps-V1.0-bf16.safetensors` | 0.8 GB | `loras/` |
+| `qwen_2.5_vl_7b_fp8_scaled.safetensors` | 8.7 GB | `text_encoders/` |
+| `qwen_image_vae.safetensors` | 0.2 GB | `vae/` |
+
+### Optional: MiniMax H3 image-to-video — 1.78 s per frame
+
+Slower than Wan and generates audio nothing here uses, but it is the only one
+of these that takes a **last frame**, so a clip can be made to land on an
+already-approved still. See [The frame a clip has to land on](#the-frame-a-clip-has-to-land-on).
+From [Comfy-Org/MiniMax-H3](https://huggingface.co/Comfy-Org/MiniMax-H3).
+
+| File | Size | Folder |
+|------|------|--------|
+| `minimax_h3_fl2va_pruned_int8_convrot.safetensors` | 19.5 GB | `diffusion_models/` |
+| `minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors` | 1.8 GB | `loras/` |
+| `qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors` | 14.6 GB | `text_encoders/` |
+| `minimax_h3_video_vae_fp16.safetensors` | 4.9 GB | `vae/` |
+| `minimax_h3_audio_vae_fp32.safetensors` | 0.6 GB | `vae/` |
+
+### Optional: Boogu-Image-0.1-Edit
+
+| File | Size | Folder |
+|------|------|--------|
+| `boogu_image_edit_int8_convrot.safetensors` | 10.6 GB | `diffusion_models/` |
+| `qwen3vl_8b_fp8_scaled.safetensors` | 9.9 GB | `text_encoders/` |
+| `ae.safetensors` | 0.3 GB | `vae/` |
+
+A workflow naming a file you do not have is not a silent failure: **Validate
+against the graph** on the Workflows page checks every mapped field against the
+live ComfyUI and says which model is missing. If your copy of a file is named
+differently, change the name in the graph rather than renaming the model, and
+record why -- `workflows/derived/*.provenance.json` shows the shape of that.
 
 ---
 
@@ -81,14 +206,44 @@ Copy `.env.example` to `.env` in the project root and adjust as needed:
 cp .env.example .env
 ```
 
-| Variable               | Default                 | Description                                                                 |
-|------------------------|-------------------------|-----------------------------------------------------------------------------|
-| `COMFYUI_PROVIDER`     | `mock`                  | `mock` for deterministic placeholders, `real` to drive a live ComfyUI        |
-| `COMFYUI_URL`          | `http://127.0.0.1:8000` | ComfyUI instance URL (used when provider is `real`)                          |
-| `CAS_DATA_DIR`         | `backend/data`          | Base directory for the database, workflows, snapshots, media and exports    |
-| `CAS_DISABLE_QUEUE`    | unset                   | Set to `1` to run the API without the background generation worker          |
-| `CAS_MOCK_QUEUED_SEC`  | `1.0`                   | Seconds a mock job stays Queued (lower it to speed up the e2e run)          |
-| `CAS_MOCK_RUNNING_SEC` | `2.0`                   | Seconds a mock job stays Running                                            |
+Every variable is optional. An empty `.env` runs the whole application on mock
+providers.
+
+**ComfyUI — local image and video generation**
+
+| Variable           | Default                 | Description                                                          |
+|--------------------|-------------------------|----------------------------------------------------------------------|
+| `COMFYUI_PROVIDER` | `mock`                  | `mock` for deterministic placeholders, `real` to drive a live ComfyUI |
+| `COMFYUI_URL`      | `http://127.0.0.1:8000` | ComfyUI instance URL, used when the provider is `real`                |
+
+**OpenAI — story authoring, hosted stills, narration**
+
+Without a key, story generation falls back to a deterministic local author,
+hosted stills are refused with an explanation rather than silently mocked, and
+narration uses the system voice. Nothing here selects a paid provider on its
+own: the Generate page shows the estimated total and the paid shot count
+before the run starts.
+
+| Variable                     | Default                     | Description                                                                   |
+|------------------------------|-----------------------------|-------------------------------------------------------------------------------|
+| `OPENAI_API_KEY`             | unset                       | Enables hosted authoring, the Images API and hosted voices                     |
+| `OPENAI_MODEL`               | provider default            | Text model for briefs, scenes, shots and prompts; built against `gpt-4.1`      |
+| `OPENAI_IMAGE_MODEL`         | `gpt-image-1-mini`          | Image model for paid stills                                                    |
+| `OPENAI_IMAGE_QUALITY`       | `medium`                    | `low`, `medium` or `high`                                                      |
+| `OPENAI_BASE_URL`            | `https://api.openai.com/v1` | Point at an Azure, proxy or compatible endpoint                                |
+| `OPENAI_ORG_ID`              | unset                       | Only if the key belongs to more than one organization                          |
+| `CAS_AI_PROVIDER`            | unset                       | Pin one text provider machine-wide. A pinned provider that is not configured fails loudly instead of quietly writing placeholder text into a storyboard |
+| `CAS_OPENAI_IMAGE_PRICE_USD` | built-in table              | Override the USD-per-image rate used to estimate what a run will cost          |
+
+**Storage and development switches**
+
+| Variable               | Default        | Description                                                                 |
+|------------------------|----------------|-----------------------------------------------------------------------------|
+| `CAS_DATA_DIR`         | `backend/data` | Database, workflows, snapshots, media and exports. Prefer an absolute path  |
+| `CAS_DISABLE_QUEUE`    | unset          | Set to `1` to run the API without the background generation worker          |
+| `CAS_MOCK_QUEUED_SEC`  | `1.0`          | Seconds a mock job stays Queued (lower it to speed up the e2e run)          |
+| `CAS_MOCK_RUNNING_SEC` | `2.0`          | Seconds a mock job stays Running                                            |
+| `CAS_DISABLE_DOTENV`   | unset          | Ignore `.env` entirely. The test suite sets this so a real key can never reach a test |
 
 All runtime data lives under `CAS_DATA_DIR` and is git-ignored:
 
@@ -839,4 +994,9 @@ The application runs on **Windows** and handles paths containing spaces and Unic
 
 ## License
 
-See project documentation for license details.
+[MIT](LICENSE). Use it, change it, ship it; keep the copyright notice.
+
+The licence covers this application's own code. The models, the ComfyUI
+workflows you export, and anything you generate with them carry their own
+terms -- check the licence of each model you download before publishing what
+it makes.

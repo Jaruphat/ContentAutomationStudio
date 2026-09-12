@@ -106,7 +106,7 @@
               "attempts": 1,
               "outputs": [
                 {
-                  "file_path": "C:\\Users\\jongp\\Desktop\\Thinkpad_and_PC_Sync\\ContentAutomationStudio\\backend\\data\\generated\\e909fb3a-00b8-490b-aaa0-a9bab4f8873a_5df52248_add1126f_00001_.png",
+                  "file_path": "<REPO>\\backend\\data\\generated\\e909fb3a-00b8-490b-aaa0-a9bab4f8873a_5df52248_add1126f_00001_.png",
                   "type": "image",
                   "width": 864,
                   "height": 480
@@ -118,7 +118,7 @@
             {
               "id": "1a1bb03e-4e3b-49e3-bc47-2417ebd9522e",
               "job_id": "39310ea1-4822-472c-aae5-37cc60ad3705",
-              "file_path": "C:\\Users\\jongp\\Desktop\\Thinkpad_and_PC_Sync\\ContentAutomationStudio\\backend\\data\\generated\\e909fb3a-00b8-490b-aaa0-a9bab4f8873a_5df52248_add1126f_00001_.png",
+              "file_path": "<REPO>\\backend\\data\\generated\\e909fb3a-00b8-490b-aaa0-a9bab4f8873a_5df52248_add1126f_00001_.png",
               "media_provider_id": "comfyui",
               "media_model": "workflow",
               "request_params": {
@@ -134,7 +134,7 @@
                 "workflow_id": "359c2852-f880-430f-a096-07e6ef5625a3",
                 "workflow_version": "1.0-local.1",
                 "workflow_sha256": "a31450cf898fc2cabb47e42fb87fc3a08feeb1e76ba96d18069b87e818e9ba89",
-                "workflow_snapshot_path": "C:\\Users\\jongp\\Desktop\\Thinkpad_and_PC_Sync\\ContentAutomationStudio\\backend\\data\\snapshots\\39310ea1-4822-472c-aae5-37cc60ad3705.json",
+                "workflow_snapshot_path": "<REPO>\\backend\\data\\snapshots\\39310ea1-4822-472c-aae5-37cc60ad3705.json",
                 "seed": 42,
                 "generated_at": "2026-09-02T10:21:46.563643+00:00"
               },
@@ -190,7 +190,7 @@
               "attempts": 1,
               "outputs": [
                 {
-                  "file_path": "C:\\Users\\jongp\\Desktop\\Thinkpad_and_PC_Sync\\ContentAutomationStudio\\backend\\data\\generated\\87f6aff0-a2ef-46e9-8956-7418d9fa26a0_5df52248_9b56cb9b_00001_.mp4",
+                  "file_path": "<REPO>\\backend\\data\\generated\\87f6aff0-a2ef-46e9-8956-7418d9fa26a0_5df52248_9b56cb9b_00001_.mp4",
                   "type": "video",
                   "width": 864,
                   "height": 480
@@ -202,7 +202,7 @@
             {
               "id": "aad3ebf0-db64-426c-9077-7777040fe938",
               "job_id": "308b224a-513b-4774-93be-7ef227505a34",
-              "file_path": "C:\\Users\\jongp\\Desktop\\Thinkpad_and_PC_Sync\\ContentAutomationStudio\\backend\\data\\generated\\87f6aff0-a2ef-46e9-8956-7418d9fa26a0_5df52248_9b56cb9b_00001_.mp4",
+              "file_path": "<REPO>\\backend\\data\\generated\\87f6aff0-a2ef-46e9-8956-7418d9fa26a0_5df52248_9b56cb9b_00001_.mp4",
               "media_provider_id": "comfyui",
               "media_model": "workflow",
               "request_params": {
@@ -218,7 +218,7 @@
                 "workflow_id": "afdaf6f8-d4bd-48a9-91c0-9b3b6a3b2023",
                 "workflow_version": "1.0",
                 "workflow_sha256": "06392e8508554ce7b9cbefc8ae1ebc59e12e7019c3d04d372ad11a4864030088",
-                "workflow_snapshot_path": "C:\\Users\\jongp\\Desktop\\Thinkpad_and_PC_Sync\\ContentAutomationStudio\\backend\\data\\snapshots\\308b224a-513b-4774-93be-7ef227505a34.json",
+                "workflow_snapshot_path": "<REPO>\\backend\\data\\snapshots\\308b224a-513b-4774-93be-7ef227505a34.json",
                 "seed": 42,
                 "generated_at": "2026-09-02T10:26:51.863814+00:00"
               },
@@ -274,7 +274,7 @@
               "attempts": 1,
               "outputs": [
                 {
-                  "file_path": "C:\\Users\\jongp\\Desktop\\Thinkpad_and_PC_Sync\\ContentAutomationStudio\\backend\\data\\generated\\9dd9a330-2ff8-4c91-93c3-2b1e76a08e54_5df52248_fef81802_00001_.png",
+                  "file_path": "<REPO>\\backend\\data\\generated\\9dd9a330-2ff8-4c91-93c3-2b1e76a08e54_5df52248_fef81802_00001_.png",
                   "type": "image",
                   "width": 864,
                   "height": 480
@@ -292,7 +292,7 @@
               "attempts": 1,
               "outputs": [
                 {
-                  "file_path": "C:\\Users\\jongp\\Desktop\\Thinkpad_and_PC_Sync\\ContentAutomationStudio\\backend\\data\\generated\\32c1fc90-9a42-426a-97cc-9f205a1897e1_5df52248_fef81802_00002_.png",
+                  "file_path": "<REPO>\\backend\\data\\generated\\32c1fc90-9a42-426a-97cc-9f205a1897e1_5df52248_fef81802_00002_.png",
                   "type": "image",
                   "width": 864,
                   "height": 480
@@ -304,7 +304,7 @@
             {
               "id": "7bcdcf55-5efe-42c8-9dba-43d8aa456cc4",
               "job_id": "fa0d526e-dbb2-48eb-9b07-8ede292c1b30",
-              "file_path": "C:\\Users\\jongp\\Desktop\\Thinkpad_and_PC_Sync\\ContentAutomationStudio\\backend\\data\\generated\\9dd9a330-2ff8-4c91-93c3-2b1e76a08e54_5df52248_fef81802_00001_.png",
+              "file_path": "<REPO>\\backend\\data\\generated\\9dd9a330-2ff8-4c91-93c3-2b1e76a08e54_5df52248_fef81802_00001_.png",
               "media_provider_id": "comfyui",
               "media_model": "workflow",
               "request_params": {
@@ -320,7 +320,7 @@
                 "workflow_id": "359c2852-f880-430f-a096-07e6ef5625a3",
                 "workflow_version": "1.0-local.1",
                 "workflow_sha256": "a31450cf898fc2cabb47e42fb87fc3a08feeb1e76ba96d18069b87e818e9ba89",
-                "workflow_snapshot_path": "C:\\Users\\jongp\\Desktop\\Thinkpad_and_PC_Sync\\ContentAutomationStudio\\backend\\data\\snapshots\\fa0d526e-dbb2-48eb-9b07-8ede292c1b30.json",
+                "workflow_snapshot_path": "<REPO>\\backend\\data\\snapshots\\fa0d526e-dbb2-48eb-9b07-8ede292c1b30.json",
                 "seed": 42,
                 "generated_at": "2026-09-02T10:27:04.209247+00:00"
               },
@@ -331,7 +331,7 @@
             {
               "id": "19ccc0f0-41ad-433e-8cbc-09dcabc7f76d",
               "job_id": "632308c1-0d0c-4c4a-8d92-97f0abce86e6",
-              "file_path": "C:\\Users\\jongp\\Desktop\\Thinkpad_and_PC_Sync\\ContentAutomationStudio\\backend\\data\\generated\\32c1fc90-9a42-426a-97cc-9f205a1897e1_5df52248_fef81802_00002_.png",
+              "file_path": "<REPO>\\backend\\data\\generated\\32c1fc90-9a42-426a-97cc-9f205a1897e1_5df52248_fef81802_00002_.png",
               "media_provider_id": "comfyui",
               "media_model": "workflow",
               "request_params": {
@@ -347,7 +347,7 @@
                 "workflow_id": "359c2852-f880-430f-a096-07e6ef5625a3",
                 "workflow_version": "1.0-local.1",
                 "workflow_sha256": "a31450cf898fc2cabb47e42fb87fc3a08feeb1e76ba96d18069b87e818e9ba89",
-                "workflow_snapshot_path": "C:\\Users\\jongp\\Desktop\\Thinkpad_and_PC_Sync\\ContentAutomationStudio\\backend\\data\\snapshots\\632308c1-0d0c-4c4a-8d92-97f0abce86e6.json",
+                "workflow_snapshot_path": "<REPO>\\backend\\data\\snapshots\\632308c1-0d0c-4c4a-8d92-97f0abce86e6.json",
                 "seed": 970460793,
                 "generated_at": "2026-09-02T10:27:11.488746+00:00"
               },

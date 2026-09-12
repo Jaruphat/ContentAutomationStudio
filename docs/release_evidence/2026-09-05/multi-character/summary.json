@@ -65,7 +65,7 @@
     {
       "check": "a clip was produced",
       "passed": true,
-      "detail": "C:\\Users\\jongp\\Desktop\\Thinkpad_and_PC_Sync\\ContentAutomationStudio\\backend\\data\\generated\\6ee46439-f0eb-4870-8dab-e1c829bd62c0_389e3302_eeaa1e6c_00001_.mp4"
+      "detail": "<REPO>\\backend\\data\\generated\\6ee46439-f0eb-4870-8dab-e1c829bd62c0_389e3302_eeaa1e6c_00001_.mp4"
     }
   ],
   "passed": 11,

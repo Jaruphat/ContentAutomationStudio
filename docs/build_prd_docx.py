@@ -8,7 +8,9 @@ from docx.enum.table import WD_TABLE_ALIGNMENT, WD_CELL_VERTICAL_ALIGNMENT
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 
-ROOT = Path(r"C:\Users\jongp\Desktop\Thinkpad_and_PC_Sync\ContentAutomationStudio")
+# The repository root, found from this file, so the script runs from any
+# checkout rather than only the machine it was written on.
+ROOT = Path(__file__).resolve().parent.parent
 version = sys.argv[1] if len(sys.argv) > 1 else "v0.1"
 src = ROOT / "docs" / f"PRD_Content_Automation_Studio_{version}.md"
 out = ROOT / "docs" / f"PRD_Content_Automation_Studio_{version}.docx"

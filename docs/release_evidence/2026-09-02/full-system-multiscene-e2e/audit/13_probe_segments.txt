@@ -1,5 +1,5 @@
 
-=== C:/Users/jongp/Desktop/Thinkpad_and_PC_Sync/ContentAutomationStudio/backend/data/exports/5df52248-ce4b-4a76-8c81-a436b21b6b46/review.mp4 ===
+=== <REPO>/backend/data/exports/5df52248-ce4b-4a76-8c81-a436b21b6b46/review.mp4 ===
 index=0
 codec_name=h264
 codec_type=video
@@ -30,7 +30,7 @@ duration=11.188333
 size=530358
 bit_rate=379222
 
-=== C:/Users/jongp/Desktop/Thinkpad_and_PC_Sync/ContentAutomationStudio/backend/data/exports/5df52248-ce4b-4a76-8c81-a436b21b6b46/segments/seg_0000.mp4 ===
+=== <REPO>/backend/data/exports/5df52248-ce4b-4a76-8c81-a436b21b6b46/segments/seg_0000.mp4 ===
 index=0
 codec_name=h264
 codec_type=video
@@ -61,7 +61,7 @@ duration=3.000000
 size=46284
 bit_rate=123424
 
-=== C:/Users/jongp/Desktop/Thinkpad_and_PC_Sync/ContentAutomationStudio/backend/data/exports/5df52248-ce4b-4a76-8c81-a436b21b6b46/segments/seg_0001.mp4 ===
+=== <REPO>/backend/data/exports/5df52248-ce4b-4a76-8c81-a436b21b6b46/segments/seg_0001.mp4 ===
 index=0
 codec_name=h264
 codec_type=video
@@ -92,7 +92,7 @@ duration=5.167000
 size=440898
 bit_rate=682636
 
-=== C:/Users/jongp/Desktop/Thinkpad_and_PC_Sync/ContentAutomationStudio/backend/data/exports/5df52248-ce4b-4a76-8c81-a436b21b6b46/segments/seg_0002.mp4 ===
+=== <REPO>/backend/data/exports/5df52248-ce4b-4a76-8c81-a436b21b6b46/segments/seg_0002.mp4 ===
 index=0
 codec_name=h264
 codec_type=video

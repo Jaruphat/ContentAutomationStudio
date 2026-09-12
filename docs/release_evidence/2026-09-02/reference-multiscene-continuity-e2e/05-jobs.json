@@ -4,7 +4,7 @@
     "shot_id": "0a68764d-10a1-48ea-959a-bfdfffceaf9d",
     "workflow_id": "75a73b44-5c6f-4661-87f6-26e66a639efd",
     "workflow_version": "1.0-reference.1",
-    "workflow_snapshot_path": "C:\\Users\\jongp\\Desktop\\Thinkpad_and_PC_Sync\\ContentAutomationStudio\\backend\\data\\snapshots\\c59813fd-5999-4e88-9a35-24986d855915.json",
+    "workflow_snapshot_path": "<REPO>\\backend\\data\\snapshots\\c59813fd-5999-4e88-9a35-24986d855915.json",
     "workflow_sha256": "05d08b4b3485b4d8d20a5b575a492686efbf74cf7688a0d28e438ca604751a54",
     "parameter_map": {
       "positivePrompt": "The same child stands at the pond edge at dawn., dawn, medium-wide, eye level, locked, same child and same single blue paper boat, same misty pond at dawn, Preserve the supplied child, blue raincoat, single blue paper boat, pond, composition and color identity. Dawn mist thickens slightly, medium-wide locked shot.",
@@ -31,7 +31,7 @@
       "workflow_id": "75a73b44-5c6f-4661-87f6-26e66a639efd",
       "workflow_version": "1.0-reference.1",
       "workflow_sha256": "05d08b4b3485b4d8d20a5b575a492686efbf74cf7688a0d28e438ca604751a54",
-      "workflow_snapshot_path": "C:\\Users\\jongp\\Desktop\\Thinkpad_and_PC_Sync\\ContentAutomationStudio\\backend\\data\\snapshots\\c59813fd-5999-4e88-9a35-24986d855915.json",
+      "workflow_snapshot_path": "<REPO>\\backend\\data\\snapshots\\c59813fd-5999-4e88-9a35-24986d855915.json",
       "seed": 42,
       "generated_at": "2026-09-02T14:14:04.251404+00:00"
     },
@@ -49,7 +49,7 @@
         {
           "image_id": "f9a8a931-b5a8-4788-86ff-3eca71003c37",
           "sheet_id": "549c9d69-efff-4bae-88bd-15e913e80949",
-          "file_path": "C:\\Users\\jongp\\Desktop\\Thinkpad_and_PC_Sync\\ContentAutomationStudio\\backend\\data\\references\\db99b7fe-73a9-41ed-9922-018043fdbd12\\f9a8a931-b5a8-4788-86ff-3eca71003c37.png",
+          "file_path": "<REPO>\\backend\\data\\references\\db99b7fe-73a9-41ed-9922-018043fdbd12\\f9a8a931-b5a8-4788-86ff-3eca71003c37.png",
           "sha256": "841ebf7cd1174f86c42f58839a79c1e140615125447d07eb97f228f66689d97e",
           "mime_type": "image/png",
           "width": 864,
@@ -75,7 +75,7 @@
     "error_message": null,
     "outputs": [
       {
-        "file_path": "C:\\Users\\jongp\\Desktop\\Thinkpad_and_PC_Sync\\ContentAutomationStudio\\backend\\data\\generated\\c98a79f0-8478-4486-9415-c27c6c5a0a77_db99b7fe_0a68764d_00001.png",
+        "file_path": "<REPO>\\backend\\data\\generated\\c98a79f0-8478-4486-9415-c27c6c5a0a77_db99b7fe_0a68764d_00001.png",
         "type": "image",
         "width": 864,
         "height": 480
@@ -91,7 +91,7 @@
     "shot_id": "804aece3-e5c3-4d68-80f2-162abcaa5118",
     "workflow_id": "75a73b44-5c6f-4661-87f6-26e66a639efd",
     "workflow_version": "1.0-reference.1",
-    "workflow_snapshot_path": "C:\\Users\\jongp\\Desktop\\Thinkpad_and_PC_Sync\\ContentAutomationStudio\\backend\\data\\snapshots\\4e274cf6-9561-43a2-86f1-59a87ea0047f.json",
+    "workflow_snapshot_path": "<REPO>\\backend\\data\\snapshots\\4e274cf6-9561-43a2-86f1-59a87ea0047f.json",
     "workflow_sha256": "05d08b4b3485b4d8d20a5b575a492686efbf74cf7688a0d28e438ca604751a54",
     "parameter_map": {
       "positivePrompt": "The same child gently reaches toward the same boat., dawn, medium-wide, eye level, locked, same child and same single blue paper boat, same misty pond at dawn, Preserve the supplied child, blue raincoat, exactly one blue paper boat and pond. The child kneels and reaches one hand toward the same boat, soft dawn light, medium locked shot.",
@@ -118,7 +118,7 @@
       "workflow_id": "75a73b44-5c6f-4661-87f6-26e66a639efd",
       "workflow_version": "1.0-reference.1",
       "workflow_sha256": "05d08b4b3485b4d8d20a5b575a492686efbf74cf7688a0d28e438ca604751a54",
-      "workflow_snapshot_path": "C:\\Users\\jongp\\Desktop\\Thinkpad_and_PC_Sync\\ContentAutomationStudio\\backend\\data\\snapshots\\4e274cf6-9561-43a2-86f1-59a87ea0047f.json",
+      "workflow_snapshot_path": "<REPO>\\backend\\data\\snapshots\\4e274cf6-9561-43a2-86f1-59a87ea0047f.json",
       "seed": 42,
       "generated_at": "2026-09-02T14:16:03.270986+00:00"
     },
@@ -136,7 +136,7 @@
         {
           "image_id": "f9a8a931-b5a8-4788-86ff-3eca71003c37",
           "sheet_id": "549c9d69-efff-4bae-88bd-15e913e80949",
-          "file_path": "C:\\Users\\jongp\\Desktop\\Thinkpad_and_PC_Sync\\ContentAutomationStudio\\backend\\data\\references\\db99b7fe-73a9-41ed-9922-018043fdbd12\\f9a8a931-b5a8-4788-86ff-3eca71003c37.png",
+          "file_path": "<REPO>\\backend\\data\\references\\db99b7fe-73a9-41ed-9922-018043fdbd12\\f9a8a931-b5a8-4788-86ff-3eca71003c37.png",
           "sha256": "841ebf7cd1174f86c42f58839a79c1e140615125447d07eb97f228f66689d97e",
           "mime_type": "image/png",
           "width": 864,
@@ -162,7 +162,7 @@
     "error_message": null,
     "outputs": [
       {
-        "file_path": "C:\\Users\\jongp\\Desktop\\Thinkpad_and_PC_Sync\\ContentAutomationStudio\\backend\\data\\generated\\4a6790f5-3d87-4a39-bd17-9f35ebb6196b_db99b7fe_804aece3_00001.png",
+        "file_path": "<REPO>\\backend\\data\\generated\\4a6790f5-3d87-4a39-bd17-9f35ebb6196b_db99b7fe_804aece3_00001.png",
         "type": "image",
         "width": 864,
         "height": 480
@@ -178,7 +178,7 @@
     "shot_id": "03c0e7e1-346b-436c-bb88-74508539a626",
     "workflow_id": "75a73b44-5c6f-4661-87f6-26e66a639efd",
     "workflow_version": "1.0-reference.1",
-    "workflow_snapshot_path": "C:\\Users\\jongp\\Desktop\\Thinkpad_and_PC_Sync\\ContentAutomationStudio\\backend\\data\\snapshots\\9d1bcc74-bd0e-4ebd-b2be-682e565cf1bd.json",
+    "workflow_snapshot_path": "<REPO>\\backend\\data\\snapshots\\9d1bcc74-bd0e-4ebd-b2be-682e565cf1bd.json",
     "workflow_sha256": "05d08b4b3485b4d8d20a5b575a492686efbf74cf7688a0d28e438ca604751a54",
     "parameter_map": {
       "positivePrompt": "The same boat reaches a narrow band of warm light., dawn, medium-wide, eye level, locked, same child and same single blue paper boat, same misty pond at dawn, Preserve the supplied child, blue raincoat, exactly one blue paper boat and same pond. The same boat drifts into warm sunlight while the child watches, wide locked shot.",
@@ -205,7 +205,7 @@
       "workflow_id": "75a73b44-5c6f-4661-87f6-26e66a639efd",
       "workflow_version": "1.0-reference.1",
       "workflow_sha256": "05d08b4b3485b4d8d20a5b575a492686efbf74cf7688a0d28e438ca604751a54",
-      "workflow_snapshot_path": "C:\\Users\\jongp\\Desktop\\Thinkpad_and_PC_Sync\\ContentAutomationStudio\\backend\\data\\snapshots\\9d1bcc74-bd0e-4ebd-b2be-682e565cf1bd.json",
+      "workflow_snapshot_path": "<REPO>\\backend\\data\\snapshots\\9d1bcc74-bd0e-4ebd-b2be-682e565cf1bd.json",
       "seed": 42,
       "generated_at": "2026-09-02T14:18:01.450703+00:00"
     },
@@ -223,7 +223,7 @@
         {
           "image_id": "f9a8a931-b5a8-4788-86ff-3eca71003c37",
           "sheet_id": "549c9d69-efff-4bae-88bd-15e913e80949",
-          "file_path": "C:\\Users\\jongp\\Desktop\\Thinkpad_and_PC_Sync\\ContentAutomationStudio\\backend\\data\\references\\db99b7fe-73a9-41ed-9922-018043fdbd12\\f9a8a931-b5a8-4788-86ff-3eca71003c37.png",
+          "file_path": "<REPO>\\backend\\data\\references\\db99b7fe-73a9-41ed-9922-018043fdbd12\\f9a8a931-b5a8-4788-86ff-3eca71003c37.png",
           "sha256": "841ebf7cd1174f86c42f58839a79c1e140615125447d07eb97f228f66689d97e",
           "mime_type": "image/png",
           "width": 864,
@@ -249,7 +249,7 @@
     "error_message": null,
     "outputs": [
       {
-        "file_path": "C:\\Users\\jongp\\Desktop\\Thinkpad_and_PC_Sync\\ContentAutomationStudio\\backend\\data\\generated\\2bc16b95-833c-49a1-b690-3d70dfabc703_db99b7fe_03c0e7e1_00001.png",
+        "file_path": "<REPO>\\backend\\data\\generated\\2bc16b95-833c-49a1-b690-3d70dfabc703_db99b7fe_03c0e7e1_00001.png",
         "type": "image",
         "width": 864,
         "height": 480

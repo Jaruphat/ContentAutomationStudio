@@ -108,7 +108,7 @@
       },
       "estimated_cost_usd": 0.011,
       "cost_basis": "Estimate only: 1 x gpt-image-1-mini at 1024x1024/medium list price. The charge recorded on your account is authoritative.",
-      "downloaded_to": "C:\\Users\\jongp\\Desktop\\Thinkpad_and_PC_Sync\\ContentAutomationStudio\\backend\\data\\release_mock\\generated\\openai-fb2c786e-7418-48a6-b163-5cf103b3736e.png"
+      "downloaded_to": "<REPO>\\backend\\data\\release_mock\\generated\\openai-fb2c786e-7418-48a6-b163-5cf103b3736e.png"
     },
     "seed": 881692882,
     "comfyui_prompt_id": "openai-fb2c786e-7418-48a6-b163-5cf103b3736e",
@@ -118,7 +118,7 @@
     "error_message": null,
     "outputs": [
       {
-        "file_path": "C:\\Users\\jongp\\Desktop\\Thinkpad_and_PC_Sync\\ContentAutomationStudio\\backend\\data\\release_mock\\generated\\openai-fb2c786e-7418-48a6-b163-5cf103b3736e.png",
+        "file_path": "<REPO>\\backend\\data\\release_mock\\generated\\openai-fb2c786e-7418-48a6-b163-5cf103b3736e.png",
         "type": "image",
         "width": 1024,
         "height": 1024

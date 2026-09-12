@@ -10,7 +10,7 @@
     "aspect_ratio": "1:1"
   },
   "output": {
-    "path": "C:\\Users\\jongp\\Desktop\\Thinkpad_and_PC_Sync\\ContentAutomationStudio\\backend\\data\\release_mock\\exports\\94916ace-62fe-47d6-9fd3-415b73de7434\\review.mp4",
+    "path": "<REPO>\\backend\\data\\release_mock\\exports\\94916ace-62fe-47d6-9fd3-415b73de7434\\review.mp4",
     "filename": "review.mp4",
     "sha256": "eab71c547d2bc250877a6897c3b2eb15ace3eed86fc5b1dc9e01f31451eab365",
     "size_bytes": 41460,
@@ -58,7 +58,7 @@
       "duration_sec": 3.0,
       "take": {
         "id": "23559f3a-02c4-473a-b8c5-86f87520e622",
-        "source_path": "C:\\Users\\jongp\\Desktop\\Thinkpad_and_PC_Sync\\ContentAutomationStudio\\backend\\data\\release_mock\\generated\\openai-fb2c786e-7418-48a6-b163-5cf103b3736e.png",
+        "source_path": "<REPO>\\backend\\data\\release_mock\\generated\\openai-fb2c786e-7418-48a6-b163-5cf103b3736e.png",
         "source_sha256": "16221bb62f6e2929213316cd80293d8ddafd6b975d120c431853275cbd21890f",
         "probe": {
           "width": 1024,

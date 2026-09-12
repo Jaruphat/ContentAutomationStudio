@@ -1,6 +1,6 @@
 
-=== C:/Users/jongp/Desktop/Thinkpad_and_PC_Sync/ContentAutomationStudio/backend/data/exports/5df52248-ce4b-4a76-8c81-a436b21b6b46/segments/seg_0000.mp4 ===
-Input #0, mov,mp4,m4a,3gp,3g2,mj2, from 'C:/Users/jongp/Desktop/Thinkpad_and_PC_Sync/ContentAutomationStudio/backend/data/exports/5df52248-ce4b-4a76-8c81-a436b21b6b46/segments/seg_0000.mp4':
+=== <REPO>/backend/data/exports/5df52248-ce4b-4a76-8c81-a436b21b6b46/segments/seg_0000.mp4 ===
+Input #0, mov,mp4,m4a,3gp,3g2,mj2, from '<REPO>/backend/data/exports/5df52248-ce4b-4a76-8c81-a436b21b6b46/segments/seg_0000.mp4':
   Metadata:
     major_brand     : isom
     minor_version   : 512
@@ -31,8 +31,8 @@ Output #0, null, to 'pipe:':
 [out#0/null @ 0000014b8ac68ec0] video:30KiB audio:0KiB subtitle:0KiB other streams:0KiB global headers:0KiB muxing overhead: unknown
 frame=   72 fps=0.0 q=-0.0 Lsize=N/A time=00:00:03.00 bitrate=N/A speed= 169x elapsed=0:00:00.01    
 
-=== C:/Users/jongp/Desktop/Thinkpad_and_PC_Sync/ContentAutomationStudio/backend/data/exports/5df52248-ce4b-4a76-8c81-a436b21b6b46/segments/seg_0001.mp4 ===
-Input #0, mov,mp4,m4a,3gp,3g2,mj2, from 'C:/Users/jongp/Desktop/Thinkpad_and_PC_Sync/ContentAutomationStudio/backend/data/exports/5df52248-ce4b-4a76-8c81-a436b21b6b46/segments/seg_0001.mp4':
+=== <REPO>/backend/data/exports/5df52248-ce4b-4a76-8c81-a436b21b6b46/segments/seg_0001.mp4 ===
+Input #0, mov,mp4,m4a,3gp,3g2,mj2, from '<REPO>/backend/data/exports/5df52248-ce4b-4a76-8c81-a436b21b6b46/segments/seg_0001.mp4':
   Metadata:
     major_brand     : isom
     minor_version   : 512
@@ -62,8 +62,8 @@ Output #0, null, to 'pipe:':
 [out#0/null @ 000002b18c17ac40] video:51KiB audio:0KiB subtitle:0KiB other streams:0KiB global headers:0KiB muxing overhead: unknown
 frame=  124 fps=0.0 q=-0.0 Lsize=N/A time=00:00:05.16 bitrate=N/A speed= 223x elapsed=0:00:00.02    
 
-=== C:/Users/jongp/Desktop/Thinkpad_and_PC_Sync/ContentAutomationStudio/backend/data/exports/5df52248-ce4b-4a76-8c81-a436b21b6b46/segments/seg_0002.mp4 ===
-Input #0, mov,mp4,m4a,3gp,3g2,mj2, from 'C:/Users/jongp/Desktop/Thinkpad_and_PC_Sync/ContentAutomationStudio/backend/data/exports/5df52248-ce4b-4a76-8c81-a436b21b6b46/segments/seg_0002.mp4':
+=== <REPO>/backend/data/exports/5df52248-ce4b-4a76-8c81-a436b21b6b46/segments/seg_0002.mp4 ===
+Input #0, mov,mp4,m4a,3gp,3g2,mj2, from '<REPO>/backend/data/exports/5df52248-ce4b-4a76-8c81-a436b21b6b46/segments/seg_0002.mp4':
   Metadata:
     major_brand     : isom
     minor_version   : 512

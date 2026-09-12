@@ -1,4 +1,4 @@
-Input #0, mov,mp4,m4a,3gp,3g2,mj2, from 'C:/Users/jongp/Desktop/Thinkpad_and_PC_Sync/ContentAutomationStudio/backend/data/exports/5df52248-ce4b-4a76-8c81-a436b21b6b46/review.mp4':
+Input #0, mov,mp4,m4a,3gp,3g2,mj2, from '<REPO>/backend/data/exports/5df52248-ce4b-4a76-8c81-a436b21b6b46/review.mp4':
   Metadata:
     major_brand     : isom
     minor_version   : 512

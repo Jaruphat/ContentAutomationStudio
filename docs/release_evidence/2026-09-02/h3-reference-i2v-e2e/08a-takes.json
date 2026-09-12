@@ -3,7 +3,7 @@
     "id": "46d72a7d-ef9b-4bf8-9345-9ef3222b17b3",
     "shot_id": "b38d7914-60bf-4abc-b2ce-c6537a590bea",
     "job_id": "009333cc-7c73-4269-b50d-0813ae3b5f45",
-    "file_path": "C:\\Users\\jongp\\Desktop\\Thinkpad_and_PC_Sync\\ContentAutomationStudio\\backend\\data\\generated\\c2937676-fcd0-49fd-aade-27251aa92b44_e6cdd637_b38d7914_00001_.mp4",
+    "file_path": "<REPO>\\backend\\data\\generated\\c2937676-fcd0-49fd-aade-27251aa92b44_e6cdd637_b38d7914_00001_.mp4",
     "thumbnail_path": "",
     "duration_sec": 5.167,
     "width": 864,
@@ -25,7 +25,7 @@
       "workflow_id": "711d55b8-fc50-41b3-92eb-d706653fde4f",
       "workflow_version": "1.0",
       "workflow_sha256": "a742c6de241bd77d540767cf0ec2ce4bc084d701eeae85faf925ec79ccf75601",
-      "workflow_snapshot_path": "C:\\Users\\jongp\\Desktop\\Thinkpad_and_PC_Sync\\ContentAutomationStudio\\backend\\data\\snapshots\\009333cc-7c73-4269-b50d-0813ae3b5f45.json",
+      "workflow_snapshot_path": "<REPO>\\backend\\data\\snapshots\\009333cc-7c73-4269-b50d-0813ae3b5f45.json",
       "seed": 42,
       "generated_at": "2026-09-02T14:10:34.936308+00:00",
       "references": {
@@ -33,7 +33,7 @@
           {
             "image_id": "c7aec94a-319d-4063-b6d5-029a9a59dbf4",
             "sheet_id": "4d2dc089-8f24-4120-b9de-cf86bc70c33f",
-            "file_path": "C:\\Users\\jongp\\Desktop\\Thinkpad_and_PC_Sync\\ContentAutomationStudio\\backend\\data\\references\\e6cdd637-17b5-43f5-9281-9834ef51a9b7\\c7aec94a-319d-4063-b6d5-029a9a59dbf4.png",
+            "file_path": "<REPO>\\backend\\data\\references\\e6cdd637-17b5-43f5-9281-9834ef51a9b7\\c7aec94a-319d-4063-b6d5-029a9a59dbf4.png",
             "sha256": "841ebf7cd1174f86c42f58839a79c1e140615125447d07eb97f228f66689d97e",
             "mime_type": "image/png",
             "width": 864,

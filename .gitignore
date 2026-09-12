@@ -39,3 +39,10 @@ comfyworkflow/
 frontend/test-results/
 frontend/playwright-report/
 frontend/blob-report/
+
+# Agent and tooling scratch that lives in the working tree but is not the project
+.hermes/
+.codex-remote-attachments/
+
+# Working drafts kept beside the repo rather than in it
+ODDVERSE_*.docx

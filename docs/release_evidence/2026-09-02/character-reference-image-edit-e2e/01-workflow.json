@@ -2,7 +2,7 @@
   "id": "75a73b44-5c6f-4661-87f6-26e66a639efd",
   "name": "Boogu Image Edit INT8 (Reference Conditioned)",
   "purpose": "image",
-  "source_json_path": "C:\\Users\\jongp\\Desktop\\Thinkpad_and_PC_Sync\\ContentAutomationStudio\\backend\\data\\workflows\\75a73b44-5c6f-4661-87f6-26e66a639efd_Boogu_Image_Edit_INT8__Reference_Conditioned_.json",
+  "source_json_path": "<REPO>\\backend\\data\\workflows\\75a73b44-5c6f-4661-87f6-26e66a639efd_Boogu_Image_Edit_INT8__Reference_Conditioned_.json",
   "source_format": "api",
   "sha256_hash": "05d08b4b3485b4d8d20a5b575a492686efbf74cf7688a0d28e438ca604751a54",
   "version": "1.0-reference.1",

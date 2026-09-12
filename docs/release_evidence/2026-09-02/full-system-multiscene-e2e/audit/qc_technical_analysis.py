@@ -3,7 +3,7 @@ import json, re, subprocess
 from fractions import Fraction
 from pathlib import Path
 
-ROOT=Path(r"C:\Users\jongp\Desktop\Thinkpad_and_PC_Sync\ContentAutomationStudio")
+ROOT=Path(r"<REPO>")
 AUDIT=ROOT/r"docs\release_evidence\2026-09-02\full-system-multiscene-e2e\audit"
 RENDER=ROOT/r"backend\data\exports\5df52248-ce4b-4a76-8c81-a436b21b6b46\review.mp4"
 T2V=ROOT/r"backend\data\generated\87f6aff0-a2ef-46e9-8956-7418d9fa26a0_5df52248_9b56cb9b_00001_.mp4"
