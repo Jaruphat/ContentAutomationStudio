@@ -30,6 +30,22 @@
 
 ---
 
+## หน้าตาแอป
+
+**Generate** — ช็อตถูกส่งไป ComfyUI แล้ววิ่งกลับมา ทุกงานบันทึก seed, prompt id และต้นทุนไว้
+
+![หน้า Generate: งานที่กำลังรัน และคิวงานที่บอก provider, model, สถานะ, จำนวนครั้งที่ลอง และ seed ของแต่ละช็อต](docs/media/app-generate.jpg)
+
+**Review** — กดผ่านหรือไม่ผ่านทีละเทค คลิปถูกวัดว่าขยับจริงแค่ไหน ภาพที่ไม่ขยับเลยจะไม่หลุดไปอยู่ในหนังเงียบ ๆ
+
+![หน้า Review: ตารางคลิปที่สร้างเสร็จ แต่ละอันมีสถานะผ่าน/ไม่ผ่าน และค่าที่วัดการเคลื่อนไหว](docs/media/app-review.jpg)
+
+**Timeline** — เฉพาะเทคที่อนุมัติแล้ว ปรับจุดเข้า-ออกได้ก่อนเรนเดอร์
+
+![หน้า Timeline: คลิปที่อนุมัติแล้วเรียงตามลำดับ พร้อมความยาวและจุดเข้า-ออก](docs/media/app-timeline.jpg)
+
+---
+
 ## สิ่งที่ต้องมี
 
 | อย่าง | เวอร์ชัน | หมายเหตุ |
@@ -98,7 +114,7 @@ cd frontend && npm install && npm run dev
 | `qwen_2.5_vl_7b_fp8_scaled.safetensors` | 8.7 GB | `text_encoders/` |
 | `qwen_image_vae.safetensors` | 0.2 GB | `vae/` |
 
-รายการเต็มรวมโมเดลทางเลือกอื่น (MiniMax H3, Boogu Edit) อยู่ใน [README ภาษาอังกฤษ](README.md#models-this-was-built-against)
+รายการเต็มรวมโมเดลทางเลือกอื่น (MiniMax H3, Boogu Edit) พร้อมขนาดและโฟลเดอร์ อยู่ที่ [Models and workflows](docs/MODELS_AND_WORKFLOWS.md)
 
 ---
 
@@ -134,3 +150,14 @@ cd frontend && npm install && npm run dev
 [MIT](LICENSE) ใช้ได้ แก้ได้ เอาไปทำต่อได้ ขอแค่คงประกาศลิขสิทธิ์ไว้
 
 licence นี้ครอบคลุมเฉพาะโค้ดของแอป ส่วนโมเดล workflow และผลงานที่สร้างออกมา มีเงื่อนไขของตัวเอง ควรอ่าน licence ของโมเดลแต่ละตัวก่อนเอาผลงานไปเผยแพร่
+
+---
+
+## เอกสารเพิ่มเติม (ภาษาอังกฤษ)
+
+| เอกสาร | เนื้อหา |
+|---|---|
+| [Development](docs/DEVELOPMENT.md) | การติดตั้ง การรัน และชุดทดสอบแบบละเอียด |
+| [Architecture](docs/ARCHITECTURE.md) | โครงสร้างระบบและไดเรกทอรี |
+| [Models and workflows](docs/MODELS_AND_WORKFLOWS.md) | โมเดลทั้งหมด และวิธีลงทะเบียน workflow |
+| [Status and verification](docs/STATUS.md) | อะไรทำเสร็จแล้ว อะไรวัดผลแล้ว อะไรยังติด |
